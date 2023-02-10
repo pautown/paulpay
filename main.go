@@ -22,11 +22,13 @@ import (
 	"github.com/skip2/go-qrcode"
 )
 
+var USDMinimum float64 = 5
 var ScamThreshold float64 = 0.005 // MINIMUM DONATION AMOUNT
 var MediaMin float64 = 0.025      // Currently unused
 var MessageMaxChar int = 250
 var NameMaxChar int = 25
 var rpcURL string = "http://127.0.0.1:28088/json_rpc"
+var coingeckoURL string = "https://api.coingecko.com/api/v3/simple/price?ids=monero&vs_currencies=usd"
 var username string = "admin"                // chat log /view page
 var AlertWidgetRefreshInterval string = "10" //seconds
 
@@ -49,6 +51,38 @@ var checkTemplate *template.Template
 var alertTemplate *template.Template
 var viewTemplate *template.Template
 var topWidgetTemplate *template.Template
+
+func getMoneroUSDPrice() float64 {
+	res := MakeRequest(coingeckoURL)
+	resBytes := []byte(res)
+	var jsonRes map[string]interface{}
+	_ = json.Unmarshal(resBytes, &jsonRes)
+
+	m_map := jsonRes["monero"].(map[string]interface{})
+
+	fmt.Println(m_map["usd"])
+
+	f, err := strconv.ParseFloat(m_map["usd"], 8)
+	fmt.Println(f, err, reflect.TypeOf(f))
+
+	return f
+}
+
+func MakeRequest(URL string) string {
+	client := &http.Client{}
+	req, _ := http.NewRequest("GET", URL, nil)
+	req.Header.Set("Header_Key", "Header_Value")
+	res, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Err is", err)
+	}
+	defer res.Body.Close()
+
+	resBody, _ := ioutil.ReadAll(res.Body)
+	response := string(resBody)
+
+	return response
+}
 
 type configJson struct {
 	MinimumDonation  float64  `json:"MinimumDonation"`
@@ -277,6 +311,11 @@ func main() {
 		panic(err)
 	}
 }
+
+func calcMinimums() {
+	ScamThreshold = USDMinimum / getMoneroUSDPrice()
+}
+
 func mail(name string, amount string, message string) {
 	body := []byte(fmt.Sprintf("From: %s\n"+
 		"Subject: %s sent %s XMR\nDate: %s\n\n"+
@@ -629,6 +668,7 @@ func checkHandler(w http.ResponseWriter, r *http.Request) {
 
 func indexHandler(w http.ResponseWriter, _ *http.Request) {
 	var i indexDisplay
+	calcMinimums()
 	i.MaxChar = MessageMaxChar
 	i.MinAmnt = ScamThreshold
 	i.Checked = checked
