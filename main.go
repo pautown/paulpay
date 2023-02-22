@@ -242,6 +242,9 @@ func main() {
 	http.HandleFunc("/xmr.svg", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/xmr.svg")
 	})
+	http.HandleFunc("/sol.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/sol.svg")
+	})
 
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/pay", paymentHandler)
