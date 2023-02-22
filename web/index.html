@@ -1,8 +1,9 @@
 <html>
 <head>
-    <title>XMR Superchat</title>
+    
+    <h2>XMR Superchat</h2>
     <link href=xmr.svg rel=icon>
-   <link href=sol.svg rel=icon>
+    <link href=sol.svg rel=icon>
     <link href=style.css rel=stylesheet>
     <script>
         var buttonText = "Change to Monero";
@@ -33,6 +34,14 @@
               buttonText = "Switch to Monero";
           }
           button.innerHTML = buttonText;
+          
+          var img = document.querySelector("#currencyIcon");
+          if (img.getAttribute("src") === "xmr.svg") {
+            img.setAttribute("src", "sol.svg");
+          } else {
+            img.setAttribute("src", "xmr.svg");
+          }
+
       }
       
       fetch("https://api.coingecko.com/api/v3/simple/price?ids=monero,solana&vs_currencies=usd")
@@ -41,6 +50,8 @@
           document.getElementById("xmrToUsd").innerHTML = data.monero.usd;
           document.getElementById("solToUsd").innerHTML = data.solana.usd;
       });
+      
+      
       
     </script>
 </head>
@@ -59,9 +70,15 @@
               rows="6"></textarea><br>
     
   <form action="/pay" method="POST">
-    <button id="submit" type="submit" data-original-text="Pay in Monero(XMR)"><img src=xmr.svg></img>Monero Tribute</button>
+    
+    <button id="submit" type="submit" data-original-text="Pay in Monero(XMR)">
+      <img id="currencyIcon" src="xmr.svg">Monero Tribute
+    </button>
+    
     <input id="showAmount" name="showAmount" type="checkbox" value="true" {{.Checked}}>
     <small><label for="showAmount">Show amount on stream?</label><small>
+      
+    
     <button id="toggleButton" type="button" onclick="toggleText()">Switch to Solana</button>
     <div id="currencyRates">
       <p style="display: inline-block;">1 XMR = $<span id="xmrToUsd"></span></p>
