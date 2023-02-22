@@ -29,6 +29,16 @@ textarea {
     min-height: 64px;
 }
 
+input[type=radio] {
+  transform: scale(0.8);
+  margin: 0 5px 0 0;
+}
+
+label.radio-label {
+  display: inline-block;
+  vertical-align: middle;
+}
+
 @media only screen and (max-device-width: 830px) {
     body {
         width: 90%;
