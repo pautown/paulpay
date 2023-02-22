@@ -5,6 +5,8 @@
     <link href=xmr.svg rel=icon>
     <link href=sol.svg rel=icon>
     <link href=style.css rel=stylesheet>
+   
+
     <script>
         var buttonText = "Change to Monero";
         function toggleText() {
@@ -60,14 +62,17 @@
 
 
     <h2>Tribute Your God In Monero.</h2>
+    <hr><br><br><br>
     
     <label for="name">Paypig Name:</label><br>
     <input id="name" maxlength="25" name="name" placeholder="Anonymous" type="text"><br>
     <label for="amount">Monero (XMR) Amount:</label><br>
     <input id="amount" min="{{.MinAmnt}}" name="amount" placeholder="{{.MinAmnt}} Minimum" step="0.0001" type="number">
     <label for="message">Message:</label><br>
-    <textarea id="message" maxlength="{{.MaxChar}}" name="message" placeholder="{{.MaxChar}} character max"
-              rows="6"></textarea><br>
+    <textarea id="message" maxlength="{{.MaxChar}}" name="message" placeholder="{{.MaxChar}} character max" rows="6"></textarea><br>
+  <label for="media">Media (Optional) - Minimum donation of $5:</label><br>
+  
+    <input id="media" name="media" type="text" placeholder="YouTube link"><br><br>
     
   <form action="/pay" method="POST">
     
