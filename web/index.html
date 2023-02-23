@@ -1,6 +1,7 @@
 <html>
 <head>
-    <br><br><br><br><br><br>
+    <br><br><br>
+    <br><br><br>
     <title>pay.paul.town</title>
     <link href=xmr.svg rel=icon>
     <link href=sol.svg rel=icon>
@@ -9,7 +10,11 @@
 
     <script>
         var buttonText = "Change to Monero";
+        var mon = true;
+      
         function toggleText() {
+          mon = !mon; // Toggle the value of mon
+          document.getElementById("mon").value = mon; // Update the value of the hidden input field
           var elements = document.querySelectorAll('h2, label, input, textarea, button');
           elements.forEach(function(element) {
               if (element.innerHTML.includes("Monero")) {
@@ -60,7 +65,7 @@
 
 <body>
 
-
+  <form action="/pay" method="POST">
     <h2>Tribute Your God In Monero.</h2>
     <hr><br><br><br>
     
@@ -74,7 +79,9 @@
   
     <input id="media" name="media" type="text" placeholder="YouTube link"><br><br>
     
-  <form action="/pay" method="POST">
+  
+    
+    <input type="hidden" id="mon" name="mon" value=true>
     
     <button id="submit" type="submit" data-original-text="Pay in Monero(XMR)">
       <img id="currencyIcon" src="xmr.svg">Monero Tribute
@@ -87,7 +94,7 @@
     <button id="toggleButton" type="button" onclick="toggleText()">Switch to Solana</button>
     <div id="currencyRates">
       <p style="display: inline-block;">1 XMR = $<span id="xmrToUsd"></span></p>
-      <p style="display: inline-block; margin-left: 15px;">1 SOL = $<span id="solToUsd"></span></p>
+      <p style="display: inline-block; margin-left: 15px;">1 SOL = $<span id="solToUsd">      </span></p>
       </div>
   </form>
       
