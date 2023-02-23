@@ -3,6 +3,9 @@
   Send solana once it has been recieved to non-costodial address
   Change CSV storage of information regarding donos to database
   Add config screen for setting non-costodial addresses
+  Add media link for donos
+  Modify OBS display code
+  Add OBS media display
   Refactor
   Refactor
   Refactor again
