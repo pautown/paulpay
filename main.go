@@ -1,3 +1,16 @@
+// TODO:
+/*
+  Send solana once it has been recieved to non-costodial address
+  Change CSV storage of information regarding donos to database
+  Add config screen for setting non-costodial addresses
+  Refactor
+  Refactor
+  Refactor again
+  Get project done in 21.2571429 hours * $70/hr
+  13.2571429 hours remain.
+
+*/
+
 package main
 
 import (
@@ -60,7 +73,8 @@ var sendTo = []string{"example@purelymail.com"} // Comma separated recipient lis
 
 var indexTemplate *template.Template
 var payTemplate *template.Template
-var checkTemplate *template.Template
+var checkXMRTemplate *template.Template
+var checkSOLTemplate *template.Template
 var alertTemplate *template.Template
 var viewTemplate *template.Template
 var topWidgetTemplate *template.Template
@@ -85,6 +99,17 @@ func MakeRequest(URL string) string {
 	response := string(resBody)
 
 	return response
+}
+
+type getBalanceResponse struct {
+	Jsonrpc string `json:"jsonrpc"`
+	Result  struct {
+		Context struct {
+			Slot uint64 `json:"slot"`
+		} `json:"context"`
+		Value uint64 `json:"value"`
+	} `json:"result"`
+	ID int `json:"id"`
 }
 
 type configJson struct {
@@ -124,6 +149,7 @@ type superChat struct {
 	QRB64    string
 	PayID    string
 	CheckURL string
+	IsSolana bool
 }
 
 type csvLog struct {
@@ -300,9 +326,14 @@ func main() {
 		http.ServeFile(w, r, "web/xmr.svg")
 	})
 
+	http.HandleFunc("/sol.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/sol.svg")
+	})
+
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/pay", paymentHandler)
-	http.HandleFunc("/check", checkHandlerMonero)
+	http.HandleFunc("/checkxmr", checkHandlerMonero)
+	http.HandleFunc("/checksol", checkHandlerSolana)
 	http.HandleFunc("/alert", alertHandler)
 	http.HandleFunc("/view", viewHandler)
 	http.HandleFunc("/top", topwidgetHandler)
@@ -325,7 +356,8 @@ func main() {
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
 	payTemplate, _ = template.ParseFiles("web/pay.html")
-	checkTemplate, _ = template.ParseFiles("web/check.html")
+	checkXMRTemplate, _ = template.ParseFiles("web/checkXMR.html")
+	checkSOLTemplate, _ = template.ParseFiles("web/checkSOL.html")
 	alertTemplate, _ = template.ParseFiles("web/alert.html")
 	viewTemplate, _ = template.ParseFiles("web/view.html")
 	topWidgetTemplate, _ = template.ParseFiles("web/top.html")
@@ -443,6 +475,99 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Println(err)
 	}
+}
+
+func checkHandlerSolana(w http.ResponseWriter, r *http.Request) {
+
+	var solanaAddress = r.URL.Query().Get("id")
+	var amountToCheck, _ = strconv.ParseFloat(r.URL.Query().Get("amount"), 64)
+	var anonDono = false
+
+	if html.EscapeString(r.URL.Query().get("showAmount")) == "false" {
+		anonDono = true
+	}
+
+	rpcURL := "https://api.mainnet-beta.solana.com"
+	payload := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"getBalance","params":["` + solanaAddress + `"]}`)
+	req, err := http.NewRequest("POST", rpcURL, payload)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer res.Body.Close()
+
+	var resp getBalanceResponse
+	err = json.NewDecoder(res.Body).Decode(&resp)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var c checkPage
+	c.Meta = `<meta http-equiv="Refresh" content="3">`
+	c.Addy = solanaAddress
+	c.PayID = r.FormValue("id")
+	c.Name = truncateStrings(r.FormValue("name"), NameMaxChar)
+	c.Msg = truncateStrings(r.FormValue("msg"), MessageMaxChar)
+	c.Media = r.FormValue("media")
+	c.Received = float64(resp.Result.Value)
+	c.Receipt = "Waiting for payment..."
+
+	if c.Received >= amountToCheck {
+		c.Meta = ""
+		c.Received = float64(resp.Result.Value) / 1000000000
+
+		if c.Received < ScamThreshold { // right now minimum threshold is in monero
+			c.Receipt = "<b style='color:red'>Scammed! " + fmt.Sprint(c.Received) + " is below minimum</b>"
+		} else { // If dono is above the threshold
+
+			c.Receipt = "<b>" + fmt.Sprint(c.Received) + " SOL Received! Superchat sent</b>"
+			if c.Received < MediaMin || c.Msg == "" {
+				c.Msg = "⠀"
+			}
+			// Add the payment to the log
+			// ...
+			var moneroBool = false
+			if r.FormValue("mon") == "true" {
+				moneroBool = true
+			}
+			addPaymentToLog(c.Name, c.Msg, c.Media, "SOL", c.Received, anonDono)
+
+		}
+	} else {
+		fmt.Println("Checking solana address:" + c.Addy)
+		fmt.Println("How much is needed:" + fmt.Sprintf("%.5f", amountToCheck))
+		fmt.Println("How much has been sent:" + fmt.Sprintf("%.5f", c.Received))
+	}
+
+	// Render the HTML response
+	err = checkSOLTemplate.Execute(w, c)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func addPaymentToLog(name, message, media, currency string, amount float64, anon bool) {
+	var datetime = getCurrentDateTime()
+	// ADD PAYMENTS TO LOG
+	if currency == "SOL" {
+
+	} else if currency == "XMR" {
+
+	}
+
+}
+
+func getCurrentDateTime() string {
+	now := time.Now()
+	return now.Format("2006-01-02 15:04:05")
 }
 
 func checkHandlerMonero(w http.ResponseWriter, r *http.Request) {
@@ -707,7 +832,7 @@ func checkHandlerMonero(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	err := checkTemplate.Execute(w, c)
+	err := checkXMRTemplate.Execute(w, c)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -840,8 +965,12 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	var s superChat
 	params := url.Values{}
 	var resp *rpcResponse // Declare resp outside the if statement
-
+	var moneroBool = false
 	if r.FormValue("mon") == "true" {
+		moneroBool = true
+	}
+
+	if moneroBool {
 		payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
 		req, err := http.NewRequest("POST", rpcURL, payload)
 		if err == nil {
@@ -947,16 +1076,16 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 		s.Media = html.EscapeString(r.FormValue("media"))
 		s.PayID = wallet_.KeyPublic
 		s.Address = wallet_.KeyPublic
+		s.IsSolana = !moneroBool
 
-		params := url.Values{}
-		params.Add("id", s.PayID)
-		params.Add("name", s.Name)
-		params.Add("msg", wallet_.DonoString)
+		params.Add("id", s.Address)
+		params.Add("amount", donoStr)
+		params.Add("msg", r.FormValue("message"))
 		params.Add("media", condenseSpaces(s.Media))
 		params.Add("show", html.EscapeString(r.FormValue("showAmount")))
 		s.CheckURL = params.Encode()
 
-		tmp, _ := qrcode.Encode(fmt.Sprintf("solana:"+address+"?amount="+donoStr, address, s.Amount), qrcode.Low, 320)
+		tmp, _ := qrcode.Encode("solana:"+address+"?amount="+donoStr, qrcode.Low, 320)
 		s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
 		err = payTemplate.Execute(w, s)
 		if err != nil {
