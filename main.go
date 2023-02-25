@@ -486,7 +486,7 @@ func checkHandlerSolana(w http.ResponseWriter, r *http.Request) {
 	var amountToCheck, _ = strconv.ParseFloat(r.URL.Query().Get("amount"), 64)
 	var anonDono = false
 
-	if html.EscapeString(r.URL.Query().get("showAmount")) == "false" {
+	if html.EscapeString(r.URL.Query().Get("showAmount")) == "false" {
 		anonDono = true
 	}
 
@@ -537,10 +537,10 @@ func checkHandlerSolana(w http.ResponseWriter, r *http.Request) {
 			}
 			// Add the payment to the log
 			// ...
-			var moneroBool = false
-			if r.FormValue("mon") == "true" {
-				moneroBool = true
-			}
+			//var moneroBool = false
+			//if r.FormValue("mon") == "true" {
+			//	moneroBool = true
+			//}
 			addPaymentToLog(c.Name, c.Msg, c.Media, "SOL", c.Received, anonDono)
 
 		}
@@ -558,7 +558,7 @@ func checkHandlerSolana(w http.ResponseWriter, r *http.Request) {
 }
 
 func addPaymentToLog(name, message, media, currency string, amount float64, anon bool) {
-	var datetime = getCurrentDateTime()
+	//var datetime = getCurrentDateTime()
 	// ADD PAYMENTS TO LOG
 	if currency == "SOL" {
 
