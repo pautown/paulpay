@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<link href=style.css rel=stylesheet>
-	<script>
+  <link href=style.css rel=stylesheet>
+  <script>
   const urlParams = new URLSearchParams(window.location.search);
 const error = urlParams.get('error');
 if (error === 'invalid_password') {
@@ -110,16 +110,16 @@ alert('Passwords do not match');
 </label>  
 
 
-	
   
-	
-	<p>Media donations are currently {{ if .MediaEnabled }}enabled{{ else }}disabled{{ end }}.</p>
+  
+  
+  <p>Media donations are currently {{ if .MediaEnabled }}enabled{{ else }}disabled{{ end }}.</p>
   
   <hr>
   <small>
     <br>
     <h2>Change Password</h2>
-	<form method="POST" action="/changepassword">
+  <form method="POST" action="/changepassword">
     <label for="current-password">Current Password:</label>
     <input type="password" id="current-password" name="current_password" required><br><br>
     <label for="new-password">New Password:</label>
@@ -130,8 +130,8 @@ alert('Passwords do not match');
 </form>
   </small>
   <hr><br><br><br>
-	<form method="POST" action="/logout">
-		<input type="submit" value="Logout">
-	</form>
+  <form method="POST" action="/logout">
+    <input type="submit" value="Logout">
+  </form>
 </body>
 </html>
