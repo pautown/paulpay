@@ -298,9 +298,6 @@ func main() {
 	var err error
 
 
-
-
-
 	// Open a new database connection
 	db, err = sql.Open("sqlite3", "users.db")
 	if err != nil {
@@ -342,6 +339,7 @@ func main() {
 	
 	// Schedule a function to run fetchExchangeRates every three minutes
 	go fetchExchangeRates()
+	go checkDonos()
 
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/pay", paymentHandler)
@@ -378,16 +376,18 @@ func main() {
 }
 
 
-func checkDonos(){ // Check all donos for newly fulfilled donos
-	// Check for unfulfilled donos and add newly fulfilled donos to a slice
-	fulfilledDonos := checkUnfulfilledDonos()
-	// Add fulfilled donos to the Queue table
-	for _, dono := range fulfilledDonos {
-		err := createNewQueueEntry(db, dono.Address, dono.Name, dono.Message, dono.AmountSent, dono.CurrencyType)
-		if err != nil {
-			panic(err)
-		}
-	}
+func checkDonos() {
+    for {
+    	log.Println("Checking Addresses:")
+        fulfilledDonos := checkUnfulfilledDonos()
+        for _, dono := range fulfilledDonos {
+            err := createNewQueueEntry(db, dono.Address, dono.Name, dono.Message, dono.AmountSent, dono.CurrencyType)
+            if err != nil {
+                panic(err)
+            }
+        }
+        time.Sleep(5 * time.Second)
+    }
 }
 
 
@@ -406,6 +406,7 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
 	// Open a new database connection
 	db, err := sql.Open("sqlite3", "users.db")
 	if err != nil {
+
 		panic(err)
 	}
 	defer db.Close()
@@ -427,9 +428,10 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
 			fulfilled,
 			created_at,
 			updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, user_id, dono_address, dono_name, dono_message, amount_to_send, 0.0, currencyType, anon_dono, false, createdAt, createdAt)
 	if err != nil {
+		log.Println(err)
 		panic(err)
 	}
 }
@@ -468,7 +470,7 @@ func checkUnfulfilledDonos() []Dono {
 	var fulfilledDonos []Dono
 	for rows.Next() {
 		var dono Dono
-		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.CreatedAt, &dono.UpdatedAt)
+		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.CreatedAt, &dono.UpdatedAt)
 		if err != nil {
 			panic(err)
 		}
@@ -477,6 +479,8 @@ func checkUnfulfilledDonos() []Dono {
 			dono.AmountSent, _ = getXMRBalance(dono.Address)
 		} else if dono.CurrencyType == "SOL" {
 			dono.AmountSent, _ = getSOLBalance(dono.Address)
+
+
 		}
 
 		if dono.AmountSent >= dono.AmountToSend {
@@ -505,6 +509,7 @@ func getSOLBalance(address string) (float64, error) {
     if err != nil {
         return 0, err
     }
+    log.Println("Address: ", address, " Balance: ", balance)
     return float64(balance) / 1e9, nil
 }
 
@@ -553,7 +558,6 @@ func getXMRBalance(address string) (float64, error) {
     if err != nil {
         return 0, err
     }
-
     return balance / 1000000000000, nil // convert from atomic units to XMR
 }
 
@@ -603,6 +607,7 @@ func createDatabaseIfNotExists(db *sql.DB) error {
         CREATE TABLE IF NOT EXISTS donos (
             dono_id INTEGER PRIMARY KEY,
             user_id INTEGER,
+            dono_address TEXT,
             dono_name TEXT,
             dono_message TEXT,
             amount_to_send FLOAT,            
@@ -1246,14 +1251,17 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
     s.Message = html.EscapeString(truncateStrings(condenseSpaces(message), MessageMaxChar))
     s.Media = html.EscapeString(media)
 
-    if mon {
+    
+     if mon {
         handleMoneroPayment(w, &s, params)
+        createNewDono(1, s.Address, s.Name, s.Message, amount, "XMR", showAmount)
     } else {
-		handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media, mon)
+        walletAddress := handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media, mon)
+        createNewDono(1, walletAddress, s.Name, s.Message, amount, "SOL", showAmount)
     }
 }
 
-func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, mon_ bool) {
+func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, mon_ bool) string {
 	var wallet_ = createWalletSolana(name_, message_, amount_, showAmount_)
 	// Get Solana address and desired balance from request
 	address := wallet_.KeyPublic
@@ -1286,6 +1294,8 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	if err != nil {
 		fmt.Println(err)
 	}
+
+	return address
 }
 
 func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values) {
