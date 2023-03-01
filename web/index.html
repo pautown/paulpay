@@ -33,6 +33,7 @@
                   element.innerHTML = element.innerHTML.replace(/SOL/g, "XMR");
               } 
           });
+
           
           var button = document.getElementById("toggleButton");
           if (buttonText === "Switch to Monero") {
@@ -49,14 +50,20 @@
             img.setAttribute("src", "xmr.svg");
           }
 
+
+          var amountInput = document.getElementById("amount");
+          if (mon) {
+            amountInput.setAttribute("placeholder", "{{.MinMonero}} Minimum");
+          } else {
+            amountInput.setAttribute("placeholder", "{{.MinSolana}} Minimum");
+          }
+          amountInput.value = "";
+
+
       }
-      
-      fetch("https://api.coingecko.com/api/v3/simple/price?ids=monero,solana&vs_currencies=usd")
-      .then(response => response.json())
-      .then(data => {
-          document.getElementById("xmrToUsd").innerHTML = data.monero.usd;
-          document.getElementById("solToUsd").innerHTML = data.solana.usd;
-      });
+
+
+
       
       
       
@@ -72,7 +79,7 @@
     <label for="name">Paypig Name:</label><br>
     <input id="name" maxlength="25" name="name" placeholder="Anonymous" type="text"><br>
     <label for="amount">Monero (XMR) Amount:</label><br>
-    <input id="amount" min="{{.MinAmnt}}" name="amount" placeholder="{{.MinAmnt}} Minimum" step="0.0001" type="number">
+    <input id="amount" min="{{.MinMonero}}" name="amount" placeholder="{{.MinMonero}} Minimum" step="0.0001" type="number">
     <label for="message">Message:</label><br>
     <textarea id="message" maxlength="{{.MaxChar}}" name="message" placeholder="{{.MaxChar}} character max" rows="6"></textarea><br>
   <label for="media">Media (Optional) - Minimum donation of $5:</label><br>
@@ -93,10 +100,11 @@
     
     <button id="toggleButton" type="button" onclick="toggleText()">Switch to Solana</button>
     <div id="currencyRates">
-      <p style="display: inline-block;">1 XMR = $<span id="xmrToUsd"></span></p>
-      <p style="display: inline-block; margin-left: 15px;">1 SOL = $<span id="solToUsd">      </span></p>
+      <p style="display: inline-block;">1 XMR = ${{.XMRPrice}}</p>
+      <p style="display: inline-block; margin-left: 15px;">1 SOL = ${{.SolPrice}}</p>
       </div>
   </form>
+
       
 </body>
 

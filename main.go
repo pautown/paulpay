@@ -38,6 +38,7 @@ import (
 	"text/template"
 	"time"
 	"unicode/utf8"
+	"bytes"
 
 	"database/sql"
 	_ "github.com/mattn/go-sqlite3"
@@ -65,7 +66,8 @@ var rpcURL string = "http://127.0.0.1:28088/json_rpc"
 var coingeckoURL string = "https://api.coingecko.com/api/v3/simple/price?ids=monero&vs_currencies=usd"
 var username string = "admin"                // chat log /view page
 var AlertWidgetRefreshInterval string = "10" //seconds
-
+var solToUsd = 0.00
+var xmrToUsd = 0.00
 var addressSliceSolana []AddressSolana
 
 // this is the password for both the /view page and the OBS /alert page
@@ -86,6 +88,8 @@ var userTemplate *template.Template
 var logoutTemplate *template.Template
 var incorrectPasswordTemplate *template.Template
 
+var minSolana, minMonero float64 // Global variables to hold minimum SOL and XMR required to equal the global value
+var minDonoValue float64 = 5.0 // The global value to equal in USD terms
 
 
 // Mainnet
@@ -95,12 +99,21 @@ var incorrectPasswordTemplate *template.Template
 var c = client.NewClient(rpc.DevnetRPCEndpoint)
 
 
+type priceData struct {
+	Monero struct {
+		Usd float64 `json:"usd"`
+	} `json:"monero"`
+	Solana struct {
+		Usd float64 `json:"usd"`
+	} `json:"solana"`
+}
+
+
 
 type User struct {
 	UserID               int
 	Username             string
 	HashedPassword       []byte
-	Timezone             string
 	EthAddress           string
 	SolAddress           string
 	HexcoinAddress       string
@@ -180,17 +193,12 @@ type superChat struct {
 	IsSolana bool
 }
 
-type csvLog struct {
-	ID            string
-	Name          string
-	Message       string
-	Amount        string
-	DisplayToggle string
-	Refresh       string
-}
-
 type indexDisplay struct {
 	MaxChar int
+	MinSolana float64
+	MinMonero float64
+	SolPrice float64
+	XMRPrice float64
 	MinAmnt float64
 	Checked string
 }
@@ -229,12 +237,72 @@ type MoneroPrice struct {
 	} `json:"monero"`
 }
 
+
+func fetchExchangeRates() {
+	for {
+		// Fetch the exchange rate data from the API
+		resp, err := http.Get("https://api.coingecko.com/api/v3/simple/price?ids=monero,solana&vs_currencies=usd")
+		if err != nil {
+			fmt.Println("Error fetching price data:", err)
+			// Wait five minutes before trying again
+			time.Sleep(300 * time.Second)
+			continue
+		}
+		defer resp.Body.Close()
+
+		// Parse the JSON response
+		var data priceData
+		err = json.NewDecoder(resp.Body).Decode(&data)
+		if err != nil {
+			fmt.Println("Error decoding price data:", err)
+			// Wait five minutes before trying again
+			time.Sleep(300 * time.Second)
+			continue
+		}
+
+		// Update the exchange rate values
+		xmrToUsd = data.Monero.Usd
+		solToUsd = data.Solana.Usd
+
+		fmt.Println("Updated exchange rates:", "1 XMR = ", xmrToUsd, " USD,", "1 SOL = ", solToUsd, " USD")
+
+		
+
+		// Calculate how much Monero is needed to equal the min usd donation var.
+	    minMonero = minDonoValue / data.Monero.Usd
+	    // Calculate how much Solana is needed to equal the min usd donation var.
+	    minSolana= minDonoValue / data.Solana.Usd
+
+	    minMonero, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minMonero), 64)
+	    minSolana, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minSolana), 64)
+	    
+	    // Save the minimum Monero and Solana variables
+	    fmt.Println("Min monero:", minMonero)
+
+	    fmt.Println("Min solana:", minSolana)
+	    // Wait three minutes before fetching again
+	    if(xmrToUsd == 0 || solToUsd == 0){ 
+	    	time.Sleep(90 * time.Second)
+	    }else{
+	    	time.Sleep(30 * time.Second)
+	    }
+		
+	}
+}
+
+
+
+
 func main() {
 	log.Println("Starting server")
 	var err error
 
+
+
+
+
 	// Open a new database connection
-	db, err = sql.Open("sqlite3", "./users.db")
+	db, err = sql.Open("sqlite3", "users.db")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -270,6 +338,10 @@ func main() {
 	http.HandleFunc("/sol.svg", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/sol.svg")
 	})
+
+	
+	// Schedule a function to run fetchExchangeRates every three minutes
+	go fetchExchangeRates()
 
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/pay", paymentHandler)
@@ -311,7 +383,7 @@ func checkDonos(){ // Check all donos for newly fulfilled donos
 	fulfilledDonos := checkUnfulfilledDonos()
 	// Add fulfilled donos to the Queue table
 	for _, dono := range fulfilledDonos {
-		err := createNewQueueEntry(db, dono.Name, dono.AmountSent, dono.CurrencyType)
+		err := createNewQueueEntry(db, dono.Address, dono.Name, dono.Message, dono.AmountSent, dono.CurrencyType)
 		if err != nil {
 			panic(err)
 		}
@@ -320,7 +392,7 @@ func checkDonos(){ // Check all donos for newly fulfilled donos
 
 
 
-func createNewQueueEntry(db *sql.DB, name string, message string, amount float64, currency string) error {
+func createNewQueueEntry(db *sql.DB, address string, name string, message string, amount float64, currency string) error {
 	_, err := db.Exec(`
 		INSERT INTO queue (name, message, amount, currency) VALUES (?, ?, ?)
 	`, name, message, amount, currency)
@@ -330,9 +402,9 @@ func createNewQueueEntry(db *sql.DB, name string, message string, amount float64
 	return nil
 }
 
-func createNewDono(user_id int, dono_name string, dono_message amount_to_send float64, currencyType string, anon_dono bool) {
+func createNewDono(user_id int, dono_address string, dono_name string, dono_message string, amount_to_send float64, currencyType string, anon_dono bool) {
 	// Open a new database connection
-	db, err := sql.Open("sqlite3", "./users.db")
+	db, err := sql.Open("sqlite3", "users.db")
 	if err != nil {
 		panic(err)
 	}
@@ -345,6 +417,7 @@ func createNewDono(user_id int, dono_name string, dono_message amount_to_send fl
 	_, err = db.Exec(`
 		INSERT INTO donos (
 			user_id,
+			dono_address,
 			dono_name,
 			dono_message,
 			amount_to_send,
@@ -355,7 +428,7 @@ func createNewDono(user_id int, dono_name string, dono_message amount_to_send fl
 			created_at,
 			updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, user_id, dono_name, dono_message, amount_to_send, 0.0, currencyType, anon_dono, false, createdAt, createdAt)
+	`, user_id, dono_address, dono_name, dono_message, amount_to_send, 0.0, currencyType, anon_dono, false, createdAt, createdAt)
 	if err != nil {
 		panic(err)
 	}
@@ -364,6 +437,7 @@ func createNewDono(user_id int, dono_name string, dono_message amount_to_send fl
 type Dono struct {
 	ID            int
 	UserID        int
+	Address		string
 	Name          string
 	Message 	  string
 	AmountToSend  float64
@@ -377,7 +451,7 @@ type Dono struct {
 
 func checkUnfulfilledDonos() []Dono {
 	// Open a new database connection
-	db, err := sql.Open("sqlite3", "./users.db")
+	db, err := sql.Open("sqlite3", "users.db")
 	if err != nil {
 		panic(err)
 	}
@@ -400,13 +474,12 @@ func checkUnfulfilledDonos() []Dono {
 		}
 
 		if dono.CurrencyType == "XMR" {
-			dono.AmountSent = getXMRBalance(dono.Address)
+			dono.AmountSent, _ = getXMRBalance(dono.Address)
 		} else if dono.CurrencyType == "SOL" {
-			dono.AmountSent = getSOLBalance(dono.Address)
+			dono.AmountSent, _ = getSOLBalance(dono.Address)
 		}
 
 		if dono.AmountSent >= dono.AmountToSend {
-			dono.AmountSent = getCurrentBalance(dono.Address)
 			dono.Fulfilled = true
 			fulfilledDonos = append(fulfilledDonos, dono)
 		}
@@ -424,7 +497,7 @@ return fulfilledDonos
 
 
 
-func getSolanaBalance(address string) (float64, error) {
+func getSOLBalance(address string) (float64, error) {
     balance, err := c.GetBalance(
         context.TODO(), // request context
         address,        // wallet to fetch balance for
@@ -520,130 +593,135 @@ func processQueue(db *sql.DB) error {
 }
 
 
-
+func displayNewDono(name string, amount float64, currency string) bool{
+	return false
+}
 
 func createDatabaseIfNotExists(db *sql.DB) error {
-	// Check if the donos table exists
-	var donosTableExists bool
-	err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='donos'").Scan(&donosTableExists)
-	if err != nil {
-		return err
-	}
+    // create the tables if they don't exist
+    _, err := db.Exec(`
+        CREATE TABLE IF NOT EXISTS donos (
+            dono_id INTEGER PRIMARY KEY,
+            user_id INTEGER,
+            dono_name TEXT,
+            dono_message TEXT,
+            amount_to_send FLOAT,            
+            amount_sent FLOAT,
+            currency_type TEXT,
+            anon_dono BOOL,
+            fulfilled BOOL,
+            created_at DATETIME,
+            updated_at DATETIME,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    `)
+    if err != nil {
+        return err
+    }
 
-	// Check if the queue table exists
-	var queueTableExists bool
-	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='queue'").Scan(&queueTableExists)
-	if err != nil {
-		return err
-	}
+    _, err = db.Exec(`
+        CREATE TABLE IF NOT EXISTS queue (
+            name TEXT,
+            message TEXT,
+            amount FLOAT,
+            currency TEXT
+        )
+    `)
+    if err != nil {
+        return err
+    }
 
-	// Check if the users table exists
-	var usersTableExists bool
-	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").Scan(&usersTableExists)
-	if err != nil {
-		return err
-	}
+    _, err = db.Exec(`
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            HashedPassword BLOB,
+            eth_address TEXT,
+            sol_address TEXT,
+            hex_address TEXT,
+            xmr_wallet_password TEXT,
+            min_donation_threshold FLOAT,
+            min_media_threshold FLOAT,
+            media_enabled BOOL,
+            created_at DATETIME,
+            modified_at DATETIME
+        )
+    `)
 
-	// If neither table exists, create them
-	if !donosTableExists && !queueTableExists && !usersTableExists {
-		_, err = db.Exec(`
-			CREATE TABLE donos (
-				dono_id INTEGER PRIMARY KEY,
-				user_id INTEGER,
-				dono_name TEXT,
-				dono_message TEXT,
-				amount_to_send FLOAT,			
-				amount_sent FLOAT,
-				currency_type TEXT,
-				anon_dono BOOL,
-				fulfilled BOOL,
-				created_at DATETIME,
-				updated_at DATETIME,
-				FOREIGN KEY(user_id) REFERENCES users(id)
-			)
-		`)
-		if err != nil {
-			return err
-		}
 
-		_, err = db.Exec(`
-			CREATE TABLE queue (
-				name TEXT,
-				message TEXT,
-				amount FLOAT,
-				currency TEXT
-			)
-		`)
-		if err != nil {
-			return err
-		}
 
-		_, err = db.Exec(`
-			CREATE TABLE users (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				username TEX UNIQUE,
-				HashedPassword BLOB,
-				eth_address TEXT,
-				sol_address TEXT,
-				hex_address TEXT,
-				xmr_wallet_password TEXT,
-				min_donation_threshold FLOAT,
-				min_media_threshold FLOAT,
-				media_enabled BOOL,
-				created_at DATETIME,
-				modified_at DATETIME
-			)
-		`)
-		if err != nil {
-			return err
-		}
+    if err != nil {
+        return err
+    } 
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
 
-		// create admin user if not exists
-		adminUser := User{
-			Username:          "admin",
-			XMRWalletPassword: "",
-			MinDono:           0,
-			MinMediaDono:      0,
-			MediaEnabled:      true,
-		}
-		adminHashedPassword, err := bcrypt.GenerateFromPassword([]byte("hunter123"), bcrypt.DefaultCost)
-		if err != nil {
-			log.Fatal(err)
-		}
-		adminUser.HashedPassword = adminHashedPassword
+    // create admin user if not exists
+    adminUser := User{
+        Username:          "admin",
+        XMRWalletPassword: "",
+        MinDono:           0,
+        MinMediaDono:      0,
+        MediaEnabled:      true,
+    }
 
-		err = createUser(adminUser)
-		if err != nil {
-			log.Println(err)
-		}
-	}
+    adminHashedPassword, err := bcrypt.GenerateFromPassword([]byte("hunter123"), bcrypt.DefaultCost)
+    if err != nil {
+        log.Fatal(err)
+    }
+    adminUser.HashedPassword = adminHashedPassword
 
-	return nil
+    err = createUser(adminUser)
+    if err != nil {
+        log.Println(err)
+    }
+
+    return nil
 }
 
 
-// create a new user
 func createUser(user User) error {
-	statement := `
-		INSERT INTO users (Username, HashedPassword, Timezone, EthAddress, SolAddress, HexcoinAddress,
-			XMRWalletPassword, MinDono, MinMediaDono, MediaEnabled, CreationDatetime, ModificationDatetime)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-	`
-	_, err := db.Exec(statement, user.Username, user.HashedPassword, user.Timezone, user.EthAddress,
-		user.SolAddress, user.HexcoinAddress, user.XMRWalletPassword, user.MinDono, user.MinMediaDono,
-		user.MediaEnabled)
-	return err
+    
+
+    // Insert the user's data into the database
+    _, err := db.Exec(`
+        INSERT INTO users (
+            username,
+            HashedPassword,
+            eth_address,
+            sol_address,
+            hex_address,
+            xmr_wallet_password,
+            min_donation_threshold,
+            min_media_threshold,
+            media_enabled,
+            created_at,
+            modified_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, user.Username, user.HashedPassword, "", "", "", "", 0, 0, false, time.Now(), time.Now())
+
+    return err
 }
+
+
 
 // update an existing user
 func updateUser(user User) error {
 	statement := `
 		UPDATE users
-		SET Username=?, HashedPassword=?, Timezone=?, EthAddress=?, SolAddress=?, HexcoinAddress=?,
-			XMRWalletPassword=?, MinDono=?, MinMediaDono=?, MediaEnabled=?, ModificationDatetime=datetime('now')
-		WHERE UserID=?
+		SET Username=?, HashedPassword=?, eth_address=?, sol_address=?, hex_address=?,
+			xmr_wallet_password=?, min_donation_threshold=?, min_media_threshold=?, media_enabled=?, modified_at=datetime('now')
+		WHERE id=?
 	`
-	_, err := db.Exec(statement, user.Username, user.HashedPassword, user.Timezone, user.EthAddress,
+	_, err := db.Exec(statement, user.Username, user.HashedPassword, user.EthAddress,
 		user.SolAddress, user.HexcoinAddress, user.XMRWalletPassword, user.MinDono, user.MinMediaDono,
 		user.MediaEnabled, user.UserID)
 	return err
@@ -653,7 +731,7 @@ func updateUser(user User) error {
 func getUserByUsername(username string) (User, error) {
 	var user User
 	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
-	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.Timezone, &user.EthAddress,
+	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
 		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime)
 	if err != nil {
@@ -669,8 +747,8 @@ func getUserBySession(sessionToken string) (User, error) {
 		return User{}, fmt.Errorf("session token not found")
 	}
 	var user User
-	row := db.QueryRow("SELECT * FROM users WHERE UserID=?", userID)
-	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.Timezone, &user.EthAddress,
+	row := db.QueryRow("SELECT * FROM users WHERE id=?", userID)
+	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
 		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime)
 	if err != nil {
@@ -715,7 +793,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.SetCookie(w, &http.Cookie{
-			Name:     "session",
+			Name:     "session_token",
 			Value:    sessionToken,
 			HttpOnly: true,
 			Path:     "/",
@@ -735,7 +813,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 // handle requests to modify user data
 func userHandler(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("session")
+	cookie, err := r.Cookie("session_token")
 	if err != nil {
 		fmt.Println(err)
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -751,7 +829,6 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "POST" {
 		user.Username = r.FormValue("username")
-		user.Timezone = r.FormValue("timezone")
 		user.EthAddress = r.FormValue("ethaddress")
 		user.SolAddress = r.FormValue("soladdress")
 		user.HexcoinAddress = r.FormValue("hexcoinaddress")
@@ -795,7 +872,7 @@ func generateSessionToken(user User) string {
 
 func changePasswordHandler(w http.ResponseWriter, r *http.Request) {
 	// retrieve user from session
-	sessionToken, err := r.Cookie("session")
+	sessionToken, err := r.Cookie("session_token")
 	if err != nil {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
@@ -867,7 +944,7 @@ func renderChangePasswordForm(w http.ResponseWriter, data UserPageData) {
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	// invalidate session token
 	http.SetCookie(w, &http.Cookie{
-		Name:     "session",
+		Name:     "session_token",
 		Value:    "",
 		MaxAge:   -1,
 		HttpOnly: true,
@@ -893,7 +970,7 @@ func createSession(userID int) (string, error) {
 }
 
 func validateSession(r *http.Request) (int, error) {
-	sessionToken, err := r.Cookie("session")
+	sessionToken, err := r.Cookie("session_token")
 	if err != nil {
 		return 0, fmt.Errorf("no session token found")
 	}
@@ -1029,7 +1106,10 @@ func getCurrentDateTime() string {
 func indexHandler(w http.ResponseWriter, _ *http.Request) {
 	var i indexDisplay
 	i.MaxChar = MessageMaxChar
-	i.MinAmnt = ScamThreshold
+	i.MinSolana = minSolana
+	i.MinMonero = minMonero
+	i.SolPrice = solToUsd
+	i.XMRPrice = xmrToUsd
 	i.Checked = checked
 	err := indexTemplate.Execute(w, i)
 	if err != nil {
@@ -1038,7 +1118,8 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 func alertHandler(w http.ResponseWriter, r *http.Request) {
-	var v csvLog
+	/*
+	 var v csvLog
 	v.Refresh = AlertWidgetRefreshInterval
 	if r.FormValue("auth") == password {
 
@@ -1089,6 +1170,7 @@ func alertHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Println(err)
 	}
+	*/
 }
 
 func getSolanaBalance(address string, amount float64) bool {
@@ -1112,138 +1194,131 @@ func getSolanaBalance(address string, amount float64) bool {
 	//return balance >= uint64(amount*math.Pow10(9)), nil
 }
 
-func paymentHandler(w http.ResponseWriter, r *http.Request) {
 
-	//log.Fatalln("monState: ", monState)
-	var s superChat
-	params := url.Values{}
-	var resp *rpcResponse // Declare resp outside the if statement
-	var moneroBool = false
-	if r.FormValue("mon") == "true" {
-		moneroBool = true
+
+
+
+func paymentHandler(w http.ResponseWriter, r *http.Request) {
+    // Get form values
+    fMon := r.FormValue("mon")
+    fAmount := r.FormValue("amount")
+    fName := r.FormValue("name")
+    fMessage := r.FormValue("message")
+    fMedia := r.FormValue("media")
+    fShowAmount := r.FormValue("showAmount")
+
+    // Parse and handle errors for each form value
+    mon, _ := strconv.ParseBool(fMon)
+    amount, err := strconv.ParseFloat(fAmount, 64)
+    if err != nil {
+        if mon {
+            amount = minMonero
+        } else {
+            amount = minSolana
+        }
+    }
+
+    name := fName
+    if name == "" {
+        name = "Anonymous"
+    }
+
+    message := fMessage
+    if message == "" {
+        message = " "
+    }
+
+    media := html.EscapeString(fMedia)
+
+    showAmount, _ := strconv.ParseBool(fShowAmount)
+
+    var s superChat
+    params := url.Values{}
+
+    params.Add("name", name)
+    params.Add("msg", message)
+    params.Add("media", condenseSpaces(media))
+    params.Add("amount", strconv.FormatFloat(amount, 'f', 4, 64))
+    params.Add("show", strconv.FormatBool(showAmount))
+
+    s.Amount = strconv.FormatFloat(amount, 'f', 4, 64)
+    s.Name = html.EscapeString(truncateStrings(condenseSpaces(name), NameMaxChar))
+    s.Message = html.EscapeString(truncateStrings(condenseSpaces(message), MessageMaxChar))
+    s.Media = html.EscapeString(media)
+
+    if mon {
+        handleMoneroPayment(w, &s, params)
+    } else {
+		handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media, mon)
+    }
+}
+
+func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, mon_ bool) {
+	var wallet_ = createWalletSolana(name_, message_, amount_, showAmount_)
+	// Get Solana address and desired balance from request
+	address := wallet_.KeyPublic
+	donoStr := fmt.Sprintf("%.2f", wallet_.DonoAmount)
+
+	s.Amount = donoStr
+	if donoStr == "" {
+		s.Amount = fmt.Sprint(ScamThreshold)
+		donoStr = s.Amount
 	}
 
-	if moneroBool {
-		payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
-		req, err := http.NewRequest("POST", rpcURL, payload)
-		if err == nil {
-			req.Header.Set("Content-Type", "application/json")
-			res, err := http.DefaultClient.Do(req)
-			if err == nil {
-				resp = &rpcResponse{}
-				if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
-					fmt.Println(err.Error())
-				}
+	if wallet_.DonoName == "" {
+		s.Name = "Anonymous"
+		wallet_.DonoName = s.Name
+	} else {
+		s.Name = html.EscapeString(truncateStrings(condenseSpaces(wallet_.DonoName), NameMaxChar))
+	}
 
-				s.Amount = html.EscapeString(r.FormValue("amount"))
-				if r.FormValue("amount") == "" {
-					s.Amount = fmt.Sprint(ScamThreshold)
-				}
-				if r.FormValue("name") == "" {
-					s.Name = "Anonymous"
-				} else {
-					s.Name = html.EscapeString(truncateStrings(condenseSpaces(r.FormValue("name")), NameMaxChar))
-				}
-				s.Message = html.EscapeString(truncateStrings(condenseSpaces(r.FormValue("message")), MessageMaxChar))
-				s.Media = html.EscapeString(r.FormValue("media"))
-				s.PayID = html.EscapeString(resp.Result.PaymentID)
-				s.Address = resp.Result.IntegratedAddress
+	s.Media = html.EscapeString(media_)
+	s.PayID = wallet_.KeyPublic
+	s.Address = wallet_.KeyPublic
+	s.IsSolana = !mon_
 
-				params.Add("id", resp.Result.PaymentID)
-				params.Add("name", s.Name)
-				params.Add("msg", r.FormValue("message"))
-				params.Add("media", condenseSpaces(s.Media))
-				params.Add("show", html.EscapeString(r.FormValue("showAmount")))
-				s.CheckURL = params.Encode()
+	params.Add("id", s.Address)
+	s.CheckURL = params.Encode()
 
-				tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", resp.Result.IntegratedAddress, s.Amount), qrcode.Low, 320)
-				s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
-
-				err := payTemplate.Execute(w, s)
-				if err != nil {
-					fmt.Println(err)
-				}
-			} else {
-				w.WriteHeader(http.StatusInternalServerError)
-				return // return http 401 unauthorized error
-			}
-		}
-	} else { //if paying with solana
-
-		s.Amount = html.EscapeString(r.FormValue("amount"))
-		if r.FormValue("amount") == "" {
-			s.Amount = fmt.Sprint(ScamThreshold)
-		}
-		if r.FormValue("name") == "" {
-			s.Name = "Anonymous"
-		} else {
-			s.Name = html.EscapeString(truncateStrings(condenseSpaces(r.FormValue("name")), NameMaxChar))
-		}
-		s.Message = html.EscapeString(truncateStrings(condenseSpaces(r.FormValue("message")), MessageMaxChar))
-		s.Media = html.EscapeString(r.FormValue("media"))
-
-		params.Add("name", s.Name)
-		params.Add("msg", r.FormValue("message"))
-		params.Add("media", condenseSpaces(s.Media))
-		params.Add("show", html.EscapeString(r.FormValue("showAmount")))
-
-		amountStr := r.FormValue("amount")
-		amount, err := strconv.ParseFloat(amountStr, 64)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		showAmount, err := strconv.ParseBool(html.EscapeString(r.FormValue("showAmount")))
-		if err != nil {
-			// handle the error here
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		var wallet_ = createWalletSolana(s.Name, r.FormValue("message"), amount, showAmount)
-		// Get Solana address and desired balance from request
-		address := wallet_.KeyPublic
-
-		// Check balance
-		//hasBalance := checkSolanaBalance(address, amount)
-
-		donoStr := fmt.Sprintf("%.2f", wallet_.DonoAmount)
-
-		// Wallet won't have what's needed, so now we display the dono page for the person to donate. Just like the monero page.
-
-		s.Amount = donoStr
-		if donoStr == "" {
-			s.Amount = fmt.Sprint(ScamThreshold)
-			donoStr = s.Amount
-		}
-
-		if wallet_.DonoName == "" {
-			s.Name = "Anonymous"
-			wallet_.DonoName = s.Name
-		} else {
-			s.Name = html.EscapeString(truncateStrings(condenseSpaces(wallet_.DonoName), NameMaxChar))
-		}
-
-		s.Message = wallet_.DonoString
-		s.Media = html.EscapeString(r.FormValue("media"))
-		s.PayID = wallet_.KeyPublic
-		s.Address = wallet_.KeyPublic
-		s.IsSolana = !moneroBool
-
-		params.Add("id", s.Address)
-		params.Add("amount", donoStr)
-		params.Add("msg", r.FormValue("message"))
-		params.Add("media", condenseSpaces(s.Media))
-		params.Add("show", html.EscapeString(r.FormValue("showAmount")))
-		s.CheckURL = params.Encode()
-
-		tmp, _ := qrcode.Encode("solana:"+address+"?amount="+donoStr, qrcode.Low, 320)
-		s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
-		err = payTemplate.Execute(w, s)
-		if err != nil {
-			fmt.Println(err)
-		}
-
+	tmp, _ := qrcode.Encode("solana:"+address+"?amount="+donoStr, qrcode.Low, 320)
+	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
+	err := payTemplate.Execute(w, s)
+	if err != nil {
+		fmt.Println(err)
 	}
 }
+
+func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values) {
+    payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
+    req, err := http.NewRequest("POST", rpcURL, payload)
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        return
+    }
+    req.Header.Set("Content-Type", "application/json")
+    res, err := http.DefaultClient.Do(req)
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        return
+    }
+
+    resp := &rpcResponse{}
+    if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
+        fmt.Println(err.Error())
+        w.WriteHeader(http.StatusInternalServerError)
+        return
+    }
+
+    s.PayID = html.EscapeString(resp.Result.PaymentID)
+    params.Add("id", resp.Result.PaymentID)
+    s.Address = resp.Result.IntegratedAddress
+    s.CheckURL = params.Encode()
+
+    tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", resp.Result.IntegratedAddress, s.Amount), qrcode.Low, 320)
+    s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
+
+	err = payTemplate.Execute(w, s)
+	if err != nil {
+		fmt.Println(err)
+	}
+} 

@@ -31,28 +31,10 @@
 <blockquote>
     <img src="data:image/png;base64,{{.QRB64}}"/>
 </blockquote>
-   {{ if .IsSolana }}
 
-  <label>Checking for payment (every 3 seconds) <a href="/checksol?{{.CheckURL}}" target="checkframe">Manual
-    check</a></label><br>
-<blockquote>
-    <iframe allowtransparency="true" frameBorder="0" name="checkframe" scrolling="no"
-            src="/checksol?{{.CheckURL}}"></iframe>
-</blockquote>
-<small>You must stay on this screen until transaction is seen. Do not manually refresh this page.</small><br>
 
-  {{ else }}
        
-    
-<label>Checking for payment (every 3 seconds) <a href="/checkxmr?{{.CheckURL}}" target="checkframe">Manual
-    check</a></label><br>
-<blockquote>
-    <iframe allowtransparency="true" frameBorder="0" name="checkframe" scrolling="no"
-            src="/checkxmr?{{.CheckURL}}"></iframe>
-</blockquote>
 <small>You must stay on this screen until transaction is seen. Do not manually refresh this page.</small><br>
-
-    {{ end }}
         
 </body>
 </html>
