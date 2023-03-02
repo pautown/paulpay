@@ -470,7 +470,7 @@ func checkUnfulfilledDonos() []Dono {
 
 		if secondsElapsedSinceLastCheck < secondsNeededToCheck {
 			log.Println("Not enough time has passed, skipping")
-			continue
+			continue // If not enough time has passed then not checking for value and thus not updating updated_at
 		}
 		log.Println("Enough time has passed, checking")
 
@@ -1295,3 +1295,52 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values)
 		fmt.Println(err)
 	}
 }
+
+// TODO TOMORROW
+
+// Add hashed IP to dono table in a way nobody can decode it but it can be checked.
+
+func clearIP(dono donation) { //call whenever dono fulfilled or dono too old to matter
+	//dono.ip = ""
+}
+func preventMassSpam() {
+	/*
+		if somebody is trying to mass spam fake donos to ddoss fast, then their IP will
+		be the exact same (if they have multiple IPs that's an issue but it's not really a
+			huge issue (which means people will do it because I'm saying it's not an issue))
+			and then if we check unfulfilled recent donos for IP matches, we can add a delay which still checks
+			but exponentially slows down the checking against the network.
+
+			This way in order to ddossss effectively you'd essentially need a really big vpn network which is
+			possible but not really likely for the moronic homosexuals who have aids and dislike me (redundant)
+			sameIPCount = 1
+			for dono in []unfullfilledDonos{ // loop through all donos to check
+				if dono.age > dayOldAge {
+					clearIP(dono)
+					}
+				if dono.ip == currentdono.ip && dono != currentdono {
+
+					sameIPCount += 1
+				}
+			}
+			if (sameIPCount > 3) { basically you can mess up thrice
+				expoAdder = (math.Pow(1.3, sameIPCount))/1.3
+			}
+	*/
+}
+
+// TODO: Sell IP lists to NSA and MOSSAD
+
+// When dono fulfilled, send solana to address in site owner / user db
+//Update form to properly enable setting and viewing of eth/sol/hex addresses
+
+// Fix payment handler logic so anon dono amount is more clearly named in db plus logic works
+
+// Modify index.html to show the minimum usd value dono next to the minimum crypto dono template text
+// Actually set up monero checking
+
+/* if your ip matters (it doesn't):
+use vpn
+use proxy
+don't visit site (everybody who runs a server can see it)
+*/
