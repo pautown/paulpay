@@ -22,6 +22,7 @@ import (
 	"context"
 	"crypto/ed25519"
 
+	"bytes"
 	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
@@ -29,6 +30,7 @@ import (
 	"html"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -38,7 +40,6 @@ import (
 	"text/template"
 	"time"
 	"unicode/utf8"
-	"bytes"
 
 	"database/sql"
 	_ "github.com/mattn/go-sqlite3"
@@ -48,13 +49,10 @@ import (
 	"github.com/portto/solana-go-sdk/types"
 	qrcode "github.com/skip2/go-qrcode"
 
-
-
 	"crypto/rand"
 	"github.com/google/uuid"
 
 	"golang.org/x/crypto/bcrypt"
-
 )
 
 var USDMinimum float64 = 5
@@ -74,9 +72,7 @@ var addressSliceSolana []AddressSolana
 // example OBS url: https://example.com/alert?auth=adminadmin
 var password string = "adminadmin"
 var checked string = ""
-
-
-
+var killDono = 30.00 * time.Hour // hours it takes for a dono to be unfulfilled before it is no longer checked.
 var indexTemplate *template.Template
 var payTemplate *template.Template
 var alertTemplate *template.Template
@@ -87,17 +83,16 @@ var incorrectLoginTemplate *template.Template
 var userTemplate *template.Template
 var logoutTemplate *template.Template
 var incorrectPasswordTemplate *template.Template
+var baseCheckingRate = 15
 
 var minSolana, minMonero float64 // Global variables to hold minimum SOL and XMR required to equal the global value
-var minDonoValue float64 = 5.0 // The global value to equal in USD terms
-
+var minDonoValue float64 = 5.0   // The global value to equal in USD terms
 
 // Mainnet
 //var c = client.NewClient(rpc.MainnetRPCEndpoint)
 
 // Devnet
 var c = client.NewClient(rpc.DevnetRPCEndpoint)
-
 
 type priceData struct {
 	Monero struct {
@@ -107,8 +102,6 @@ type priceData struct {
 		Usd float64 `json:"usd"`
 	} `json:"solana"`
 }
-
-
 
 type User struct {
 	UserID               int
@@ -160,14 +153,14 @@ type getBalanceResponse struct {
 }
 
 type configJson struct {
-	MinimumDonation  float64  `json:"MinimumDonation"`
-	MaxMessageChars  int      `json:"MaxMessageChars"`
-	MaxNameChars     int      `json:"MaxNameChars"`
-	RPCWalletURL     string   `json:"RPCWalletURL"`
-	WebViewUsername  string   `json:"WebViewUsername"`
-	WebViewPassword  string   `json:"WebViewPassword"`
-	OBSWidgetRefresh string   `json:"OBSWidgetRefresh"`
-	Checked          bool     `json:"ShowAmountCheckedByDefault"`
+	MinimumDonation  float64 `json:"MinimumDonation"`
+	MaxMessageChars  int     `json:"MaxMessageChars"`
+	MaxNameChars     int     `json:"MaxNameChars"`
+	RPCWalletURL     string  `json:"RPCWalletURL"`
+	WebViewUsername  string  `json:"WebViewUsername"`
+	WebViewPassword  string  `json:"WebViewPassword"`
+	OBSWidgetRefresh string  `json:"OBSWidgetRefresh"`
+	Checked          bool    `json:"ShowAmountCheckedByDefault"`
 }
 
 type checkPage struct {
@@ -194,13 +187,13 @@ type superChat struct {
 }
 
 type indexDisplay struct {
-	MaxChar int
+	MaxChar   int
 	MinSolana float64
 	MinMonero float64
-	SolPrice float64
-	XMRPrice float64
-	MinAmnt float64
-	Checked string
+	SolPrice  float64
+	XMRPrice  float64
+	MinAmnt   float64
+	Checked   string
 }
 
 type viewPageData struct {
@@ -229,14 +222,11 @@ type AddressSolana struct {
 	DonoAnon   bool
 }
 
-
-
 type MoneroPrice struct {
 	Monero struct {
 		Usd float64 `json:"usd"`
 	} `json:"monero"`
 }
-
 
 func fetchExchangeRates() {
 	for {
@@ -266,37 +256,31 @@ func fetchExchangeRates() {
 
 		fmt.Println("Updated exchange rates:", "1 XMR = ", xmrToUsd, " USD,", "1 SOL = ", solToUsd, " USD")
 
-		
-
 		// Calculate how much Monero is needed to equal the min usd donation var.
-	    minMonero = minDonoValue / data.Monero.Usd
-	    // Calculate how much Solana is needed to equal the min usd donation var.
-	    minSolana= minDonoValue / data.Solana.Usd
+		minMonero = minDonoValue / data.Monero.Usd
+		// Calculate how much Solana is needed to equal the min usd donation var.
+		minSolana = minDonoValue / data.Solana.Usd
 
-	    minMonero, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minMonero), 64)
-	    minSolana, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minSolana), 64)
-	    
-	    // Save the minimum Monero and Solana variables
-	    fmt.Println("Min monero:", minMonero)
+		minMonero, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minMonero), 64)
+		minSolana, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minSolana), 64)
 
-	    fmt.Println("Min solana:", minSolana)
-	    // Wait three minutes before fetching again
-	    if(xmrToUsd == 0 || solToUsd == 0){ 
-	    	time.Sleep(90 * time.Second)
-	    }else{
-	    	time.Sleep(30 * time.Second)
-	    }
-		
+		// Save the minimum Monero and Solana variables
+		fmt.Println("Min monero:", minMonero)
+
+		fmt.Println("Min solana:", minSolana)
+		// Wait three minutes before fetching again
+		if xmrToUsd == 0 || solToUsd == 0 {
+			time.Sleep(90 * time.Second)
+		} else {
+			time.Sleep(30 * time.Second)
+		}
+
 	}
 }
-
-
-
 
 func main() {
 	log.Println("Starting server")
 	var err error
-
 
 	// Open a new database connection
 	db, err = sql.Open("sqlite3", "users.db")
@@ -304,7 +288,6 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-
 
 	// Check if the database and tables exist, and create them if they don't
 	err = createDatabaseIfNotExists(db)
@@ -336,7 +319,6 @@ func main() {
 		http.ServeFile(w, r, "web/sol.svg")
 	})
 
-	
 	// Schedule a function to run fetchExchangeRates every three minutes
 	go fetchExchangeRates()
 	go checkDonos()
@@ -346,7 +328,6 @@ func main() {
 	http.HandleFunc("/alert", alertHandler)
 	http.HandleFunc("/view", viewHandler)
 
-
 	// serve login and user interface pages
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/incorrect_login", incorrectLoginHandler)
@@ -354,13 +335,10 @@ func main() {
 	http.HandleFunc("/logout", logoutHandler)
 	http.HandleFunc("/changepassword", changePasswordHandler)
 
-
 	indexTemplate, _ = template.ParseFiles("web/index.html")
 	payTemplate, _ = template.ParseFiles("web/pay.html")
 	alertTemplate, _ = template.ParseFiles("web/alert.html")
 	viewTemplate, _ = template.ParseFiles("web/view.html")
-
-
 
 	loginTemplate, _ = template.ParseFiles("web/login.html")
 	incorrectLoginTemplate, _ = template.ParseFiles("web/incorrect_login.html")
@@ -368,29 +346,25 @@ func main() {
 	logoutTemplate, _ = template.ParseFiles("web/logout.html")
 	incorrectPasswordTemplate, _ = template.ParseFiles("web/password_change_failed.html")
 
-
 	err = http.ListenAndServe(":8900", nil)
 	if err != nil {
 		panic(err)
 	}
 }
 
-
 func checkDonos() {
-    for {
-    	log.Println("Checking Addresses:")
-        fulfilledDonos := checkUnfulfilledDonos()
-        for _, dono := range fulfilledDonos {
-            err := createNewQueueEntry(db, dono.Address, dono.Name, dono.Message, dono.AmountSent, dono.CurrencyType)
-            if err != nil {
-                panic(err)
-            }
-        }
-        time.Sleep(5 * time.Second)
-    }
+	for {
+		log.Println("Checking Addresses:")
+		fulfilledDonos := checkUnfulfilledDonos()
+		for _, dono := range fulfilledDonos {
+			err := createNewQueueEntry(db, dono.Address, dono.Name, dono.Message, dono.AmountSent, dono.CurrencyType)
+			if err != nil {
+				panic(err)
+			}
+		}
+		time.Sleep(time.Duration(baseCheckingRate) * time.Second)
+	}
 }
-
-
 
 func createNewQueueEntry(db *sql.DB, address string, name string, message string, amount float64, currency string) error {
 	_, err := db.Exec(`
@@ -437,18 +411,18 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
 }
 
 type Dono struct {
-	ID            int
-	UserID        int
-	Address		string
-	Name          string
-	Message 	  string
-	AmountToSend  float64
-	AmountSent    float64
-	CurrencyType  string
-	AnonDono      bool
-	Fulfilled     bool
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID           int
+	UserID       int
+	Address      string
+	Name         string
+	Message      string
+	AmountToSend float64
+	AmountSent   float64
+	CurrencyType string
+	AnonDono     bool
+	Fulfilled    bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 func checkUnfulfilledDonos() []Dono {
@@ -468,97 +442,130 @@ func checkUnfulfilledDonos() []Dono {
 
 	// Loop through the unfulfilled donos and check their status
 	var fulfilledDonos []Dono
+	var rowsToUpdate []int // slice to store the ids of rows that need to be updated
+	var dono Dono
 	for rows.Next() {
-		var dono Dono
+
 		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.CreatedAt, &dono.UpdatedAt)
 		if err != nil {
 			panic(err)
 		}
 
+		// Check if the dono has exceeded the killDono time
+		timeElapsedFromDonoCreation := time.Since(dono.CreatedAt)
+		if timeElapsedFromDonoCreation > (killDono) {
+			dono.Fulfilled = true
+			fulfilledDonos = append(fulfilledDonos, dono)
+			rowsToUpdate = append(rowsToUpdate, dono.ID)
+			continue
+		}
+
+		// Check if the dono needs to be skipped based on exponential backoff
+		secondsElapsedSinceLastCheck := time.Since(dono.UpdatedAt).Seconds()
+		log.Println("Seconds since last check: ", secondsElapsedSinceLastCheck)
+		expoAdder := secondsElapsedSinceLastCheck / 60 / 60 / 19
+		secondsNeededToCheck := math.Pow(float64(baseCheckingRate), 1+expoAdder)
+		log.Println("Seconds needed to check: ", secondsNeededToCheck)
+
+		log.Printf("Result of math.Pow: %f", secondsNeededToCheck)
+		log.Println("Expo adder: ", expoAdder)
+
+		if secondsElapsedSinceLastCheck < secondsNeededToCheck {
+
+			log.Println("Not enough time has passed, skipping")
+			continue
+		}
+		log.Println("Enough time has passed, checking")
+
 		if dono.CurrencyType == "XMR" {
 			dono.AmountSent, _ = getXMRBalance(dono.Address)
 		} else if dono.CurrencyType == "SOL" {
 			dono.AmountSent, _ = getSOLBalance(dono.Address)
-
-
 		}
 
 		if dono.AmountSent >= dono.AmountToSend {
 			dono.Fulfilled = true
 			fulfilledDonos = append(fulfilledDonos, dono)
+			rowsToUpdate = append(rowsToUpdate, dono.ID)
 		}
 	}
 
-	// Mark the newly fulfilled donos as fulfilled in the donos table
-	for _, dono := range fulfilledDonos {
-		_, err := db.Exec(`UPDATE donos SET fulfilled = true, amount_sent = ? WHERE dono_id = ?`, dono.AmountSent, dono.ID)
-		if err != nil {
-		panic(err)
+	// Update the rows that need to be updated in a way that never throws a database locked error
+	for len(rowsToUpdate) > 0 {
+		// update only one row at a time
+		_, err = db.Exec(`UPDATE donos SET updated_at = ?, amount_sent = ?, fulfilled = ? WHERE dono_id = ?`, time.Now(), dono.AmountSent, dono.Fulfilled, rowsToUpdate[0])
+		if err == nil {
+			// if the update was successful, remove the updated row from the slice
+			rowsToUpdate = rowsToUpdate[1:]
+			continue
+		} else if err.Error() != "database is locked" {
+			// if the error is not "database is locked", panic
+			panic(err)
 		}
+		// if the error is "database is locked", wait a bit before trying again
+		time.Sleep(time.Second)
 	}
-return fulfilledDonos
+
+	return fulfilledDonos
 }
-
-
 
 func getSOLBalance(address string) (float64, error) {
-    balance, err := c.GetBalance(
-        context.TODO(), // request context
-        address,        // wallet to fetch balance for
-    )
-    if err != nil {
-        return 0, err
-    }
-    log.Println("Address: ", address, " Balance: ", balance)
-    return float64(balance) / 1e9, nil
+	balance, err := c.GetBalance(
+		context.TODO(), // request context
+		address,        // wallet to fetch balance for
+	)
+	if err != nil {
+		return 0, err
+	}
+	log.Println("Address: ", address, " Balance: ", balance)
+	return float64(balance) / 1e9, nil
 }
 
-
 func getXMRBalance(address string) (float64, error) {
-    // Construct the URL for the Monero RPC endpoint
-    url := "http://127.0.0.1:18081/json_rpc"
+	// Construct the URL for the Monero RPC endpoint
+	url := "http://127.0.0.1:18081/json_rpc"
 
-    // Create the JSON request payload for the RPC call
-    rpcRequest := map[string]interface{}{
-        "jsonrpc": "2.0",
-        "id":      "0",
-        "method":  "get_balance",
-        "params": map[string]interface{}{
-            "address": address,
-        },
-    }
+	// Create the JSON request payload for the RPC call
+	rpcRequest := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      "0",
+		"method":  "get_balance",
+		"params": map[string]interface{}{
+			"address": address,
+		},
+	}
 
-    // Convert the request payload to JSON format
-    payload, err := json.Marshal(rpcRequest)
-    if err != nil {
-        return 0, err
-    }
+	// Convert the request payload to JSON format
+	payload, err := json.Marshal(rpcRequest)
+	if err != nil {
+		return 0, err
+	}
 
-    // Make the HTTP POST request to the Monero RPC endpoint
-    resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
-    if err != nil {
-        return 0, err
-    }
-    defer resp.Body.Close()
+	// Make the HTTP POST request to the Monero RPC endpoint
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
 
-    // Parse the JSON response
-    var rpcResponse map[string]interface{}
-    err = json.NewDecoder(resp.Body).Decode(&rpcResponse)
-    if err != nil {
-        return 0, err
-    }
+	// Parse the JSON response
+	var rpcResponse map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&rpcResponse)
+	if err != nil {
+		return 0, err
+	}
 
-    // Check if the RPC call was successful
-    if rpcResponse["error"] != nil {
-        return 0, fmt.Errorf("RPC call failed: %s", rpcResponse["error"].(map[string]interface{})["message"])
-    }
+	// Check if the RPC call was successful
+	if rpcResponse["error"] != nil {
+		return 0, fmt.Errorf("RPC call failed: %s", rpcResponse["error"].(map[string]interface{})["message"])
+	}
 
-    // Extract the balance from the response and convert it to float64 format
-    balance, err := strconv.ParseFloat(rpcResponse["result"].(map[string]interface{})["balance"].(string), 64)
-    if err != nil {
-        return 0, err
-    }
-    return balance / 1000000000000, nil // convert from atomic units to XMR
+	// Extract the balance from the response and convert it to float64 format
+	balance, err := strconv.ParseFloat(rpcResponse["result"].(map[string]interface{})["balance"].(string), 64)
+	if err != nil {
+		return 0, err
+	}
+	return balance / 1000000000000, nil // convert from atomic units to XMR
 }
 
 func processQueue(db *sql.DB) error {
@@ -596,14 +603,13 @@ func processQueue(db *sql.DB) error {
 	return nil
 }
 
-
-func displayNewDono(name string, amount float64, currency string) bool{
+func displayNewDono(name string, amount float64, currency string) bool {
 	return false
 }
 
 func createDatabaseIfNotExists(db *sql.DB) error {
-    // create the tables if they don't exist
-    _, err := db.Exec(`
+	// create the tables if they don't exist
+	_, err := db.Exec(`
         CREATE TABLE IF NOT EXISTS donos (
             dono_id INTEGER PRIMARY KEY,
             user_id INTEGER,
@@ -620,11 +626,11 @@ func createDatabaseIfNotExists(db *sql.DB) error {
             FOREIGN KEY(user_id) REFERENCES users(id)
         )
     `)
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 
-    _, err = db.Exec(`
+	_, err = db.Exec(`
         CREATE TABLE IF NOT EXISTS queue (
             name TEXT,
             message TEXT,
@@ -632,11 +638,11 @@ func createDatabaseIfNotExists(db *sql.DB) error {
             currency TEXT
         )
     `)
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 
-    _, err = db.Exec(`
+	_, err = db.Exec(`
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
@@ -653,51 +659,37 @@ func createDatabaseIfNotExists(db *sql.DB) error {
         )
     `)
 
+	if err != nil {
+		return err
+	}
 
+	// create admin user if not exists
+	adminUser := User{
+		Username:          "admin",
+		XMRWalletPassword: "",
+		MinDono:           0,
+		MinMediaDono:      0,
+		MediaEnabled:      true,
+	}
 
-    if err != nil {
-        return err
-    } 
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
+	adminHashedPassword, err := bcrypt.GenerateFromPassword([]byte("hunter123"), bcrypt.DefaultCost)
+	if err != nil {
+		log.Fatal(err)
+	}
+	adminUser.HashedPassword = adminHashedPassword
 
-    // create admin user if not exists
-    adminUser := User{
-        Username:          "admin",
-        XMRWalletPassword: "",
-        MinDono:           0,
-        MinMediaDono:      0,
-        MediaEnabled:      true,
-    }
+	err = createUser(adminUser)
+	if err != nil {
+		log.Println(err)
+	}
 
-    adminHashedPassword, err := bcrypt.GenerateFromPassword([]byte("hunter123"), bcrypt.DefaultCost)
-    if err != nil {
-        log.Fatal(err)
-    }
-    adminUser.HashedPassword = adminHashedPassword
-
-    err = createUser(adminUser)
-    if err != nil {
-        log.Println(err)
-    }
-
-    return nil
+	return nil
 }
 
-
 func createUser(user User) error {
-    
 
-    // Insert the user's data into the database
-    _, err := db.Exec(`
+	// Insert the user's data into the database
+	_, err := db.Exec(`
         INSERT INTO users (
             username,
             HashedPassword,
@@ -713,10 +705,8 @@ func createUser(user User) error {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, user.Username, user.HashedPassword, "", "", "", "", 0, 0, false, time.Now(), time.Now())
 
-    return err
+	return err
 }
-
-
 
 // update an existing user
 func updateUser(user User) error {
@@ -927,7 +917,6 @@ func changePasswordHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-
 	// render change password form
 	tmpl, err := template.ParseFiles("web/user.html")
 	if err != nil {
@@ -986,11 +975,6 @@ func validateSession(r *http.Request) (int, error) {
 	return userID, nil
 }
 
-
-
-
-
-
 func createWalletSolana(dName string, dString string, dAmount float64, dAnon bool) AddressSolana {
 	//create a new wallet using
 	wallet := types.NewAccount()
@@ -1018,8 +1002,6 @@ func addToAddressSliceSolana(a AddressSolana) {
 	addressSliceSolana = append(addressSliceSolana, a)
 	fmt.Println(len(addressSliceSolana))
 }
-
-
 
 func condenseSpaces(s string) string {
 	return strings.Join(strings.Fields(s), " ")
@@ -1088,7 +1070,6 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-
 func addPaymentToLog(name, message, media, currency string, amount float64, anon bool) {
 	//var datetime = getCurrentDateTime()
 	// ADD PAYMENTS TO LOG
@@ -1104,9 +1085,6 @@ func getCurrentDateTime() string {
 	now := time.Now()
 	return now.Format("2006-01-02 15:04:05")
 }
-
-
-
 
 func indexHandler(w http.ResponseWriter, _ *http.Request) {
 	var i indexDisplay
@@ -1124,57 +1102,57 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 
 func alertHandler(w http.ResponseWriter, r *http.Request) {
 	/*
-	 var v csvLog
-	v.Refresh = AlertWidgetRefreshInterval
-	if r.FormValue("auth") == password {
+		 var v csvLog
+		v.Refresh = AlertWidgetRefreshInterval
+		if r.FormValue("auth") == password {
 
-		csvFile, err := os.Open("log/alertqueue.csv")
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		csvLines, err := csv.NewReader(csvFile).ReadAll()
-		if err != nil {
-			fmt.Println(err)
-		}
-		defer func(csvFile *os.File) {
-			err := csvFile.Close()
+			csvFile, err := os.Open("log/alertqueue.csv")
 			if err != nil {
 				fmt.Println(err)
 			}
-		}(csvFile)
 
-		// Remove top line of CSV file after displaying it
-		if csvLines != nil {
-			popFile, _ := os.OpenFile("log/alertqueue.csv", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-			popFirst := csvLines[1:]
-			w := csv.NewWriter(popFile)
-			err := w.WriteAll(popFirst)
+			csvLines, err := csv.NewReader(csvFile).ReadAll()
 			if err != nil {
 				fmt.Println(err)
 			}
-			defer func(popFile *os.File) {
-				err := popFile.Close()
+			defer func(csvFile *os.File) {
+				err := csvFile.Close()
 				if err != nil {
 					fmt.Println(err)
 				}
-			}(popFile)
-			v.ID = csvLines[0][0]
-			v.Name = csvLines[0][1]
-			v.Message = csvLines[0][2]
-			v.Amount = csvLines[0][3]
-			v.DisplayToggle = ""
+			}(csvFile)
+
+			// Remove top line of CSV file after displaying it
+			if csvLines != nil {
+				popFile, _ := os.OpenFile("log/alertqueue.csv", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+				popFirst := csvLines[1:]
+				w := csv.NewWriter(popFile)
+				err := w.WriteAll(popFirst)
+				if err != nil {
+					fmt.Println(err)
+				}
+				defer func(popFile *os.File) {
+					err := popFile.Close()
+					if err != nil {
+						fmt.Println(err)
+					}
+				}(popFile)
+				v.ID = csvLines[0][0]
+				v.Name = csvLines[0][1]
+				v.Message = csvLines[0][2]
+				v.Amount = csvLines[0][3]
+				v.DisplayToggle = ""
+			} else {
+				v.DisplayToggle = "display: none;"
+			}
 		} else {
-			v.DisplayToggle = "display: none;"
+			w.WriteHeader(http.StatusUnauthorized)
+			return // return http 401 unauthorized error
 		}
-	} else {
-		w.WriteHeader(http.StatusUnauthorized)
-		return // return http 401 unauthorized error
-	}
-	err := alertTemplate.Execute(w, v)
-	if err != nil {
-		fmt.Println(err)
-	}
+		err := alertTemplate.Execute(w, v)
+		if err != nil {
+			fmt.Println(err)
+		}
 	*/
 }
 
@@ -1199,66 +1177,61 @@ func getSolanaBalance(address string, amount float64) bool {
 	//return balance >= uint64(amount*math.Pow10(9)), nil
 }
 
-
-
-
-
 func paymentHandler(w http.ResponseWriter, r *http.Request) {
-    // Get form values
-    fMon := r.FormValue("mon")
-    fAmount := r.FormValue("amount")
-    fName := r.FormValue("name")
-    fMessage := r.FormValue("message")
-    fMedia := r.FormValue("media")
-    fShowAmount := r.FormValue("showAmount")
+	// Get form values
+	fMon := r.FormValue("mon")
+	fAmount := r.FormValue("amount")
+	fName := r.FormValue("name")
+	fMessage := r.FormValue("message")
+	fMedia := r.FormValue("media")
+	fShowAmount := r.FormValue("showAmount")
 
-    // Parse and handle errors for each form value
-    mon, _ := strconv.ParseBool(fMon)
-    amount, err := strconv.ParseFloat(fAmount, 64)
-    if err != nil {
-        if mon {
-            amount = minMonero
-        } else {
-            amount = minSolana
-        }
-    }
+	// Parse and handle errors for each form value
+	mon, _ := strconv.ParseBool(fMon)
+	amount, err := strconv.ParseFloat(fAmount, 64)
+	if err != nil {
+		if mon {
+			amount = minMonero
+		} else {
+			amount = minSolana
+		}
+	}
 
-    name := fName
-    if name == "" {
-        name = "Anonymous"
-    }
+	name := fName
+	if name == "" {
+		name = "Anonymous"
+	}
 
-    message := fMessage
-    if message == "" {
-        message = " "
-    }
+	message := fMessage
+	if message == "" {
+		message = " "
+	}
 
-    media := html.EscapeString(fMedia)
+	media := html.EscapeString(fMedia)
 
-    showAmount, _ := strconv.ParseBool(fShowAmount)
+	showAmount, _ := strconv.ParseBool(fShowAmount)
 
-    var s superChat
-    params := url.Values{}
+	var s superChat
+	params := url.Values{}
 
-    params.Add("name", name)
-    params.Add("msg", message)
-    params.Add("media", condenseSpaces(media))
-    params.Add("amount", strconv.FormatFloat(amount, 'f', 4, 64))
-    params.Add("show", strconv.FormatBool(showAmount))
+	params.Add("name", name)
+	params.Add("msg", message)
+	params.Add("media", condenseSpaces(media))
+	params.Add("amount", strconv.FormatFloat(amount, 'f', 4, 64))
+	params.Add("show", strconv.FormatBool(showAmount))
 
-    s.Amount = strconv.FormatFloat(amount, 'f', 4, 64)
-    s.Name = html.EscapeString(truncateStrings(condenseSpaces(name), NameMaxChar))
-    s.Message = html.EscapeString(truncateStrings(condenseSpaces(message), MessageMaxChar))
-    s.Media = html.EscapeString(media)
+	s.Amount = strconv.FormatFloat(amount, 'f', 4, 64)
+	s.Name = html.EscapeString(truncateStrings(condenseSpaces(name), NameMaxChar))
+	s.Message = html.EscapeString(truncateStrings(condenseSpaces(message), MessageMaxChar))
+	s.Media = html.EscapeString(media)
 
-    
-     if mon {
-        handleMoneroPayment(w, &s, params)
-        createNewDono(1, s.Address, s.Name, s.Message, amount, "XMR", showAmount)
-    } else {
-        walletAddress := handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media, mon)
-        createNewDono(1, walletAddress, s.Name, s.Message, amount, "SOL", showAmount)
-    }
+	if mon {
+		handleMoneroPayment(w, &s, params)
+		createNewDono(1, s.Address, s.Name, s.Message, amount, "XMR", showAmount)
+	} else {
+		walletAddress := handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media, mon)
+		createNewDono(1, walletAddress, s.Name, s.Message, amount, "SOL", showAmount)
+	}
 }
 
 func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, mon_ bool) string {
@@ -1299,36 +1272,36 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 }
 
 func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values) {
-    payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
-    req, err := http.NewRequest("POST", rpcURL, payload)
-    if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
-        return
-    }
-    req.Header.Set("Content-Type", "application/json")
-    res, err := http.DefaultClient.Do(req)
-    if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
-        return
-    }
+	payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
+	req, err := http.NewRequest("POST", rpcURL, payload)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
-    resp := &rpcResponse{}
-    if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
-        fmt.Println(err.Error())
-        w.WriteHeader(http.StatusInternalServerError)
-        return
-    }
+	resp := &rpcResponse{}
+	if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
+		fmt.Println(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
-    s.PayID = html.EscapeString(resp.Result.PaymentID)
-    params.Add("id", resp.Result.PaymentID)
-    s.Address = resp.Result.IntegratedAddress
-    s.CheckURL = params.Encode()
+	s.PayID = html.EscapeString(resp.Result.PaymentID)
+	params.Add("id", resp.Result.PaymentID)
+	s.Address = resp.Result.IntegratedAddress
+	s.CheckURL = params.Encode()
 
-    tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", resp.Result.IntegratedAddress, s.Amount), qrcode.Low, 320)
-    s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
+	tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", resp.Result.IntegratedAddress, s.Amount), qrcode.Low, 320)
+	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
 
 	err = payTemplate.Execute(w, s)
 	if err != nil {
 		fmt.Println(err)
 	}
-} 
+}
