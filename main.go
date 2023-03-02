@@ -445,7 +445,6 @@ func checkUnfulfilledDonos() []Dono {
 	var rowsToUpdate []int // slice to store the ids of rows that need to be updated
 	var dono Dono
 	for rows.Next() {
-
 		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.CreatedAt, &dono.UpdatedAt)
 		if err != nil {
 			panic(err)
@@ -463,15 +462,13 @@ func checkUnfulfilledDonos() []Dono {
 		// Check if the dono needs to be skipped based on exponential backoff
 		secondsElapsedSinceLastCheck := time.Since(dono.UpdatedAt).Seconds()
 		log.Println("Seconds since last check: ", secondsElapsedSinceLastCheck)
-		expoAdder := secondsElapsedSinceLastCheck / 60 / 60 / 19
+		expoAdder := time.Since(dono.CreatedAt).Seconds() / 60 / 60 / 19
 		secondsNeededToCheck := math.Pow(float64(baseCheckingRate), 1+expoAdder)
 		log.Println("Seconds needed to check: ", secondsNeededToCheck)
-
 		log.Printf("Result of math.Pow: %f", secondsNeededToCheck)
 		log.Println("Expo adder: ", expoAdder)
 
 		if secondsElapsedSinceLastCheck < secondsNeededToCheck {
-
 			log.Println("Not enough time has passed, skipping")
 			continue
 		}
@@ -486,24 +483,17 @@ func checkUnfulfilledDonos() []Dono {
 		if dono.AmountSent >= dono.AmountToSend {
 			dono.Fulfilled = true
 			fulfilledDonos = append(fulfilledDonos, dono)
-			rowsToUpdate = append(rowsToUpdate, dono.ID)
 		}
+
+		rowsToUpdate = append(rowsToUpdate, dono.ID)
 	}
 
 	// Update the rows that need to be updated in a way that never throws a database locked error
-	for len(rowsToUpdate) > 0 {
-		// update only one row at a time
-		_, err = db.Exec(`UPDATE donos SET updated_at = ?, amount_sent = ?, fulfilled = ? WHERE dono_id = ?`, time.Now(), dono.AmountSent, dono.Fulfilled, rowsToUpdate[0])
-		if err == nil {
-			// if the update was successful, remove the updated row from the slice
-			rowsToUpdate = rowsToUpdate[1:]
-			continue
-		} else if err.Error() != "database is locked" {
-			// if the error is not "database is locked", panic
+	for _, rowID := range rowsToUpdate {
+		_, err = db.Exec(`UPDATE donos SET updated_at = ? WHERE dono_id = ?`, time.Now(), rowID)
+		if err != nil {
 			panic(err)
 		}
-		// if the error is "database is locked", wait a bit before trying again
-		time.Sleep(time.Second)
 	}
 
 	return fulfilledDonos
