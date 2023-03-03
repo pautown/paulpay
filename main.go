@@ -21,6 +21,8 @@ import (
 	// get version number of sol
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
 
 	"bytes"
 	"encoding/base64"
@@ -354,7 +356,6 @@ func main() {
 
 func checkDonos() {
 	for {
-		log.Println("Checking Addresses:")
 		fulfilledDonos := checkUnfulfilledDonos()
 		for _, dono := range fulfilledDonos {
 			err := createNewQueueEntry(db, dono.Address, dono.Name, dono.Message, dono.AmountSent, dono.CurrencyType)
@@ -368,7 +369,7 @@ func checkDonos() {
 
 func createNewQueueEntry(db *sql.DB, address string, name string, message string, amount float64, currency string) error {
 	_, err := db.Exec(`
-		INSERT INTO queue (name, message, amount, currency) VALUES (?, ?, ?)
+		INSERT INTO queue (name, message, amount, currency) VALUES (?, ?, ?, ?)
 	`, name, message, amount, currency)
 	if err != nil {
 		return err
@@ -376,7 +377,7 @@ func createNewQueueEntry(db *sql.DB, address string, name string, message string
 	return nil
 }
 
-func createNewDono(user_id int, dono_address string, dono_name string, dono_message string, amount_to_send float64, currencyType string, anon_dono bool) {
+func createNewDono(user_id int, dono_address string, dono_name string, dono_message string, amount_to_send float64, currencyType string, encrypted_ip string, anon_dono bool) {
 	// Open a new database connection
 	db, err := sql.Open("sqlite3", "users.db")
 	if err != nil {
@@ -400,10 +401,11 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
 			currency_type,
 			anon_dono,
 			fulfilled,
+			encrypted_ip,
 			created_at,
 			updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, user_id, dono_address, dono_name, dono_message, amount_to_send, 0.0, currencyType, anon_dono, false, createdAt, createdAt)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, user_id, dono_address, dono_name, dono_message, amount_to_send, 0.0, currencyType, anon_dono, false, encrypted_ip, createdAt, createdAt)
 	if err != nil {
 		log.Println(err)
 		panic(err)
@@ -421,8 +423,23 @@ type Dono struct {
 	CurrencyType string
 	AnonDono     bool
 	Fulfilled    bool
+	EncryptedIP  string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+}
+
+func clearEncryptedIP(dono *Dono) {
+	// call whenever dono fulfilled or dono too old to matter
+	dono.EncryptedIP = ""
+}
+
+func encryptIP(ip string) string {
+	// Encrypt IP using SHA-256 algorithm for secure and efficient hashing.
+	// Special thanks to "xander" for keeping the hashing/encryption secure.
+	h := sha256.New()
+	h.Write([]byte(ip))
+	hash := h.Sum(nil)
+	return hex.EncodeToString(hash)
 }
 
 func checkUnfulfilledDonos() []Dono {
@@ -440,39 +457,52 @@ func checkUnfulfilledDonos() []Dono {
 	}
 	defer rows.Close()
 
+	var fulfilledSlice []bool
+
 	// Loop through the unfulfilled donos and check their status
 	var fulfilledDonos []Dono
 	var rowsToUpdate []int // slice to store the ids of rows that need to be updated
 	var dono Dono
 	for rows.Next() {
-		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.CreatedAt, &dono.UpdatedAt)
+		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt)
 		if err != nil {
 			panic(err)
 		}
 
+		log.Println("Dono ID: ", dono.ID, "Address: ", dono.Address)
+		log.Println("Name: ", dono.Name)
+		log.Println("Message: ", dono.Message)
+		log.Println("AmountToSend: ", dono.AmountToSend)
+		log.Println("AmountSent: ", dono.AmountSent)
+		log.Println("CurrencyType: ", dono.CurrencyType)
 		// Check if the dono has exceeded the killDono time
 		timeElapsedFromDonoCreation := time.Since(dono.CreatedAt)
 		if timeElapsedFromDonoCreation > (killDono) {
 			dono.Fulfilled = true
-			fulfilledDonos = append(fulfilledDonos, dono)
 			rowsToUpdate = append(rowsToUpdate, dono.ID)
+			// add true to fulfilledSlice
+			fulfilledSlice = append(fulfilledSlice, true)
+			log.Println("Dono too old, killed (marked as fulfilled) and won't be checked again. \n")
 			continue
 		}
+
+		// add false to fulfilledSlice
+		fulfilledSlice = append(fulfilledSlice, false)
 
 		// Check if the dono needs to be skipped based on exponential backoff
 		secondsElapsedSinceLastCheck := time.Since(dono.UpdatedAt).Seconds()
 		log.Println("Seconds since last check: ", secondsElapsedSinceLastCheck)
-		expoAdder := time.Since(dono.CreatedAt).Seconds() / 60 / 60 / 19
-		secondsNeededToCheck := math.Pow(float64(baseCheckingRate), 1+expoAdder)
+		expoAdder := returnIPPenalty(rows, dono.EncryptedIP) + time.Since(dono.CreatedAt).Seconds()/60/60/19
+		secondsNeededToCheck := math.Pow(float64(baseCheckingRate), expoAdder)
 		log.Println("Seconds needed to check: ", secondsNeededToCheck)
-		log.Printf("Result of math.Pow: %f", secondsNeededToCheck)
-		log.Println("Expo adder: ", expoAdder)
+		//log.Printf("Result of math.Pow: %f", secondsNeededToCheck)
+		//log.Println("Expo adder: ", expoAdder)
 
 		if secondsElapsedSinceLastCheck < secondsNeededToCheck {
-			log.Println("Not enough time has passed, skipping")
+			log.Println("Not enough time has passed, skipping. \n")
 			continue // If not enough time has passed then not checking for value and thus not updating updated_at
 		}
-		log.Println("Enough time has passed, checking")
+		log.Println("Enough time has passed, checking. \n")
 
 		if dono.CurrencyType == "XMR" {
 			dono.AmountSent, _ = getXMRBalance(dono.Address)
@@ -482,18 +512,22 @@ func checkUnfulfilledDonos() []Dono {
 
 		if dono.AmountSent >= dono.AmountToSend {
 			dono.Fulfilled = true
+			log.Println("Dono fulfilled. \n")
 			fulfilledDonos = append(fulfilledDonos, dono)
 		}
 
 		rowsToUpdate = append(rowsToUpdate, dono.ID)
 	}
 
+	i := 0
 	// Update the rows that need to be updated in a way that never throws a database locked error
 	for _, rowID := range rowsToUpdate {
-		_, err = db.Exec(`UPDATE donos SET updated_at = ? WHERE dono_id = ?`, time.Now(), rowID)
+
+		_, err = db.Exec(`UPDATE donos SET updated_at = ?, fulfilled = ? WHERE dono_id = ?`, time.Now(), fulfilledSlice[i], rowID)
 		if err != nil {
 			panic(err)
 		}
+		i += 1
 	}
 
 	return fulfilledDonos
@@ -507,7 +541,7 @@ func getSOLBalance(address string) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	log.Println("Address: ", address, " Balance: ", balance)
+	log.Println("Address: ", address, " Balance: ", balance, "\n")
 	return float64(balance) / 1e9, nil
 }
 
@@ -611,6 +645,7 @@ func createDatabaseIfNotExists(db *sql.DB) error {
             currency_type TEXT,
             anon_dono BOOL,
             fulfilled BOOL,
+            encrypted_ip TEXT,
             created_at DATETIME,
             updated_at DATETIME,
             FOREIGN KEY(user_id) REFERENCES users(id)
@@ -1167,7 +1202,43 @@ func getSolanaBalance(address string, amount float64) bool {
 	//return balance >= uint64(amount*math.Pow10(9)), nil
 }
 
+func returnIPPenalty(rows *sql.Rows, currentDonoIP string) float64 {
+
+	var donos []*Dono
+	for rows.Next() {
+		var dono Dono
+		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt)
+		if err != nil {
+			panic(err)
+		}
+		donos = append(donos, &dono)
+	}
+
+	// Check if the encrypted IP matches any of the encrypted IPs in the slice of donos
+	sameIPCount := 0
+	for _, dono := range donos {
+		if time.Since(dono.CreatedAt).Hours() > 24 {
+			clearEncryptedIP(dono)
+			continue
+		}
+		if dono.EncryptedIP == currentDonoIP {
+			sameIPCount++
+		}
+	}
+
+	// Calculate the exponential delay factor based on the number of matching IPs
+	expoAdder := 1.00
+	if sameIPCount > 2 {
+		expoAdder = math.Pow(1.3, float64(sameIPCount)) / 1.3
+	}
+
+	return expoAdder // 1 ip (unique dono IP) = 1 by default
+}
+
 func paymentHandler(w http.ResponseWriter, r *http.Request) {
+	// Get the user's IP address
+	ip := r.RemoteAddr
+
 	// Get form values
 	fMon := r.FormValue("mon")
 	fAmount := r.FormValue("amount")
@@ -1175,6 +1246,7 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	fMessage := r.FormValue("message")
 	fMedia := r.FormValue("media")
 	fShowAmount := r.FormValue("showAmount")
+	encrypted_ip := encryptIP(ip)
 
 	// Parse and handle errors for each form value
 	mon, _ := strconv.ParseBool(fMon)
@@ -1217,10 +1289,10 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	if mon {
 		handleMoneroPayment(w, &s, params)
-		createNewDono(1, s.Address, s.Name, s.Message, amount, "XMR", showAmount)
+		createNewDono(1, s.Address, s.Name, s.Message, amount, "XMR", encrypted_ip, showAmount)
 	} else {
 		walletAddress := handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media, mon)
-		createNewDono(1, walletAddress, s.Name, s.Message, amount, "SOL", showAmount)
+		createNewDono(1, walletAddress, s.Name, s.Message, amount, "SOL", encrypted_ip, showAmount)
 	}
 }
 
@@ -1296,40 +1368,7 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values)
 	}
 }
 
-// TODO TOMORROW
-
-// Add hashed IP to dono table in a way nobody can decode it but it can be checked.
-
-func clearIP(dono donation) { //call whenever dono fulfilled or dono too old to matter
-	//dono.ip = ""
-}
-func preventMassSpam() {
-	/*
-		if somebody is trying to mass spam fake donos to ddoss fast, then their IP will
-		be the exact same (if they have multiple IPs that's an issue but it's not really a
-			huge issue (which means people will do it because I'm saying it's not an issue))
-			and then if we check unfulfilled recent donos for IP matches, we can add a delay which still checks
-			but exponentially slows down the checking against the network.
-
-			This way in order to ddossss effectively you'd essentially need a really big vpn network which is
-			possible but not really likely for the moronic homosexuals who have aids and dislike me (redundant)
-			sameIPCount = 1
-			for dono in []unfullfilledDonos{ // loop through all donos to check
-				if dono.age > dayOldAge {
-					clearIP(dono)
-					}
-				if dono.ip == currentdono.ip && dono != currentdono {
-
-					sameIPCount += 1
-				}
-			}
-			if (sameIPCount > 3) { basically you can mess up thrice
-				expoAdder = (math.Pow(1.3, sameIPCount))/1.3
-			}
-	*/
-}
-
-// TODO: Sell IP lists to NSA and MOSSAD
+// TODO TODAY
 
 // When dono fulfilled, send solana to address in site owner / user db
 //Update form to properly enable setting and viewing of eth/sol/hex addresses
@@ -1339,8 +1378,9 @@ func preventMassSpam() {
 // Modify index.html to show the minimum usd value dono next to the minimum crypto dono template text
 // Actually set up monero checking
 
-/* if your ip matters (it doesn't):
-use vpn
-use proxy
-don't visit site (everybody who runs a server can see it)
-*/
+// Rewrite alert handler from old csv functionality, to new database functionality interacting with and removing elements in the queue
+// Use chatgpt to write test cases for all functions.
+
+// Modify OBS functionality
+// Add TTS functionality to OBS functionality
+// Break this script into multiple files.
