@@ -527,9 +527,6 @@ func checkUnfulfilledDonos() []Dono {
 			continue
 		}
 
-		// add false to fulfilledSlice
-		fulfilledSlice = append(fulfilledSlice, false)
-
 		// Check if the dono needs to be skipped based on exponential backoff
 		secondsElapsedSinceLastCheck := time.Since(dono.UpdatedAt).Seconds()
 		log.Println("Seconds since last check: ", secondsElapsedSinceLastCheck)
@@ -562,10 +559,14 @@ func checkUnfulfilledDonos() []Dono {
 
 			dono.Fulfilled = true
 			// add true to fulfilledSlice
+			rowsToUpdate = append(rowsToUpdate, dono.ID)
 			fulfilledSlice = append(fulfilledSlice, true)
 			log.Println("Dono FULFILLED and sent to home sol address and won't be checked again. \n")
+			continue
 		}
 
+		// add false to fulfilledSlice
+		fulfilledSlice = append(fulfilledSlice, false)
 		rowsToUpdate = append(rowsToUpdate, dono.ID)
 
 		//*/
@@ -1457,7 +1458,6 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values)
 
 // TODO TODAY
 
-// When dono fulfilled, send solana to address in site owner / user db
 //Update form to properly enable setting and viewing of eth/sol/hex addresses
 
 // Fix payment handler logic so anon dono amount is more clearly named in db plus logic works

@@ -1,20 +1,9 @@
 <!DOCTYPE html>
 <html>
+    <link href=style.css rel=stylesheet>
 <head>
-  <link href=style.css rel=stylesheet>
   <script>
-  const urlParams = new URLSearchParams(window.location.search);
-const error = urlParams.get('error');
-if (error === 'invalid_password') {
-    const statusDiv = document.getElementById('status');
-    statusDiv.innerText = 'Invalid password';
-    statusDiv.classList.add('status-red');
-    statusDiv.classList.remove('hidden');
-}
-    
 window.onload = function() {
-  
-
   const form = document.querySelector('form');
   const newPasswordInput = document.getElementById('new-password');
   const newPasswordConfirmInput = document.getElementById('new-password-confirm');
@@ -60,7 +49,6 @@ alert('Passwords do not match');
 </head>
 <body>
  <br><br><br>
-  
   <h1>User Settings Panel</h1>
   <hr>
   <h3>User settings for <i> {{ .Username }} </i> </h3>
@@ -81,40 +69,19 @@ alert('Passwords do not match');
   <hr>
   <br>
   
-   <h2>Minimum Donation Amount (USD):</h2>
-  <p>Minimum donation amount is currently ${{ .MinDono }}.</p>
+ <submit>Minimum Donation Amount (USD)</submit>
+<submit><input type="number" id="customAmountText" name="minUsdAmount" min="1" pattern="\d+"></submit>
 
-        <label class="radio-label">
-    <input type="radio" name="minUsdAmount" value="0" required>
-    $0
-</label>
-
-<label class="radio-label">
-    <input type="radio" name="minUsdAmount" value="0.01" required>
-    $1 
-</label>
-
-<label class="radio-label">
-    <input type="radio" name="minUsdAmount" value="0.05" required>
-    $5
-</label>
-
-<label class="radio-label">
-    <input type="radio" name="minUsdAmount" value="0.10" required>
-    $10
-</label>
-
-<label class="radio-label">
- Custom:
-<input type="number" id="customAmountText" name="minUsdAmount" pattern="^\d+(\.\d{1,2})?$">
-</label>  
+  
 
 
   
   
   
   <p>Media donations are currently {{ if .MediaEnabled }}enabled{{ else }}disabled{{ end }}.</p>
-  
+  <form method="POST" action="/updateprofile">
+  <button type="submit" id="update-profile">Update Profile</button>
+</form>
   <hr>
   <small>
     <br>
