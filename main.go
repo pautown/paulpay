@@ -445,7 +445,41 @@ func encryptIP(ip string) string {
 	return hex.EncodeToString(hash)
 }
 
+func getUnfulfilledDonoIPs() ([]string, error) {
+	ips := []string{}
+
+	db, err := sql.Open("sqlite3", "users.db")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	rows, err := db.Query(`SELECT ip FROM donos WHERE fulfilled = false`)
+	if err != nil {
+		return ips, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ip string
+		err := rows.Scan(&ip)
+		if err != nil {
+			return ips, err
+		}
+		ips = append(ips, ip)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return ips, err
+	}
+
+	return ips, nil
+}
+
 func checkUnfulfilledDonos() []Dono {
+	ips, _ := getUnfulfilledDonoIPs() // get ips
+
 	// Open a new database connection
 	db, err := sql.Open("sqlite3", "users.db")
 	if err != nil {
@@ -473,6 +507,8 @@ func checkUnfulfilledDonos() []Dono {
 			panic(err)
 		}
 
+		log.Println(dono.ID)
+
 		log.Println("Dono ID: ", dono.ID, "Address: ", dono.Address)
 		log.Println("Name: ", dono.Name)
 		log.Println("Message: ", dono.Message)
@@ -496,7 +532,7 @@ func checkUnfulfilledDonos() []Dono {
 		// Check if the dono needs to be skipped based on exponential backoff
 		secondsElapsedSinceLastCheck := time.Since(dono.UpdatedAt).Seconds()
 		log.Println("Seconds since last check: ", secondsElapsedSinceLastCheck)
-		expoAdder := returnIPPenalty(rows, dono.EncryptedIP) + time.Since(dono.CreatedAt).Seconds()/60/60/19
+		expoAdder := returnIPPenalty(ips, dono.EncryptedIP) + time.Since(dono.CreatedAt).Seconds()/60/60/19
 		secondsNeededToCheck := math.Pow(float64(baseCheckingRate), expoAdder)
 		log.Println("Seconds needed to check: ", secondsNeededToCheck)
 		//log.Printf("Result of math.Pow: %f", secondsNeededToCheck)
@@ -532,6 +568,8 @@ func checkUnfulfilledDonos() []Dono {
 		}
 
 		rowsToUpdate = append(rowsToUpdate, dono.ID)
+
+		//*/
 	}
 
 	i := 0
@@ -1262,26 +1300,16 @@ func alertHandler(w http.ResponseWriter, r *http.Request) {
 	*/
 }
 
-func returnIPPenalty(rows *sql.Rows, currentDonoIP string) float64 {
-
-	var donos []*Dono
-	for rows.Next() {
-		var dono Dono
-		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt)
-		if err != nil {
-			panic(err)
-		}
-		donos = append(donos, &dono)
-	}
+func returnIPPenalty(ips []string, currentDonoIP string) float64 {
 
 	// Check if the encrypted IP matches any of the encrypted IPs in the slice of donos
 	sameIPCount := 0
-	for _, dono := range donos {
-		if time.Since(dono.CreatedAt).Hours() > 24 {
-			clearEncryptedIP(dono)
-			continue
-		}
-		if dono.EncryptedIP == currentDonoIP {
+	for _, donoIP := range ips {
+		/* if time.Since(dono.CreatedAt).Hours() > 24 { /* TODO: clear dono */
+		//	clearEncryptedIP(dono)
+		//	continue
+		//}
+		if donoIP == currentDonoIP {
 			sameIPCount++
 		}
 	}
