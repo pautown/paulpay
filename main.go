@@ -29,6 +29,9 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"github.com/portto/solana-go-sdk/common"
+	"github.com/portto/solana-go-sdk/program/system"
+
 	"html"
 	"io/ioutil"
 	"log"
@@ -42,6 +45,7 @@ import (
 	"text/template"
 	"time"
 	"unicode/utf8"
+	//	"github.com/portto/solana-go-sdk/transaction"
 
 	"database/sql"
 	_ "github.com/mattn/go-sqlite3"
@@ -94,6 +98,7 @@ var minDonoValue float64 = 5.0   // The global value to equal in USD terms
 //var c = client.NewClient(rpc.MainnetRPCEndpoint)
 
 // Devnet
+var devnetAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
 var c = client.NewClient(rpc.DevnetRPCEndpoint)
 
 type priceData struct {
@@ -434,10 +439,8 @@ func clearEncryptedIP(dono *Dono) {
 }
 
 func encryptIP(ip string) string {
-	// Encrypt IP using SHA-256 algorithm for secure and efficient hashing.
-	// Special thanks to "xander" for keeping the hashing/encryption secure.
 	h := sha256.New()
-	h.Write([]byte(ip))
+	h.Write([]byte("IPFingerprint" + ip))
 	hash := h.Sum(nil)
 	return hex.EncodeToString(hash)
 }
@@ -458,6 +461,7 @@ func checkUnfulfilledDonos() []Dono {
 	defer rows.Close()
 
 	var fulfilledSlice []bool
+	var amountSlice []float64
 
 	// Loop through the unfulfilled donos and check their status
 	var fulfilledDonos []Dono
@@ -473,7 +477,7 @@ func checkUnfulfilledDonos() []Dono {
 		log.Println("Name: ", dono.Name)
 		log.Println("Message: ", dono.Message)
 		log.Println("AmountToSend: ", dono.AmountToSend)
-		log.Println("AmountSent: ", dono.AmountSent)
+		log.Println("AmountSent(old): ", dono.AmountSent)
 		log.Println("CurrencyType: ", dono.CurrencyType)
 		// Check if the dono has exceeded the killDono time
 		timeElapsedFromDonoCreation := time.Since(dono.CreatedAt)
@@ -502,7 +506,7 @@ func checkUnfulfilledDonos() []Dono {
 			log.Println("Not enough time has passed, skipping. \n")
 			continue // If not enough time has passed then not checking for value and thus not updating updated_at
 		}
-		log.Println("Enough time has passed, checking. \n")
+		log.Println("Enough time has passed, checking.")
 
 		if dono.CurrencyType == "XMR" {
 			dono.AmountSent, _ = getXMRBalance(dono.Address)
@@ -510,10 +514,21 @@ func checkUnfulfilledDonos() []Dono {
 			dono.AmountSent, _ = getSOLBalance(dono.Address)
 		}
 
+		log.Println("AmountSent(new): ", dono.AmountSent, "\n")
+
+		amountSlice = append(amountSlice, dono.AmountSent)
+
 		if dono.AmountSent >= dono.AmountToSend {
+			wallet, _ := ReadAddress(dono.Address)
+
+			SendSolana(wallet.KeyPublic, wallet.KeyPrivate, devnetAddress, dono.AmountSent)
+
 			dono.Fulfilled = true
-			log.Println("Dono fulfilled. \n")
-			fulfilledDonos = append(fulfilledDonos, dono)
+			rowsToUpdate = append(rowsToUpdate, dono.ID)
+			// add true to fulfilledSlice
+			fulfilledSlice = append(fulfilledSlice, true)
+			log.Println("Dono FULFILLED and sent to home sol address and won't be checked again. \n")
+			continue
 		}
 
 		rowsToUpdate = append(rowsToUpdate, dono.ID)
@@ -522,8 +537,7 @@ func checkUnfulfilledDonos() []Dono {
 	i := 0
 	// Update the rows that need to be updated in a way that never throws a database locked error
 	for _, rowID := range rowsToUpdate {
-
-		_, err = db.Exec(`UPDATE donos SET updated_at = ?, fulfilled = ? WHERE dono_id = ?`, time.Now(), fulfilledSlice[i], rowID)
+		_, err = db.Exec(`UPDATE donos SET updated_at = ?, fulfilled = ?, amount_sent = ? WHERE dono_id = ?`, time.Now(), fulfilledSlice[i], amountSlice[i], rowID)
 		if err != nil {
 			panic(err)
 		}
@@ -541,7 +555,7 @@ func getSOLBalance(address string) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	log.Println("Address: ", address, " Balance: ", balance, "\n")
+	log.Println("Address: ", address, " Balance: ", float64(balance)/1e9, "\n")
 	return float64(balance) / 1e9, nil
 }
 
@@ -627,6 +641,62 @@ func processQueue(db *sql.DB) error {
 	return nil
 }
 
+// CreateAddress inserts a new address into the database.
+func CreateAddress(addr AddressSolana) error {
+	// Convert the private key to a byte slice.
+	privateKeyBytes := []byte(addr.KeyPrivate)
+
+	// Insert the address into the database.
+	_, err := db.Exec("INSERT INTO addresses (key_public, key_private) VALUES (?, ?)",
+		addr.KeyPublic, privateKeyBytes)
+	return err
+}
+
+// ReadAddress reads an address from the database by public key.
+func ReadAddress(publicKey string) (*AddressSolana, error) {
+	// Query the database for the address.
+	row := db.QueryRow("SELECT key_public, key_private FROM addresses WHERE key_public = ?", publicKey)
+
+	// Extract the fields from the row.
+	var keyPublic string
+	var privateKeyBytes []byte
+	err := row.Scan(&keyPublic, &privateKeyBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the private key byte slice to an ed25519.PrivateKey.
+	privateKey := ed25519.PrivateKey(privateKeyBytes)
+
+	// Create a new AddressSolana object.
+	addr := AddressSolana{
+		KeyPublic:  keyPublic,
+		KeyPrivate: privateKey,
+	}
+
+	return &addr, nil
+}
+
+// UpdateAddress updates an existing address in the database.
+func UpdateAddress(addr AddressSolana) error {
+	// Convert the private key to a byte slice.
+	privateKeyBytes := []byte(addr.KeyPrivate)
+
+	// Update the address in the database.
+	_, err := db.Exec("UPDATE addresses SET key_private = ? WHERE key_public = ?",
+		privateKeyBytes, addr.KeyPublic)
+	return err
+}
+
+// DeleteAddress deletes an address from the database by public key.
+func DeleteAddress(publicKey string) error {
+	// Delete the address from the database.
+	_, err := db.Exec("DELETE FROM addresses WHERE key_public = ?", publicKey)
+	return err
+}
+
+///////////////////
+
 func displayNewDono(name string, amount float64, currency string) bool {
 	return false
 }
@@ -649,6 +719,16 @@ func createDatabaseIfNotExists(db *sql.DB) error {
             created_at DATETIME,
             updated_at DATETIME,
             FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    `)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`
+        CREATE TABLE IF NOT EXISTS addresses (
+            key_public TEXT NOT NULL,
+            key_private BLOB NOT NULL
         )
     `)
 	if err != nil {
@@ -1019,6 +1099,7 @@ func createWalletSolana(dName string, dString string, dAmount float64, dAnon boo
 
 	//fmt.Println("Json OBJ: " + string(addressByte))
 	addToAddressSliceSolana(address)
+	CreateAddress(address)
 
 	return address
 }
@@ -1179,27 +1260,6 @@ func alertHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Println(err)
 		}
 	*/
-}
-
-func getSolanaBalance(address string, amount float64) bool {
-
-	balance, err := c.GetBalance(
-		context.TODO(), // request context
-		address,        // wallet to fetch balance for
-	)
-
-	if err != nil {
-		log.Fatalln("get balance error", err)
-	}
-	var realBalance = float64(balance / 1e9)
-	if realBalance >= amount { // if donation has been fulfilled
-		return true
-	} else {
-
-		return false
-	}
-
-	//return balance >= uint64(amount*math.Pow10(9)), nil
 }
 
 func returnIPPenalty(rows *sql.Rows, currentDonoIP string) float64 {
@@ -1384,3 +1444,43 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values)
 // Modify OBS functionality
 // Add TTS functionality to OBS functionality
 // Break this script into multiple files.
+func SendSolana(senderPublicKey string, senderPrivateKey ed25519.PrivateKey, recipientAddress string, amount float64) {
+
+	var feePayer, _ = types.AccountFromBytes(senderPrivateKey) // fill your private key here (u8 array)
+
+	resp, err := c.GetLatestBlockhash(context.Background())
+	if err != nil {
+		log.Fatalf("failed to get recent blockhash, err: %v", err)
+	}
+
+	toPubkey := common.PublicKeyFromString(recipientAddress)
+	if err != nil {
+		log.Fatalf("failed to parse recipient public key, err: %v", err)
+	}
+
+	log.Println("Public Key Payer:", feePayer.PublicKey)
+	amountLamports := uint64(math.Round(amount * math.Pow10(9)))
+	tx, err := types.NewTransaction(types.NewTransactionParam{
+		Message: types.NewMessage(types.NewMessageParam{
+			FeePayer:        feePayer.PublicKey,
+			RecentBlockhash: resp.Blockhash,
+			Instructions: []types.Instruction{
+				system.Transfer(system.TransferParam{
+					From:   feePayer.PublicKey,
+					To:     toPubkey,
+					Amount: amountLamports - 1000000,
+				}),
+			},
+		}),
+		Signers: []types.Account{feePayer},
+	})
+	if err != nil {
+		log.Fatalf("failed to build raw tx, err: %v", err)
+	}
+	sig, err := c.SendTransaction(context.Background(), tx)
+	if err != nil {
+		log.Fatalf("failed to send tx, err: %v", err)
+	}
+	fmt.Println(sig)
+
+}
