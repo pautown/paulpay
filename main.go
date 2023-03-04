@@ -93,6 +93,7 @@ var baseCheckingRate = 15
 
 var minSolana, minMonero float64 // Global variables to hold minimum SOL and XMR required to equal the global value
 var minDonoValue float64 = 5.0   // The global value to equal in USD terms
+var lamportFee = 1000000
 
 // Mainnet
 //var c = client.NewClient(rpc.MainnetRPCEndpoint)
@@ -554,17 +555,15 @@ func checkUnfulfilledDonos() []Dono {
 
 		amountSlice = append(amountSlice, dono.AmountSent)
 
-		if dono.AmountSent >= dono.AmountToSend {
+		if dono.AmountSent >= dono.AmountToSend-float64(lamportFee)/1e9 {
 			wallet, _ := ReadAddress(dono.Address)
 
 			SendSolana(wallet.KeyPublic, wallet.KeyPrivate, devnetAddress, dono.AmountSent)
 
 			dono.Fulfilled = true
-			rowsToUpdate = append(rowsToUpdate, dono.ID)
 			// add true to fulfilledSlice
 			fulfilledSlice = append(fulfilledSlice, true)
 			log.Println("Dono FULFILLED and sent to home sol address and won't be checked again. \n")
-			continue
 		}
 
 		rowsToUpdate = append(rowsToUpdate, dono.ID)
@@ -1496,7 +1495,7 @@ func SendSolana(senderPublicKey string, senderPrivateKey ed25519.PrivateKey, rec
 				system.Transfer(system.TransferParam{
 					From:   feePayer.PublicKey,
 					To:     toPubkey,
-					Amount: amountLamports - 1000000,
+					Amount: amountLamports - uint64(lamportFee),
 				}),
 			},
 		}),
