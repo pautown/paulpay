@@ -1,16 +1,11 @@
 // TODO:
 /*
-  Send solana once it has been recieved to non-costodial address
-  Change CSV storage of information regarding donos to database
-  Add config screen for setting non-costodial addresses
   Add media link for donos
   Modify OBS display code
   Add OBS media display
   Refactor
   Refactor
   Refactor again
-  Get project done in 21.2571429 hours * $70/hr
-  13.2571429 hours remain.
 
 */
 
@@ -99,7 +94,9 @@ var lamportFee = 1000000
 //var c = client.NewClient(rpc.MainnetRPCEndpoint)
 
 // Devnet
-var devnetAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
+var adminSolanaAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
+var adminEthereumAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
+var adminHexcoinAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
 var c = client.NewClient(rpc.DevnetRPCEndpoint)
 
 type priceData struct {
@@ -342,6 +339,7 @@ func main() {
 	http.HandleFunc("/user", userHandler)
 	http.HandleFunc("/logout", logoutHandler)
 	http.HandleFunc("/changepassword", changePasswordHandler)
+	http.HandleFunc("/changeuser", changeUserHandler)
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
 	payTemplate, _ = template.ParseFiles("web/pay.html")
@@ -555,7 +553,7 @@ func checkUnfulfilledDonos() []Dono {
 		if dono.AmountSent >= dono.AmountToSend-float64(lamportFee)/1e9 {
 			wallet, _ := ReadAddress(dono.Address)
 
-			SendSolana(wallet.KeyPublic, wallet.KeyPrivate, devnetAddress, dono.AmountSent)
+			SendSolana(wallet.KeyPublic, wallet.KeyPrivate, adminSolanaAddress, dono.AmountSent)
 
 			dono.Fulfilled = true
 			// add true to fulfilledSlice
@@ -809,9 +807,12 @@ func createDatabaseIfNotExists(db *sql.DB) error {
 	// create admin user if not exists
 	adminUser := User{
 		Username:          "admin",
+		EthAddress:        "asl12312qse123we1232323lol",
+		SolAddress:        "solololololololololsbfjeew",
+		HexcoinAddress:    "realmoneyrealmoney123BMIhi",
 		XMRWalletPassword: "",
-		MinDono:           0,
-		MinMediaDono:      0,
+		MinDono:           3,
+		MinMediaDono:      5,
 		MediaEnabled:      true,
 	}
 
@@ -846,7 +847,12 @@ func createUser(user User) error {
             created_at,
             modified_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, user.Username, user.HashedPassword, "", "", "", "", 0, 0, false, time.Now(), time.Now())
+    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now(), time.Now())
+
+	adminEthereumAddress = user.EthAddress
+	adminSolanaAddress = user.SolAddress
+	adminHexcoinAddress = user.HexcoinAddress
+	minDonoValue = float64(user.MinDono)
 
 	return err
 }
@@ -1058,6 +1064,57 @@ func changePasswordHandler(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/user", http.StatusSeeOther)
 			return
 		}
+	}
+
+	// render change password form
+	tmpl, err := template.ParseFiles("web/user.html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	tmpl.Execute(w, data)
+}
+
+func changeUserHandler(w http.ResponseWriter, r *http.Request) {
+	// retrieve user from session
+	sessionToken, err := r.Cookie("session_token")
+	if err != nil {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	user, err := getUserBySession(sessionToken.Value)
+	if err != nil {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	// initialize user page data struct
+	data := UserPageData{}
+
+	// process form submission
+	if r.Method == "POST" {
+		// check current password
+
+		user.EthAddress = r.FormValue("ethereumAddress")
+		adminEthereumAddress = user.EthAddress
+		user.SolAddress = r.FormValue("solanaAddress")
+		adminSolanaAddress = user.SolAddress
+		user.HexcoinAddress = r.FormValue("hexcoinAddress")
+		adminHexcoinAddress = user.HexcoinAddress
+		minDono, _ := strconv.Atoi(r.FormValue("minUsdAmount"))
+		user.MinDono = minDono
+		minDonoValue = float64(minDono)
+		fetchExchangeRates()
+
+		err = updateUser(user)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// redirect to user page
+		http.Redirect(w, r, "/user", http.StatusSeeOther)
+		return
+
 	}
 
 	// render change password form
@@ -1458,11 +1515,6 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values)
 
 // TODO TODAY
 
-//Update form to properly enable setting and viewing of eth/sol/hex addresses
-
-// Fix payment handler logic so anon dono amount is more clearly named in db plus logic works
-
-// Modify index.html to show the minimum usd value dono next to the minimum crypto dono template text
 // Actually set up monero checking
 
 // Rewrite alert handler from old csv functionality, to new database functionality interacting with and removing elements in the queue
