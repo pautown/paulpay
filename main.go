@@ -76,6 +76,7 @@ var checked string = ""
 var killDono = 30.00 * time.Hour // hours it takes for a dono to be unfulfilled before it is no longer checked.
 var indexTemplate *template.Template
 var payTemplate *template.Template
+
 var alertTemplate *template.Template
 var viewTemplate *template.Template
 
@@ -209,6 +210,14 @@ type viewPageData struct {
 	Display []string
 }
 
+type alertPageData struct {
+	Name          string
+	Message       string
+	Amount        float64
+	Currency      string
+	Refresh       int
+	DisplayToggle string
+}
 type rpcResponse struct {
 	ID      string `json:"id"`
 	Jsonrpc string `json:"jsonrpc"`
@@ -232,6 +241,8 @@ type MoneroPrice struct {
 		Usd float64 `json:"usd"`
 	} `json:"monero"`
 }
+
+var a alertPageData
 
 func fetchExchangeRates() {
 	for {
@@ -275,7 +286,7 @@ func fetchExchangeRates() {
 		fmt.Println("Min solana:", minSolana)
 		// Wait three minutes before fetching again
 		if xmrToUsd == 0 || solToUsd == 0 {
-			time.Sleep(90 * time.Second)
+			time.Sleep(180 * time.Second)
 		} else {
 			time.Sleep(30 * time.Second)
 		}
@@ -328,10 +339,11 @@ func main() {
 	go fetchExchangeRates()
 	go checkDonos()
 
+	a.Refresh = 10
+
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/pay", paymentHandler)
-	http.HandleFunc("/alert", alertHandler)
-	http.HandleFunc("/view", viewHandler)
+	http.HandleFunc("/alert", alertOBSHandler)
 
 	// serve login and user interface pages
 	http.HandleFunc("/login", loginHandler)
@@ -344,7 +356,6 @@ func main() {
 	indexTemplate, _ = template.ParseFiles("web/index.html")
 	payTemplate, _ = template.ParseFiles("web/pay.html")
 	alertTemplate, _ = template.ParseFiles("web/alert.html")
-	viewTemplate, _ = template.ParseFiles("web/view.html")
 
 	loginTemplate, _ = template.ParseFiles("web/login.html")
 	incorrectLoginTemplate, _ = template.ParseFiles("web/incorrect_login.html")
@@ -361,7 +372,9 @@ func main() {
 func checkDonos() {
 	for {
 		fulfilledDonos := checkUnfulfilledDonos()
+		fmt.Println("Fulfilled Donos:")
 		for _, dono := range fulfilledDonos {
+			fmt.Println(dono)
 			err := createNewQueueEntry(db, dono.Address, dono.Name, dono.Message, dono.AmountSent, dono.CurrencyType)
 			if err != nil {
 				panic(err)
@@ -553,10 +566,11 @@ func checkUnfulfilledDonos() []Dono {
 		if dono.AmountSent >= dono.AmountToSend-float64(lamportFee)/1e9 {
 			wallet, _ := ReadAddress(dono.Address)
 
-			SendSolana(wallet.KeyPublic, wallet.KeyPrivate, adminSolanaAddress, dono.AmountSent)
+			SendSolana(wallet.KeyPublic, wallet.KeyPrivate, "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa", dono.AmountSent)
 
 			dono.Fulfilled = true
 			// add true to fulfilledSlice
+			fulfilledDonos = append(fulfilledDonos, dono)
 			rowsToUpdate = append(rowsToUpdate, dono.ID)
 			fulfilledSlice = append(fulfilledSlice, true)
 			log.Println("Dono FULFILLED and sent to home sol address and won't be checked again. \n")
@@ -868,6 +882,9 @@ func updateUser(user User) error {
 	_, err := db.Exec(statement, user.Username, user.HashedPassword, user.EthAddress,
 		user.SolAddress, user.HexcoinAddress, user.XMRWalletPassword, user.MinDono, user.MinMediaDono,
 		user.MediaEnabled, user.UserID)
+	if err != nil {
+		log.Fatalf("failed, err: %v", err)
+	}
 	return err
 }
 
@@ -1076,6 +1093,7 @@ func changePasswordHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func changeUserHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Starting change user handler function")
 	// retrieve user from session
 	sessionToken, err := r.Cookie("session_token")
 	if err != nil {
@@ -1104,15 +1122,17 @@ func changeUserHandler(w http.ResponseWriter, r *http.Request) {
 		minDono, _ := strconv.Atoi(r.FormValue("minUsdAmount"))
 		user.MinDono = minDono
 		minDonoValue = float64(minDono)
-		fetchExchangeRates()
-
+		log.Println("Begin write to user")
 		err = updateUser(user)
+
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		log.Println("wrote to user")
 		// redirect to user page
 		http.Redirect(w, r, "/user", http.StatusSeeOther)
+		log.Println("redirect to user")
 		return
 
 	}
@@ -1223,61 +1243,21 @@ func reverse(ss []string) {
 	}
 }
 
-func viewHandler(w http.ResponseWriter, r *http.Request) {
-	var a viewPageData
-	var displayTemp string
+func alertOBSHandler(w http.ResponseWriter, r *http.Request) {
 
-	u, p, ok := r.BasicAuth()
-	if !ok {
-		w.Header().Add("WWW-Authenticate", `Basic realm="Give username and password"`)
-		w.WriteHeader(http.StatusUnauthorized)
-		return
+	newDono, err := checkDonoQueue(db)
+	if err != nil {
+		log.Printf("Error checking donation queue: %v\n", err)
 	}
-	if (u == username) && (p == password) {
-		csvFile, err := os.Open("log/superchats.csv")
-		if err != nil {
-			fmt.Println(err)
-		}
 
-		defer func(csvFile *os.File) {
-			err := csvFile.Close()
-			if err != nil {
-				fmt.Println(err)
-			}
-		}(csvFile)
-
-		csvLines, err := csv.NewReader(csvFile).ReadAll()
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		for _, line := range csvLines {
-			a.ID = append(a.ID, line[0])
-			a.Name = append(a.Name, line[1])
-			a.Message = append(a.Message, line[2])
-			a.Amount = append(a.Amount, line[3])
-			displayTemp = fmt.Sprintf("<h3><b>%s</b> sent <b>%s</b> XMR:</h3><p>%s</p>", html.EscapeString(line[1]), html.EscapeString(line[3]), line[2])
-			a.Display = append(a.Display, displayTemp)
-		}
-
+	if newDono {
+		fmt.Println("Showing NEW DONO!")
 	} else {
-		w.WriteHeader(http.StatusUnauthorized)
-		return // return http 401 unauthorized error
+		a.DisplayToggle = "display: none;"
 	}
-	reverse(a.Display)
-	err := viewTemplate.Execute(w, a)
+	err = alertTemplate.Execute(w, a)
 	if err != nil {
 		fmt.Println(err)
-	}
-}
-
-func addPaymentToLog(name, message, media, currency string, amount float64, anon bool) {
-	//var datetime = getCurrentDateTime()
-	// ADD PAYMENTS TO LOG
-	if currency == "SOL" {
-
-	} else if currency == "XMR" {
-
 	}
 
 }
@@ -1301,60 +1281,39 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func alertHandler(w http.ResponseWriter, r *http.Request) {
-	/*
-		 var v csvLog
-		v.Refresh = AlertWidgetRefreshInterval
-		if r.FormValue("auth") == password {
+func checkDonoQueue(db *sql.DB) (bool, error) {
 
-			csvFile, err := os.Open("log/alertqueue.csv")
-			if err != nil {
-				fmt.Println(err)
-			}
+	// Fetch oldest entry from queue table
+	row := db.QueryRow("SELECT name, message, amount, currency FROM queue ORDER BY rowid LIMIT 1")
 
-			csvLines, err := csv.NewReader(csvFile).ReadAll()
-			if err != nil {
-				fmt.Println(err)
-			}
-			defer func(csvFile *os.File) {
-				err := csvFile.Close()
-				if err != nil {
-					fmt.Println(err)
-				}
-			}(csvFile)
+	var name string
+	var message string
+	var amount float64
+	var currency string
+	err := row.Scan(&name, &message, &amount, &currency)
+	if err == sql.ErrNoRows {
+		// Queue is empty, do nothing
+		return false, nil
+	} else if err != nil {
+		// Error occurred while fetching row
+		return false, err
+	}
 
-			// Remove top line of CSV file after displaying it
-			if csvLines != nil {
-				popFile, _ := os.OpenFile("log/alertqueue.csv", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-				popFirst := csvLines[1:]
-				w := csv.NewWriter(popFile)
-				err := w.WriteAll(popFirst)
-				if err != nil {
-					fmt.Println(err)
-				}
-				defer func(popFile *os.File) {
-					err := popFile.Close()
-					if err != nil {
-						fmt.Println(err)
-					}
-				}(popFile)
-				v.ID = csvLines[0][0]
-				v.Name = csvLines[0][1]
-				v.Message = csvLines[0][2]
-				v.Amount = csvLines[0][3]
-				v.DisplayToggle = ""
-			} else {
-				v.DisplayToggle = "display: none;"
-			}
-		} else {
-			w.WriteHeader(http.StatusUnauthorized)
-			return // return http 401 unauthorized error
-		}
-		err := alertTemplate.Execute(w, v)
-		if err != nil {
-			fmt.Println(err)
-		}
-	*/
+	fmt.Println("Showing notif:", name, ":", message)
+	// update the form in memory
+	a.Name = name
+	a.Message = message
+	a.Amount = amount
+	a.Currency = currency
+	a.DisplayToggle = "display: block;"
+
+	// Remove fetched entry from queue table
+	_, err = db.Exec("DELETE FROM queue WHERE name = ? AND message = ? AND amount = ? AND currency = ?", name, message, amount, currency)
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func returnIPPenalty(ips []string, currentDonoIP string) float64 {
@@ -1470,6 +1429,7 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 
 	tmp, _ := qrcode.Encode("solana:"+address+"?amount="+donoStr, qrcode.Low, 320)
 	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
+
 	err := payTemplate.Execute(w, s)
 	if err != nil {
 		fmt.Println(err)
