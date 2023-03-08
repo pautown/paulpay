@@ -21,7 +21,6 @@ import (
 
 	"bytes"
 	"encoding/base64"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"github.com/portto/solana-go-sdk/common"
@@ -33,7 +32,6 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -534,6 +532,8 @@ func checkUnfulfilledDonos() []Dono {
 			rowsToUpdate = append(rowsToUpdate, dono.ID)
 			// add true to fulfilledSlice
 			fulfilledSlice = append(fulfilledSlice, true)
+
+			amountSlice = append(amountSlice, dono.AmountSent)
 			log.Println("Dono too old, killed (marked as fulfilled) and won't be checked again. \n")
 			continue
 		}
@@ -561,8 +561,6 @@ func checkUnfulfilledDonos() []Dono {
 
 		log.Println("AmountSent(new): ", dono.AmountSent, "\n")
 
-		amountSlice = append(amountSlice, dono.AmountSent)
-
 		if dono.AmountSent >= dono.AmountToSend-float64(lamportFee)/1e9 {
 			wallet, _ := ReadAddress(dono.Address)
 
@@ -573,6 +571,7 @@ func checkUnfulfilledDonos() []Dono {
 			fulfilledDonos = append(fulfilledDonos, dono)
 			rowsToUpdate = append(rowsToUpdate, dono.ID)
 			fulfilledSlice = append(fulfilledSlice, true)
+			amountSlice = append(amountSlice, dono.AmountSent)
 			log.Println("Dono FULFILLED and sent to home sol address and won't be checked again. \n")
 			continue
 		}
@@ -580,11 +579,15 @@ func checkUnfulfilledDonos() []Dono {
 		// add false to fulfilledSlice
 		fulfilledSlice = append(fulfilledSlice, false)
 		rowsToUpdate = append(rowsToUpdate, dono.ID)
+		amountSlice = append(amountSlice, dono.AmountSent)
 
 		//*/
 	}
 
 	i := 0
+	log.Println("rTU", len(rowsToUpdate))
+	log.Println("FS", len(fulfilledSlice))
+	log.Println("AS", len(amountSlice))
 	// Update the rows that need to be updated in a way that never throws a database locked error
 	for _, rowID := range rowsToUpdate {
 		_, err = db.Exec(`UPDATE donos SET updated_at = ?, fulfilled = ?, amount_sent = ? WHERE dono_id = ?`, time.Now(), fulfilledSlice[i], amountSlice[i], rowID)
