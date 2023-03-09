@@ -413,8 +413,28 @@ func checkDonos() {
 			if err != nil {
 				panic(err)
 			}
+			addDonoToDonoBar(dono.AmountSent, dono.CurrencyType)
 		}
 		time.Sleep(time.Duration(baseCheckingRate) * time.Second)
+	}
+}
+
+func addDonoToDonoBar(as float64, c string) {
+	usdVal := 0.00
+
+	if c == "XMR" {
+		usdVal = as * xmrToUsd
+	} else if c == "SOL" {
+		usdVal = as * solToUsd
+	}
+	pb.Sent += usdVal
+	amountSent = pb.Sent
+
+	err := updateObsData(db, 1, 1, obsData.FilenameGIF, obsData.FilenameMP3, "alice", pb)
+
+	if err != nil {
+		log.Println("Error: ", err)
+		return
 	}
 }
 
