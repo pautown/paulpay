@@ -8,3 +8,4 @@ users.db
 apilol.go
 users.db
 *.db
+monero/monero-wallet-rpc.log

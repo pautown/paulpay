@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"reflect"
 	"strconv"
 	"strings"
@@ -273,8 +274,26 @@ func fetchExchangeRates() {
 	}
 }
 
+func startMoneroWallet() {
+	cmd := exec.Command("monero/monero-wallet-rpc.exe", "--rpc-bind-port", "28088", "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "monero/wallet", "--disable-rpc-login", "--password", "")
+
+	// Capture the output of the command
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("Error running command: %v\n", err)
+		return
+	}
+
+	// Print the output of the command
+	fmt.Println(string(output))
+}
+
 func main() {
+
+	go startMoneroWallet()
+
 	log.Println("Starting server")
+
 	var err error
 
 	// Open a new database connection
