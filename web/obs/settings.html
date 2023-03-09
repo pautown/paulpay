@@ -7,7 +7,7 @@
 </head>
 <body>
   <h1>OBS Settings</h1>
-  <form method="POST" action="/obssettings" enctype="multipart/form-data">
+  <form method="POST" action="/userobs" enctype="multipart/form-data">
     <label for="dono-animation">Dono Animation (GIF):</label>
     <input type="file" id="dono-animation" name="dono_animation" accept=".gif">
     {{if .FilenameGIF}}
@@ -19,14 +19,27 @@
     {{if .FilenameMP3}}
       <span><small>Current dono MP3: <i>{{.FilenameMP3}}</i></small></span>
     {{end}}
+    <br><br>    
+    <label for="message"> Dono Bar Message:</label>
+    <input type="text" id="message" name="message" value="{{.Message}}">
     <br><br>
+    <label for="needed">Donation USD Goal:</label>
+    <input type="number" step="1.00" id="needed" name="needed" value="{{.Needed}}">
+    <br><br>
+    <label for="sent">Amount Currently Sent:</label>
+    <input type="number" step=".01" id="sent" name="sent" value="{{.Sent}}">
+    <br><br>
+
     <label for="obs-url">OBS Donation Display URL:</label>
     <input type="text" id="obs-url" name="obs_url" value="{{.URLdisplay}}" disabled>
     <br><br>
     <label for="dono-goal-url">OBS Dono Bar URL:</label>
     <input type="text" id="dono-goal-url" name="dono_goal_url" value="{{.URLdonobar}}" disabled>
     <br><br>
+
     <input type="submit" value="Save">
+
+
   </form>
 </body>
 </html>

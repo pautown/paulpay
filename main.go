@@ -18,6 +18,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"os"
 
 	"bytes"
 	"encoding/base64"
@@ -361,10 +362,8 @@ func main() {
 	go checkDonos()
 
 	a.Refresh = 10
-	pb.Refresh = 5
+	pb.Refresh = 1
 
-	obsData.FilenameMP3 = "default.mp3"
-	obsData.FilenameGIF = "default.gif"
 	obsData.URLdonobar = "/progressbar"
 	obsData.URLdisplay = "/alert"
 
@@ -382,6 +381,8 @@ func main() {
 	http.HandleFunc("/logout", logoutHandler)
 	http.HandleFunc("/changepassword", changePasswordHandler)
 	http.HandleFunc("/changeuser", changeUserHandler)
+
+	getObsData(db, 1)
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
 	payTemplate, _ = template.ParseFiles("web/pay.html")
@@ -944,6 +945,33 @@ func checkObsData(db *sql.DB) (bool, error) {
 	return count == 0, nil
 }
 
+func updateObsData(db *sql.DB, obsId int, userId int, gifName string, mp3Name string, ttsVoice string, pbData progressbarData) error {
+	updateObsData := `
+        UPDATE obs
+        SET user_id = ?,
+            gif_name = ?,
+            mp3_name = ?,
+            tts_voice = ?,
+            message = ?,
+            needed = ?,
+            sent = ?
+        WHERE id = ?;`
+	_, err := db.Exec(updateObsData, userId, gifName, mp3Name, ttsVoice, pbData.Message, pbData.Needed, pbData.Sent, obsId)
+	return err
+}
+
+func getObsData(db *sql.DB, userId int) {
+	err := db.QueryRow("SELECT gif_name, mp3_name, `message`, needed, sent FROM obs WHERE user_id = ?", userId).
+		Scan(&obsData.FilenameGIF, &obsData.FilenameMP3, &pbMessage, &amountNeeded, &amountSent)
+	if err != nil {
+		log.Println("Error:", err)
+	}
+
+	log.Println(pbMessage)
+	log.Println(amountNeeded)
+	log.Println(amountSent)
+}
+
 func createUser(user User) error {
 
 	// Insert the user's data into the database
@@ -1094,31 +1122,82 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 	obsData.URLdonobar = host + "/progressbar"
 	obsData.URLdisplay = host + "/alert"
 
-	log.Println(user)
-	log.Println(cookie)
-	/*
-		if r.Method == "POST" {
-			user.Username = r.FormValue("username")
-			user.EthAddress = r.FormValue("ethaddress")
-			user.SolAddress = r.FormValue("soladdress")
-			user.HexcoinAddress = r.FormValue("hexcoinaddress")
-			user.XMRWalletPassword = r.FormValue("xmrwalletpassword")
-			minDono, _ := strconv.Atoi(r.FormValue("mindono"))
-			user.MinDono = minDono
-			minMediaDono, _ := strconv.Atoi(r.FormValue("minmediadono"))
-			user.MinMediaDono = minMediaDono
-			mediaEnabled := r.FormValue("mediaenabled") == "on"
-			user.MediaEnabled = mediaEnabled
+	if r.Method == http.MethodPost {
+		r.ParseMultipartForm(10 << 20) // max file size of 10 MB
 
-			err := updateUser(user)
+		// Get the files from the request
+		fileGIF, handlerGIF, err := r.FormFile("dono_animation")
+		if err == nil {
+			defer fileGIF.Close()
+
+			// Save the file to the server
+			fileNameGIF := handlerGIF.Filename
+			fileBytesGIF, err := ioutil.ReadAll(fileGIF)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+			if err = os.WriteFile("web/obs/media/"+fileNameGIF, fileBytesGIF, 0644); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 
-			http.Redirect(w, r, "/user", http.StatusSeeOther)
+			obsData.FilenameGIF = fileNameGIF
+		}
+
+		fileMP3, handlerMP3, err := r.FormFile("dono_sound")
+		if err == nil {
+			defer fileMP3.Close()
+
+			fileNameMP3 := handlerMP3.Filename
+			fileBytesMP3, err := ioutil.ReadAll(fileMP3)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if err = os.WriteFile("web/obs/media/"+fileNameMP3, fileBytesMP3, 0644); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			obsData.FilenameMP3 = fileNameMP3
+		}
+
+		//// hererererere
+
+		pbMessage = r.FormValue("message")
+		amountNeededStr := r.FormValue("needed")
+		amountSentStr := r.FormValue("sent")
+
+		amountNeeded, err = strconv.ParseFloat(amountNeededStr, 64)
+		if err != nil {
+			// handle the error
+			log.Println(err)
+		}
+
+		amountSent, err = strconv.ParseFloat(amountSentStr, 64)
+		if err != nil {
+			// handle the error
+			log.Println(err)
+		}
+		pb.Message = pbMessage
+		pb.Needed = amountNeeded
+		pb.Sent = amountSent
+
+		err = updateObsData(db, 1, 1, obsData.FilenameGIF, obsData.FilenameMP3, "alice", pb)
+
+		if err != nil {
+			log.Println("Error: ", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
-		}*/
+		}
+	} else {
+
+		getObsData(db, 1)
+	}
+
+	log.Println(user)
+	log.Println(cookie)
 
 	tmpl, err := template.ParseFiles("web/obs/settings.html")
 	if err != nil {
@@ -1126,7 +1205,14 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tmpl.Execute(w, obsData)
+	type combinedData struct {
+		obsDataStruct
+		progressbarData
+	}
+
+	tnd := combinedData{obsData, pb}
+
+	tmpl.Execute(w, tnd)
 
 }
 
