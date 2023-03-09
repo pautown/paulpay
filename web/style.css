@@ -23,6 +23,25 @@ button, input, textarea {
     width: 100%
 }
 
+.hidden {
+  display: none;
+}
+
+.status {
+  padding: 10px;
+  text-align: center;
+  font-weight: bold;
+  color: white;
+}
+
+.status-green {
+  background-color: green;
+}
+
+.status-red {
+  background-color: red;
+}
+
 textarea {
     resize: vertical;
     overflow: hidden;
@@ -112,4 +131,22 @@ label {
 
 b, a {
     color: #EF4444;
+}
+
+.radio-label {
+  display: inline-block;
+  text-align: center;
+  margin: 5px;
+  font-size: 14px;
+}
+
+.radio-label input[type="radio"] {
+  transform: scale(0.7); /* make the radio button smaller */
+
+}
+
+.radio-label input[type="number"] {
+  width: 60px;
+  margin-left: 5px;
+  margin-right: 5px;
 }

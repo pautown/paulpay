@@ -1,10 +1,10 @@
-# Shadowchat (Paul's Version)
+# Shadowchat
 
-- Self-hosted, noncustodial and minimalist Monero (XMR) and Solana (SOL) and Ethereum (ETH) and Hex (HEX) livestream donation system written in Go.
+- Self-hosted, noncustodial and minimalist Monero (XMR) superchat system written in Go.
 - Provides an admin view page to see donations with corresponding comments.
 - Provides notification methods usable in OBS with an HTML page.
 
-To see a working instance of shadowchat, see [pay.paul.town](pay.paul.town).
+To see a working instance of shadowchat, see [xmr.lukesmith.xyz](https://xmr.lukesmith.xyz).
 
 # Installation
 
@@ -40,16 +40,9 @@ This is designed to be run on a cloud server with nginx proxypass for TLS.
 
 # Future plans
 
+- Blocklist for naughty words
+- Widget for OBS displaying top donators
 - Settings page for on-the-fly changes (minimum donation amount, hide all amounts, etc.)
-- Admin page for easy nav
-- Bootstrap UI for easy nav
-- Integration with chatbot
-- User games via donos (banning others from chatting)
-- Rewriting donor CSV into DB
-- Rewriting most of codebase
-- Custom OBS notification page
-- Better read-me
-- User login/password system based on real DB and encryption
 
 # License
 
@@ -57,7 +50,10 @@ GPLv3
 
 ### Origin
 
-This comes from [https://git.sr.ht/~anon_/shadowchat](https://git.sr.ht/~anon_/shadowchat) and is not Paul's original
+This comes from [https://git.sr.ht/~anon_/shadowchat](https://git.sr.ht/~anon_/shadowchat) and is not Luke's original
 work.
 
+### Donate
 
+sir,,thank you
+`84U6xHT7KVaWqdKwc7LiwkAXKCS2f2g6b6SFyt1G7u6xWqLBYTVXH2aEsEPho64uPFJQS6KHqSg7XLEfEkqvjdgd9H1vQSm`
