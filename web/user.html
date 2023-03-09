@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>User Page</title>
+  <link href=style.css rel=stylesheet>
+  <script>
+    var MediaEnabled = {{ if .MediaEnabled }} true {{ else }} false {{ end }};
+
+function toggleDonos() { 
+  MediaEnabled = !MediaEnabled
+  var button = document.getElementById("toggle-media-donos");
+  var elements = document.querySelectorAll('p, textarea')
+
+  if (MediaEnabled) {
+    button.innerHTML = "Turn Media Donations OFF";
+    document.getElementById("media-status").innerHTML = "Media donations are currently enabled";
+  } else {
+    button.innerHTML = "Turn Media Donations ON";
+    document.getElementById("media-status").innerHTML = "Media donations are currently <b>disabled</b>";
+  }
+}
+
+
+window.onload = function() {
+  const form = document.querySelector('form');
+  const newPasswordInput = document.getElementById('new-password');
+  const newPasswordConfirmInput = document.getElementById('new-password-confirm');
+  const submitButton = document.getElementById('change-password');
+  
+  function validatePassword() {
+    if (newPasswordInput.value !== newPasswordConfirmInput.value) {
+      newPasswordConfirmInput.setCustomValidity("Passwords don't match");
+      submitButton.disabled = true;
+      submitButton.textContent = "Passwords Don't Match";
+    } else if (newPasswordInput.value === '' || newPasswordConfirmInput.value === '') {
+      submitButton.disabled = true;
+      submitButton.textContent = "Change Password";
+    } else {
+      newPasswordConfirmInput.setCustomValidity('');
+      submitButton.disabled = false;
+      submitButton.textContent = "Change Password";
+    }
+  }
+
+  newPasswordInput.addEventListener('input', validatePassword);
+  newPasswordConfirmInput.addEventListener('input', validatePassword);
+
+  form.addEventListener('submit', function(event) {
+    if (newPasswordInput.value !== newPasswordConfirmInput.value) {
+      event.preventDefault();
+      alert('Passwords do not match');
+    }
+  });
+};
+  </script>
+</head>
+<body>
+  <br><br><br>
+  <h1>User Settings Panel</h1>
+  <hr>
+  <h3>User settings for <i>{{ .Username }}</i></h3>
+  <br><br>
+  <h2>Wallets:</h2>
+  <form method="POST" action="/changeuser">
+  <label for="ethereumAddress">Ethereum Address:</label>
+  <input type="text" id="ethereumAddress" name="ethereumAddress" placeholder="{{.EthAddress}}" value="{{.EthAddress}}">
+  <label for="solanaAddress">Solana Address:</label>
+  <input type="text" id="solanaAddress" name="solanaAddress" placeholder="{{.SolAddress}}" value="{{.SolAddress}}">
+  <label for="hexcoinAddress">HEXcoin Address:</label>
+        <input type="text" id="hexcoinAddress" name="hexcoinAddress" placeholder="{{.HexcoinAddress}}" value="{{.HexcoinAddress}}">
+
+        <label for="moneroWallet">View-Only Monero Wallet:</label>
+        <input type="file" id="moneroWallet" name="moneroWallet" accept=".keys">
+  <hr>
+  <br>
+  
+ <submit>Minimum Donation Amount (USD)</submit>
+<submit><input type="number" id="minUsdAmount" name="minUsdAmount" min="1"  value="{{.MinDono}}"></submit>
+  
+  
+  
+  <p id="media-status">Media donations are currently {{ if .MediaEnabled }}enabled{{ else }}<b>disabled</b>{{ end }}</p>
+
+   
+  <button type="button" id="toggle-media-donos" onclick="toggleDonos()">Turn Media Donations  {{ if .MediaEnabled }}OFF{{ else }} ON{{ end }}</button>
+   
+    <input type="submit" value="Update User" id="update-profile">
+  </form>
+  
+  <hr>
+  <small>
+    <br>
+    <h2>Change Password</h2>
+  <form method="POST" action="/changepassword">
+    <label for="current-password">Current Password:</label>
+    <input type="password" id="current-password" name="current_password" required><br><br>
+    <label for="new-password">New Password:</label>
+    <input type="password" id="new-password" name="new_password" required><br><br>
+    <label for="new-password-confirm">Confirm New Password:</label>
+<input type="password" id="new-password-confirm" name="new_password_confirm" required><br><br>
+    <button type="submit" id="change-password">Change Password</button>
+</form>
+  </small>
+  <hr><br><br><br>
+  <form method="POST" action="/logout">
+    <input type="submit" value="Logout">
+  </form>
+</body>
+</html>
