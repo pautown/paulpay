@@ -1,25 +1,25 @@
-# Shadowchat
+# PayPaul
 
-- Self-hosted, noncustodial and minimalist Monero (XMR) superchat system written in Go.
-- Provides an admin view page to see donations with corresponding comments.
-- Provides notification methods usable in OBS with an HTML page.
+- Self-hosted, noncustodial crypto-currency (currently Monero(XMR) and Solana(SOL)) superchat system written in Go.
+- Provides notifications and a progress bar usable in OBS as well as admin pages for settings like minimum donos.
+- Settings pages /user /userobs (default login is user:admin password:hunter123)
 
-To see a working instance of shadowchat, see [xmr.lukesmith.xyz](https://xmr.lukesmith.xyz).
+To see a working instance of PayPaul, see [pay.paul.town](https://pay.paul.town).
 
 # Installation
 
 1. ```apt install golang```
-2. ```git clone https://git.sr.ht/~anon_/shadowchat```
+2. ```git clone https://github.com/pautown/paulpay.git```
 3. ```cd shadowchat```
-4. ```go install github.com/skip2/go-qrcode@latest```
-5. edit ```config.json```
-6. ```go run main.go```
+4. ```go install github.com/skip2/go-qrcode@latest``
+5. ```go run main.go```
 
-A webserver at 127.0.0.1:8900 is running. Pressing the pay button will result in a 500 Error if the `monero-wallet-rpc`
-is not running.
-This is designed to be run on a cloud server with nginx proxypass for TLS.
+A webserver at 127.0.0.1:8900 is running.
 
-# Monero Setup
+Pressing the pay button for monero will result in a 500 Error if the `monero-wallet-rpc` is not running.
+This is currently designed to be run on a cloud server with nginx proxypass for TLS.
+
+# Monero Wallet Setup (needs to be rewritten.)
 
 1. Generate a view only wallet using the `monero-wallet-gui` from getmonero.org. Preferably with no password
 2. Copy the newly generated `walletname_viewonly` and `walletname_viewonly.keys` files to your VPS
@@ -29,31 +29,38 @@ This is designed to be run on a cloud server with nginx proxypass for TLS.
 
 # Usage
 
-- Visit 127.0.0.1:8900/view to view your superchat history
-- Visit 127.0.0.1:8900/alert?auth=adminadmin to see notifications
-- The default username is `admin` and password `adminadmin`. Change these in `main.go`
-- Edit web/index.html and web/style.css to customize your front page!
+- Visit 127.0.0.1:8900/user to view your user settings
+- Visit 127.0.0.1:8900/userobs to view your user OBS settings
+- Visit 127.0.0.1:8900/alert to see notifications (only have one of these open at a time, preferrably in the OBS screen)
+- Visit 127.0.0.1:8900/progressbar to see the OBS progressbar which gets modified in the OBS settings url
+- 
+- The default username is `admin` and password `hunter123`. Change these in the http://127.0.0.1:8900/user panel
 
 # OBS
 
-- Add a Browser source in obs and point it to `https://example.com/alert?auth=adminadmin`
+- Add a Browser source in OBS and point it to `127.0.0.1:8900/alert` for Dono Alerts
+- Add a Browser source in OBS and point it to `127.0.0.1:8900/progressbar` to display the Dono Bar in OBS
 
 # Future plans
 
-- Blocklist for naughty words
-- Widget for OBS displaying top donators
-- Settings page for on-the-fly changes (minimum donation amount, hide all amounts, etc.)
+- Youtube Media Links
+- Sound and GIF for dono
+- TTS integration for donos
+- Eth donations using batch transaction processing
+- Hex donations using batch transaction processing
+- API integration for getting Powerchat and Streamlabs Donos and keeping track of USD value
+- Selection of which dono methods are available
+
+
 
 # License
-
 GPLv3
 
 ### Origin
-
-This comes from [https://git.sr.ht/~anon_/shadowchat](https://git.sr.ht/~anon_/shadowchat) and is not Luke's original
-work.
+This comes from [https://git.sr.ht/~anon_/shadowchat](https://git.sr.ht/~anon_/shadowchat) and the base logic (mostly rewritten now) is not Paul's original
+work, although without the base logic I would have never started doing this, so thank you to the great mind behind this.
 
 ### Donate
 
-sir,,thank you
-`84U6xHT7KVaWqdKwc7LiwkAXKCS2f2g6b6SFyt1G7u6xWqLBYTVXH2aEsEPho64uPFJQS6KHqSg7XLEfEkqvjdgd9H1vQSm`
+To support further development of this project, send XMR to me (Paul) at:
+`88K988HXHBTZZEFACejzJRDe7zMiKviesFKWtq4Q3Bo6VZfPZDWFzbod4Kn7SudVSBKhu5GqMUqBUXFNj5wBLyWuNWe4nqN`
