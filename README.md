@@ -1,10 +1,9 @@
-# Shadowchat
+# PayPaul
 
-- Self-hosted, noncustodial and minimalist Monero (XMR) superchat system written in Go.
-- Provides an admin view page to see donations with corresponding comments.
-- Provides notification methods usable in OBS with an HTML page.
+- Self-hosted, noncustodial crypto-currency (currently Monero(XMR) and Solana(SOL)) superchat system written in Go.
+- Provides notifications and a progress bar usable in OBS as well as admin pages for settings like minimum donos.
 
-To see a working instance of shadowchat, see [xmr.lukesmith.xyz](https://xmr.lukesmith.xyz).
+To see a working instance of PayPaul, see [pay.paul.town](https://pay.paul.town).
 
 # Installation
 
@@ -50,10 +49,10 @@ GPLv3
 
 ### Origin
 
-This comes from [https://git.sr.ht/~anon_/shadowchat](https://git.sr.ht/~anon_/shadowchat) and is not Luke's original
+This comes from [https://git.sr.ht/~anon_/shadowchat](https://git.sr.ht/~anon_/shadowchat) and the base logic (mostly rewritten now) is not Paul's original
 work.
 
 ### Donate
 
-sir,,thank you
-`84U6xHT7KVaWqdKwc7LiwkAXKCS2f2g6b6SFyt1G7u6xWqLBYTVXH2aEsEPho64uPFJQS6KHqSg7XLEfEkqvjdgd9H1vQSm`
+To support further development of this project, send XMR to me (Paul) at:
+`88K988HXHBTZZEFACejzJRDe7zMiKviesFKWtq4Q3Bo6VZfPZDWFzbod4Kn7SudVSBKhu5GqMUqBUXFNj5wBLyWuNWe4nqN`
