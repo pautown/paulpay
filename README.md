@@ -29,14 +29,17 @@ This is currently designed to be run on a cloud server with nginx proxypass for 
 
 # Usage
 
-- Visit 127.0.0.1:8900/view to view your superchat history
-- Visit 127.0.0.1:8900/alert?auth=adminadmin to see notifications
-- The default username is `admin` and password `adminadmin`. Change these in `main.go`
-- Edit web/index.html and web/style.css to customize your front page!
+- Visit 127.0.0.1:8900/user to view your user settings
+- Visit 127.0.0.1:8900/userobs to view your user OBS settings
+- Visit 127.0.0.1:8900/alert to see notifications (only have one of these open at a time, preferrably in the OBS screen)
+- Visit 127.0.0.1:8900/progressbar to see the OBS progressbar which gets modified in the OBS settings url
+- 
+- The default username is `admin` and password `hunter123`. Change these in the http://127.0.0.1:8900/user panel
 
 # OBS
 
-- Add a Browser source in obs and point it to `https://example.com/alert?auth=adminadmin`
+- Add a Browser source in OBS and point it to `127.0.0.1:8900/alert` for Dono Alerts
+- Add a Browser source in OBS and point it to `127.0.0.1:8900/progressbar` to display the Dono Bar in OBS
 
 # Future plans
 
