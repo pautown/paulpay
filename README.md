@@ -2,6 +2,7 @@
 
 - Self-hosted, noncustodial crypto-currency (currently Monero(XMR) and Solana(SOL)) superchat system written in Go.
 - Provides notifications and a progress bar usable in OBS as well as admin pages for settings like minimum donos.
+- Settings pages /user /userobs (default login is user:admin password:hunter123)
 
 To see a working instance of PayPaul, see [pay.paul.town](https://pay.paul.town).
 
@@ -39,18 +40,22 @@ This is currently designed to be run on a cloud server with nginx proxypass for 
 
 # Future plans
 
-- Blocklist for naughty words
-- Widget for OBS displaying top donators
-- Settings page for on-the-fly changes (minimum donation amount, hide all amounts, etc.)
+- Youtube Media Links
+- Sound and GIF for dono
+- TTS integration for donos
+- Eth donations using batch transaction processing
+- Hex donations using batch transaction processing
+- API integration for getting Powerchat and Streamlabs Donos and keeping track of USD value
+- Selection of which dono methods are available
+
+
 
 # License
-
 GPLv3
 
 ### Origin
-
 This comes from [https://git.sr.ht/~anon_/shadowchat](https://git.sr.ht/~anon_/shadowchat) and the base logic (mostly rewritten now) is not Paul's original
-work.
+work, although without the base logic I would have never started doing this, so thank you to the great mind behind this.
 
 ### Donate
 
