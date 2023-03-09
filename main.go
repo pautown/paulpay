@@ -35,6 +35,8 @@ import (
 	"unicode/utf8"
 )
 
+const username = "admin"
+
 var USDMinimum float64 = 5
 var MediaMin float64 = 0.025 // Currently unused
 var MessageMaxChar int = 250
@@ -298,8 +300,6 @@ func main() {
 	}
 
 	fmt.Println("version", response.SolanaCore)
-
-	fmt.Println(fmt.Sprintf("OBS Alert path: /alert?auth=%s", password))
 
 	http.HandleFunc("/style.css", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/style.css")
@@ -598,9 +598,6 @@ func checkUnfulfilledDonos() []Dono {
 	}
 
 	i := 0
-	log.Println("rTU", len(rowsToUpdate))
-	log.Println("FS", len(fulfilledSlice))
-	log.Println("AS", len(amountSlice))
 	// Update rows to be update in a way that never throws a database locked error
 	for _, rowID := range rowsToUpdate {
 		_, err = db.Exec(`UPDATE donos SET updated_at = ?, fulfilled = ?, amount_sent = ? WHERE dono_id = ?`, time.Now(), fulfilledSlice[i], amountSlice[i], rowID)
@@ -1082,6 +1079,9 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
+
+	log.Println(user)
+	log.Println(cookie)
 
 	host := r.Host // get host url
 	obsData.URLdonobar = host + "/progressbar"
