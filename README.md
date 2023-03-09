@@ -8,17 +8,17 @@ To see a working instance of PayPaul, see [pay.paul.town](https://pay.paul.town)
 # Installation
 
 1. ```apt install golang```
-2. ```git clone https://git.sr.ht/~anon_/shadowchat```
+2. ```git clone https://github.com/pautown/paulpay.git```
 3. ```cd shadowchat```
-4. ```go install github.com/skip2/go-qrcode@latest```
-5. edit ```config.json```
-6. ```go run main.go```
+4. ```go install github.com/skip2/go-qrcode@latest``
+5. ```go run main.go```
 
-A webserver at 127.0.0.1:8900 is running. Pressing the pay button will result in a 500 Error if the `monero-wallet-rpc`
-is not running.
-This is designed to be run on a cloud server with nginx proxypass for TLS.
+A webserver at 127.0.0.1:8900 is running.
 
-# Monero Setup
+Pressing the pay button for monero will result in a 500 Error if the `monero-wallet-rpc` is not running.
+This is currently designed to be run on a cloud server with nginx proxypass for TLS.
+
+# Monero Wallet Setup (needs to be rewritten.)
 
 1. Generate a view only wallet using the `monero-wallet-gui` from getmonero.org. Preferably with no password
 2. Copy the newly generated `walletname_viewonly` and `walletname_viewonly.keys` files to your VPS
