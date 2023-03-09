@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+  <head>
+
+<meta http-equiv="refresh" content="{{.Refresh}}">
+
+<style type="text/css">
+        #progress-bar {
+        background-color: #DDDDDD;
+        height: 25px;
+        border-radius: 13px;
+        margin: 0px;
+        position: relative;
+        border: 3px solid black;
+      }
+      #progress-bar-fill {
+        background-color: #4CAF50;
+        height: 100%;
+        border-radius: 10px;
+        width: 0%;
+        position: absolute;
+        left: 0;
+      }
+      #progress-bar-label-left {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 14px;
+        font-family: Arial, sans-serif;
+        font-weight: bold;
+        color: black;
+      }
+      #progress-bar-label-center {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 14px;
+        font-family: Arial, sans-serif;
+        color: black;
+      }
+      #progress-bar-label-right {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 14px;
+        font-family: Arial, sans-serif;
+        font-weight: bold;
+        color: black;
+      }
+</style>
+
+
+
+
+  </head>
+  <body>
+    <div id="progress-bar">
+      <div id="progress-bar-fill"></div>
+      <div id="progress-bar-label-left"></div>
+      <div id="progress-bar-label-center"></div>
+      <div id="progress-bar-label-right"></div>
+    </div>
+  </body>
+</html>
+
+
+<script defer>
+      
+     var labelLeft = '';
+var sentAmt = 0;
+var neededAmt = 0;
+var labelCenter = '$' + sentAmt;
+var percentComplete = neededAmt/sentAmt;
+var labelRight = '$' + neededAmt;
+
+function progressBarHandler(percent, labelLeft, labelCenter, labelRight) {
+  const progressBarFill = document.getElementById('progress-bar-fill');
+  const progressBarLabelLeft = document.getElementById('progress-bar-label-left');
+  const progressBarLabelCenter = document.getElementById('progress-bar-label-center');
+  const progressBarLabelRight = document.getElementById('progress-bar-label-right');
+
+  progressBarFill.style.width = percent + '%';
+  progressBarLabelLeft.innerHTML = labelLeft;
+  progressBarLabelCenter.innerHTML = labelCenter;
+  progressBarLabelRight.innerHTML = labelRight;
+}
+
+function updateVals(label, needed, sent) {        
+  labelLeft = label;
+  sentAmt = sent;
+  neededAmt = needed;
+  labelCenter = '$' + sentAmt;
+  percentComplete = (sentAmt/ neededAmt)*100;
+  if (percentComplete > 100){
+    percentComplete = 100; // prevent bleeding into value
+  }
+  labelRight = '$' + needed;        
+}
+
+updateVals("{{.Message}}", {{.Needed}}, {{.Sent}});     
+progressBarHandler(percentComplete, labelLeft, labelCenter, labelRight);
+
+    </script>

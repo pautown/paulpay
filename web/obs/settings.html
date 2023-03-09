@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>OBS Settings</title>
+  <link href="style.css" rel="stylesheet">
+</head>
+<body>
+  <h1>OBS Settings</h1>
+  <form method="POST" action="/obssettings" enctype="multipart/form-data">
+    <label for="dono-animation">Dono Animation (GIF):</label>
+    <input type="file" id="dono-animation" name="dono_animation" accept=".gif">
+    {{if .FilenameGIF}}
+      <span><small>Current dono GIF: <i>{{.FilenameGIF}}</i></small></span>
+    {{end}}
+    <br><br>
+    <label for="dono-sound">Dono Sound (MP3):</label>
+    <input type="file" id="dono-sound" name="dono_sound" accept=".mp3">
+    {{if .FilenameMP3}}
+      <span><small>Current dono MP3: <i>{{.FilenameMP3}}</i></small></span>
+    {{end}}
+    <br><br>
+    <label for="obs-url">OBS Donation Display URL:</label>
+    <input type="text" id="obs-url" name="obs_url" value="{{.URLdisplay}}" disabled>
+    <br><br>
+    <label for="dono-goal-url">OBS Dono Bar URL:</label>
+    <input type="text" id="dono-goal-url" name="dono_goal_url" value="{{.URLdonobar}}" disabled>
+    <br><br>
+    <input type="submit" value="Save">
+  </form>
+</body>
+</html>

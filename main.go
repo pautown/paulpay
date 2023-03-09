@@ -76,6 +76,8 @@ var indexTemplate *template.Template
 var payTemplate *template.Template
 
 var alertTemplate *template.Template
+var progressbarTemplate *template.Template
+var userOBSTemplate *template.Template
 var viewTemplate *template.Template
 
 var loginTemplate *template.Template
@@ -128,6 +130,9 @@ type UserPageData struct {
 
 var db *sql.DB
 var userSessions = make(map[string]int)
+
+var amountNeeded = 1000.00
+var amountSent = 200.00
 
 func MakeRequest(URL string) string {
 	client := &http.Client{}
@@ -216,6 +221,21 @@ type alertPageData struct {
 	Refresh       int
 	DisplayToggle string
 }
+
+type progressbarData struct {
+	Message string
+	Needed  float64
+	Sent    float64
+	Refresh int
+}
+
+type obsDataStruct struct {
+	FilenameGIF string
+	FilenameMP3 string
+	URLdisplay  string
+	URLdonobar  string
+}
+
 type rpcResponse struct {
 	ID      string `json:"id"`
 	Jsonrpc string `json:"jsonrpc"`
@@ -241,6 +261,9 @@ type MoneroPrice struct {
 }
 
 var a alertPageData
+var pb progressbarData
+var obsData obsDataStruct
+var pbMessage = "Stream Tomorrow"
 
 func fetchExchangeRates() {
 	for {
@@ -338,15 +361,24 @@ func main() {
 	go checkDonos()
 
 	a.Refresh = 10
+	pb.Refresh = 5
+
+	obsData.FilenameMP3 = "default.mp3"
+	obsData.FilenameGIF = "default.gif"
+	obsData.URLdonobar = "/progressbar"
+	obsData.URLdisplay = "/alert"
 
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/pay", paymentHandler)
 	http.HandleFunc("/alert", alertOBSHandler)
 
+	http.HandleFunc("/progressbar", progressbarOBSHandler)
+
 	// serve login and user interface pages
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/incorrect_login", incorrectLoginHandler)
 	http.HandleFunc("/user", userHandler)
+	http.HandleFunc("/userobs", userOBSHandler)
 	http.HandleFunc("/logout", logoutHandler)
 	http.HandleFunc("/changepassword", changePasswordHandler)
 	http.HandleFunc("/changeuser", changeUserHandler)
@@ -354,6 +386,9 @@ func main() {
 	indexTemplate, _ = template.ParseFiles("web/index.html")
 	payTemplate, _ = template.ParseFiles("web/pay.html")
 	alertTemplate, _ = template.ParseFiles("web/alert.html")
+
+	userOBSTemplate, _ = template.ParseFiles("web/obs/settings.html")
+	progressbarTemplate, _ = template.ParseFiles("web/obs/progressbar.html")
 
 	loginTemplate, _ = template.ParseFiles("web/login.html")
 	incorrectLoginTemplate, _ = template.ParseFiles("web/incorrect_login.html")
@@ -821,6 +856,29 @@ func createDatabaseIfNotExists(db *sql.DB) error {
 		return err
 	}
 
+	err = createObsTable(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	emptyTable, err := checkObsData(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if emptyTable {
+		pbData := progressbarData{
+			Message: "test message",
+			Needed:  100.0,
+			Sent:    50.0,
+			Refresh: 5,
+		}
+		err = insertObsData(db, 1, "test.gif", "test.mp3", "test_voice", pbData)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	// create admin user if not exists
 	adminUser := User{
 		Username:          "admin",
@@ -845,6 +903,45 @@ func createDatabaseIfNotExists(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+func createObsTable(db *sql.DB) error {
+	obsTable := `
+        CREATE TABLE IF NOT EXISTS obs (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER,
+            gif_name TEXT,
+            mp3_name TEXT,
+            tts_voice TEXT,
+            message TEXT,
+            needed FLOAT,
+            sent FLOAT
+        );`
+	_, err := db.Exec(obsTable)
+	return err
+}
+
+func insertObsData(db *sql.DB, userId int, gifName, mp3Name, ttsVoice string, pbData progressbarData) error {
+	obsData := `
+        INSERT INTO obs (
+            user_id,
+            gif_name,
+            mp3_name,
+            tts_voice,
+            message,
+            needed,
+            sent
+        ) VALUES (?, ?, ?, ?, ?, ?, ?);`
+	_, err := db.Exec(obsData, userId, gifName, mp3Name, ttsVoice, pbData.Message, pbData.Needed, pbData.Sent)
+	return err
+}
+func checkObsData(db *sql.DB) (bool, error) {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM obs").Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count == 0, nil
 }
 
 func createUser(user User) error {
@@ -973,6 +1070,64 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
+}
+
+// handle requests to modify user data
+func userOBSHandler(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_token")
+	if err != nil {
+		fmt.Println(err)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	user, err := getUserBySession(cookie.Value)
+	if err != nil {
+		fmt.Println(err)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	host := r.Host
+	fmt.Println("Current URL host value:", host)
+
+	obsData.URLdonobar = host + "/progressbar"
+	obsData.URLdisplay = host + "/alert"
+
+	log.Println(user)
+	log.Println(cookie)
+	/*
+		if r.Method == "POST" {
+			user.Username = r.FormValue("username")
+			user.EthAddress = r.FormValue("ethaddress")
+			user.SolAddress = r.FormValue("soladdress")
+			user.HexcoinAddress = r.FormValue("hexcoinaddress")
+			user.XMRWalletPassword = r.FormValue("xmrwalletpassword")
+			minDono, _ := strconv.Atoi(r.FormValue("mindono"))
+			user.MinDono = minDono
+			minMediaDono, _ := strconv.Atoi(r.FormValue("minmediadono"))
+			user.MinMediaDono = minMediaDono
+			mediaEnabled := r.FormValue("mediaenabled") == "on"
+			user.MediaEnabled = mediaEnabled
+
+			err := updateUser(user)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			http.Redirect(w, r, "/user", http.StatusSeeOther)
+			return
+		}*/
+
+	tmpl, err := template.ParseFiles("web/obs/settings.html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	tmpl.Execute(w, obsData)
+
 }
 
 // handle requests to modify user data
@@ -1230,6 +1385,7 @@ func addToAddressSliceSolana(a AddressSolana) {
 func condenseSpaces(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
+
 func truncateStrings(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -1239,6 +1395,7 @@ func truncateStrings(s string, n int) string {
 	}
 	return s[:n]
 }
+
 func reverse(ss []string) {
 	last := len(ss) - 1
 	for i := 0; i < len(ss)/2; i++ {
@@ -1247,7 +1404,6 @@ func reverse(ss []string) {
 }
 
 func alertOBSHandler(w http.ResponseWriter, r *http.Request) {
-
 	newDono, err := checkDonoQueue(db)
 	if err != nil {
 		log.Printf("Error checking donation queue: %v\n", err)
@@ -1259,6 +1415,18 @@ func alertOBSHandler(w http.ResponseWriter, r *http.Request) {
 		a.DisplayToggle = "display: none;"
 	}
 	err = alertTemplate.Execute(w, a)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func progressbarOBSHandler(w http.ResponseWriter, r *http.Request) {
+
+	pb.Message = pbMessage
+	pb.Needed = amountNeeded
+	pb.Sent = amountSent
+
+	err := progressbarTemplate.Execute(w, pb)
 	if err != nil {
 		fmt.Println(err)
 	}
