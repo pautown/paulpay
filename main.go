@@ -266,6 +266,20 @@ var pb progressbarData
 var obsData obsDataStruct
 var pbMessage = "Stream Tomorrow"
 
+func setMinDonos() {
+
+	// Calculate how much Monero is needed to equal the min usd donation var.
+	minMonero = minDonoValue / xmrToUsd
+	// Calculate how much Solana is needed to equal the min usd donation var.
+	minSolana = minDonoValue / solToUsd
+	minMonero, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minMonero), 64)
+	minSolana, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minSolana), 64)
+
+	log.Println("Minimum XMR Dono:", minMonero)
+	log.Println("Minimum SOL Dono:", minSolana)
+
+}
+
 func fetchExchangeRates() {
 	for {
 		// Fetch the exchange rate data from the API
@@ -397,10 +411,20 @@ func main() {
 	logoutTemplate, _ = template.ParseFiles("web/logout.html")
 	incorrectPasswordTemplate, _ = template.ParseFiles("web/password_change_failed.html")
 
+	user, err := getUserByUsername(username)
+	if err != nil {
+		panic(err)
+	}
+
+	minDonoValue = float64(user.MinDono)
+	adminSolanaAddress = user.SolAddress
+	setMinDonos()
+
 	err = http.ListenAndServe(":8900", nil)
 	if err != nil {
 		panic(err)
 	}
+
 }
 
 func checkDonos() {
@@ -620,7 +644,7 @@ func checkUnfulfilledDonos() []Dono {
 		if dono.AmountSent >= dono.AmountToSend-float64(lamportFee)/1e9 {
 			wallet, _ := ReadAddress(dono.Address)
 
-			SendSolana(wallet.KeyPublic, wallet.KeyPrivate, "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa", dono.AmountSent)
+			SendSolana(wallet.KeyPublic, wallet.KeyPrivate, adminSolanaAddress, dono.AmountSent)
 
 			dono.Fulfilled = true
 			// add true to fulfilledSlice
@@ -1280,7 +1304,7 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
+	setMinDonos()
 	tmpl.Execute(w, user)
 
 }
@@ -1681,7 +1705,7 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	var wallet_ = createWalletSolana(name_, message_, amount_, showAmount_)
 	// Get Solana address and desired balance from request
 	address := wallet_.KeyPublic
-	donoStr := fmt.Sprintf("%.2f", wallet_.DonoAmount)
+	donoStr := fmt.Sprintf("%.4f", wallet_.DonoAmount)
 
 	s.Amount = donoStr
 	if donoStr == "" {
@@ -1770,6 +1794,7 @@ func SendSolana(senderPublicKey string, senderPrivateKey ed25519.PrivateKey, rec
 	}
 
 	toPubkey := common.PublicKeyFromString(recipientAddress)
+	log.Println(toPubkey)
 	if err != nil {
 		log.Fatalf("failed to parse recipient public key, err: %v", err)
 	}
