@@ -11,7 +11,7 @@ To see a working instance of PayPaul, see [pay.paul.town](https://pay.paul.town)
 1. ```apt install golang```
 2. ```git clone https://github.com/pautown/paulpay.git```
 3. ```cd shadowchat```
-4. ```go install github.com/skip2/go-qrcode@latest``'
+4. ```go install github.com/skip2/go-qrcode@latest```
 5. ```go run main.go```
 
 A webserver at 127.0.0.1:8900 is running.
