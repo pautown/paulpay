@@ -288,6 +288,20 @@ func startMoneroWallet() {
 	fmt.Println(string(output))
 }
 
+func stopMoneroWallet() {
+	cmd := exec.Command("monero/monero-wallet-rpc.exe", "--rpc-bind-port", "28088", "--command", "stop_wallet")
+
+	// Capture the output of the command
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("Error running command: %v\n", err)
+		return
+	}
+
+	// Print the output of the command
+	fmt.Println(string(output))
+}
+
 func main() {
 
 	go startMoneroWallet()
