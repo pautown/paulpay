@@ -494,7 +494,11 @@ func fetchExchangeRates() {
 }
 
 func startMoneroWallet() {
-	cmd := exec.Command("monero/monero-wallet-rpc.exe", "--rpc-bind-port", "28088", "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "monero/wallet", "--disable-rpc-login", "--password", "")
+	//linux
+	cmd := exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", "28088", "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "monero/wallet", "--disable-rpc-login", "--password", "")
+
+	//windows
+	//cmd := exec.Command("monero/monero-wallet-rpc.exe", "--rpc-bind-port", "28088", "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "monero/wallet", "--disable-rpc-login", "--password", "")
 
 	// Capture the output of the command
 	output, err := cmd.CombinedOutput()
