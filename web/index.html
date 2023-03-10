@@ -73,10 +73,10 @@
 <body>
 
   <form action="/pay" method="POST">
-    <h2>Tribute Your God In Monero.</h2>
+    <h2>PayPaul in Monero.</h2>
     <hr><br><br><br>
     
-    <label for="name">Paypig Name:</label><br>
+    <label for="name">Name:</label><br>
     <input id="name" maxlength="25" name="name" placeholder="Anonymous" type="text"><br>
     <label for="amount">Monero (XMR) Amount:</label><br>
     <input id="amount" min="{{.MinMonero}}" name="amount" placeholder="{{.MinMonero}} Minimum" step="0.0001" type="number">
@@ -91,7 +91,7 @@
     <input type="hidden" id="mon" name="mon" value=true>
     
     <button id="submit" type="submit" data-original-text="Pay in Monero(XMR)">
-      <img id="currencyIcon" src="xmr.svg">Monero Tribute
+      <img id="currencyIcon" src="xmr.svg">Monero PayPaul
     </button>
     
     <input id="showAmount" name="showAmount" type="checkbox" value="true" {{.Checked}}>

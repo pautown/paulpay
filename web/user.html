@@ -60,6 +60,12 @@ window.onload = function() {
   <h1>User Settings Panel</h1>
   <hr>
   <h3>User settings for <i>{{ .Username }}</i></h3>
+  <form method="POST" action="/viewdonos">
+    <a href="/viewdonos" class="button">View Donations</a>
+  </form>
+  <form method="POST" action="/userobs">
+    <a href="/userobs" class="button">OBS Settings</a>
+  </form>
   <br><br>
   <h2>Wallets:</h2>
   <form method="POST" action="/changeuser">
