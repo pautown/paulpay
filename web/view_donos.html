@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Donations</title>
+	<style>
+		body {
+		    background: #12151C;
+		    text-align: left;
+		    color: white;
+		    margin: 0 auto;
+		    font-family: Arial, serif;
+		}
+		table {
+			border-collapse: collapse;
+			width: 100%;
+		}
+
+		th, td {
+			text-align: left;
+			padding: 8px;
+			border: 1px solid #ddd;
+		}
+
+		th {
+			cursor: pointer;
+		}
+
+		tr:hover {
+			background-color: #0D0E11;
+		}
+
+		.asc:after {
+			content: "\25b2";
+		}
+
+		.desc:after {
+			content: "\25bc";
+		}
+	</style>
+</head>
+<body>
+	<h1>View Donos</h1>
+	<div id="donations">
+		<table>
+			<thead>
+				<tr>
+
+					<th onclick="sortTable(0)">Donation Time</th>
+					<th onclick="sortTable(1)">Donation Name</th>
+					<th onclick="sortTable(2)">Donation Message</th>
+					<th onclick="sortTable(3)">USD Value</th>
+					<th onclick="sortTable(4)">Amount Sent</th>
+					<th onclick="sortTable(5)">Crypto</th>
+				</tr>
+			</thead>
+			<tbody id="donations-table-body">
+				{{range .}}
+				<tr>
+
+					<td>{{.UpdatedAt.Format "15:04:05 01-02-2006"}}</td>
+					<td>{{.Name}}</td>
+					<td>{{.Message}}</td>
+					<td>${{.AmountToSend}}</td>
+					<td>{{.AmountSent}}</td>
+					<td>{{.CurrencyType}}</td>
+				</tr>
+				{{end}}
+			</tbody>
+		</table>
+	</div>
+	<script>
+
+
+	function sortTable(n) {
+    var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+    table = document.getElementsByTagName("table")[0];
+    switching = true;
+    dir = "asc";
+    while (switching) {
+        switching = false;
+        rows = table.rows;
+        for (i = 1; i < (rows.length - 1); i++) {
+            shouldSwitch = false;
+            x = rows[i].getElementsByTagName("td")[n];
+            y = rows[i + 1].getElementsByTagName("td")[n];
+            if (n == 0) { // sort date column
+                var dateX = new Date(x.innerHTML);
+                var dateY = new Date(y.innerHTML);
+                if (dir == "asc") {
+                    if (dateX.getTime() > dateY.getTime()) {
+                        shouldSwitch = true;
+                        break;
+                    }
+                } else if (dir == "desc") {
+                    if (dateX.getTime() < dateY.getTime()) {
+                        shouldSwitch = true;
+                        break;
+                    }
+                }
+            } else if (n == 3 || n == 4) { // sort amount column
+                var numX = parseFloat(x.innerHTML.replace("$", ""));
+                var numY = parseFloat(y.innerHTML.replace("$", ""));
+                if (dir == "asc") {
+                    if (numX > numY) {
+                        shouldSwitch = true;
+                        break;
+                    }
+                } else if (dir == "desc") {
+                    if (numX < numY) {
+                        shouldSwitch = true;
+                        break;
+                    }
+                }
+            } else { // sort other columns
+                if (dir == "asc") {
+                    if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+                        shouldSwitch = true;
+                        break;
+                    }
+                } else if (dir == "desc") {
+                    if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+                        shouldSwitch = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (shouldSwitch) {
+            rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+            switching = true;
+            switchcount ++;
+        } else {
+            if (switchcount == 0 && dir == "asc") {
+                dir = "desc";
+                switching = true;
+            }
+        }
+    }
+    // remove the "asc" or "desc" class from all other rows
+    for (i = 0; i < rows.length; i++) {
+        if (i == 0) {
+            rows[i].classList.add(dir == "asc" ? "asc" : "desc");
+        } else {
+            rows[i].classList.remove("asc");
+            rows[i].classList.remove("desc");
+        }
+    }
+}
+
+
+function updateDonations() {
+    var xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === XMLHttpRequest.DONE) {
+            if (xhr.status === 200) {
+                var tableBody = document.getElementById("donations-table-body");
+                tableBody.innerHTML = xhr.responseText;
+            } else {
+                console.log("Error fetching donations: " + xhr.status);
+            }
+        }
+    };
+    xhr.open("GET", "/donations");
+    xhr.send();
+}
+
+
+// Call the updateDonations function every 5 seconds
+setInterval(updateDonations, 5000);
+
+
+	</script>
+
+</body>
+</html>
