@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/gabstv/go-monero/walletrpc"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/portto/solana-go-sdk/client"
@@ -32,6 +33,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 	"unicode/utf8"
@@ -39,6 +41,7 @@ import (
 
 const username = "admin"
 
+var dbLock sync.Mutex
 var USDMinimum float64 = 5
 var MediaMin float64 = 0.025 // Currently unused
 var MessageMaxChar int = 250
@@ -273,6 +276,8 @@ func main() {
 
 	go startMoneroWallet()
 
+	time.Sleep(5 * time.Second)
+
 	log.Println("Starting server")
 
 	var err error
@@ -306,6 +311,10 @@ func main() {
 	})
 	http.HandleFunc("/xmr.svg", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/xmr.svg")
+	})
+
+	http.HandleFunc("/dono.gif", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/obs/media/ezgif-1-fd55d7ca73.gif")
 	})
 
 	http.HandleFunc("/sol.svg", func(w http.ResponseWriter, r *http.Request) {
@@ -499,13 +508,22 @@ func startMoneroWallet() {
 
 	//windows
 	//cmd := exec.Command("monero/monero-wallet-rpc.exe", "--rpc-bind-port", "28088", "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "monero/wallet", "--disable-rpc-login", "--password", "")
-
 	// Capture the output of the command
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("Error running command: %v\n", err)
 		return
 	}
+
+	// Start a wallet client instance
+	clientXMR := walletrpc.New(walletrpc.Config{
+		Address: "http://127.0.0.1:28088/json_rpc",
+	})
+
+	// check wallet balance
+	balance, unlocked, err := clientXMR.GetBalance()
+
+	log.Println(walletrpc.XMRToDecimal(balance), unlocked, err)
 
 	// Print the output of the command
 	fmt.Println(string(output))
@@ -555,6 +573,9 @@ func addDonoToDonoBar(as float64, c string) float64 {
 	}
 	pb.Sent += usdVal
 	amountSent = pb.Sent
+
+	dbLock.Lock()
+	defer dbLock.Unlock()
 
 	err := updateObsData(db, 1, 1, obsData.FilenameGIF, obsData.FilenameMP3, "alice", pb)
 
@@ -707,7 +728,7 @@ func checkUnfulfilledDonos() []Dono {
 			fulfilledSlice = append(fulfilledSlice, true)
 
 			amountSlice = append(amountSlice, dono.AmountSent)
-			amountUSDSlice = append(amountSlice, dono.AmountToSend)
+			amountUSDSlice = append(amountUSDSlice, dono.AmountToSend)
 			if dono.Address == " " {
 				log.Println("No dono address, killed (marked as fulfilled) and won't be checked again. \n")
 			} else {
@@ -742,9 +763,10 @@ func checkUnfulfilledDonos() []Dono {
 		log.Println("New Amount Recieved:", dono.AmountSent, "\n")
 
 		if dono.AmountSent >= dono.AmountToSend-float64(lamportFee)/1e9 && dono.AmountToSend != 0 {
-			wallet, _ := ReadAddress(dono.Address)
-
-			SendSolana(wallet.KeyPublic, wallet.KeyPrivate, adminSolanaAddress, dono.AmountSent)
+			if dono.CurrencyType == "SOL" {
+				wallet, _ := ReadAddress(dono.Address)
+				SendSolana(wallet.KeyPublic, wallet.KeyPrivate, adminSolanaAddress, dono.AmountSent, dono.CurrencyType)
+			}
 			dono.AmountToSend = addDonoToDonoBar(dono.AmountSent, dono.CurrencyType) // change Amount To Send to USD value of sent
 
 			dono.Fulfilled = true
@@ -753,7 +775,7 @@ func checkUnfulfilledDonos() []Dono {
 			rowsToUpdate = append(rowsToUpdate, dono.ID)
 			fulfilledSlice = append(fulfilledSlice, true)
 			amountSlice = append(amountSlice, dono.AmountSent)
-			amountUSDSlice = append(amountSlice, dono.AmountToSend)
+			amountUSDSlice = append(amountUSDSlice, dono.AmountToSend)
 			log.Println("Dono FULFILLED and sent to home sol address and won't be checked again. \n")
 			continue
 		}
@@ -762,12 +784,14 @@ func checkUnfulfilledDonos() []Dono {
 		fulfilledSlice = append(fulfilledSlice, false)
 		rowsToUpdate = append(rowsToUpdate, dono.ID)
 		amountSlice = append(amountSlice, dono.AmountSent)
-		amountUSDSlice = append(amountSlice, dono.AmountToSend)
+		amountUSDSlice = append(amountUSDSlice, dono.AmountToSend)
 
 	}
 
 	i := 0
 	// Update rows to be update in a way that never throws a database locked error
+	dbLock.Lock()
+	defer dbLock.Unlock()
 	for _, rowID := range rowsToUpdate {
 		_, err = db.Exec(`UPDATE donos SET updated_at = ?, fulfilled = ?, amount_sent = ?, amount_to_send = ? WHERE dono_id = ?`, time.Now(), fulfilledSlice[i], amountSlice[i], amountUSDSlice[i], rowID)
 		if err != nil {
@@ -789,52 +813,76 @@ func getSOLBalance(address string) (float64, error) {
 	}
 	return float64(balance) / 1e9, nil
 }
+func getXMRBalance(checkID string) (float64, error) {
+	url := "http://localhost:28088/json_rpc"
 
-func getXMRBalance(address string) (float64, error) {
-	url := "http://127.0.0.1:18081/json_rpc"
-
-	// Create the JSON request payload for RPC call and convert to JSON
-	rpcRequest := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      "0",
-		"method":  "get_balance",
-		"params": map[string]interface{}{
-			"address": address,
+	payload := struct {
+		Jsonrpc string `json:"jsonrpc"`
+		Id      int    `json:"id"`
+		Method  string `json:"method"`
+		Params  struct {
+			PaymentID string `json:"payment_id"`
+		} `json:"params"`
+	}{
+		Jsonrpc: "2.0",
+		Id:      0,
+		Method:  "get_payments",
+		Params: struct {
+			PaymentID string `json:"payment_id"`
+		}{
+			PaymentID: checkID,
 		},
 	}
-	payload, err := json.Marshal(rpcRequest)
+
+	reqBody, err := json.Marshal(payload)
 	if err != nil {
 		return 0, err
 	}
 
-	// POST request XMR RPC endpoint
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return 0, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, err
 	}
 	defer resp.Body.Close()
 
-	// Parse JSON response
-	var rpcResponse map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&rpcResponse)
+	var result map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&result)
 	if err != nil {
 		return 0, err
 	}
 
-	// Check RPC call was successful
-	if rpcResponse["error"] != nil {
-		return 0, fmt.Errorf("RPC call failed: %s", rpcResponse["error"].(map[string]interface{})["message"])
+	fmt.Println(result)
+
+	resultMap, ok := result["result"].(map[string]interface{})
+	if !ok {
+		return 0, fmt.Errorf("result key not found in response")
 	}
 
-	// Extract balance from response and convert to float64
-	balance, err := strconv.ParseFloat(rpcResponse["result"].(map[string]interface{})["balance"].(string), 64)
-	if err != nil {
-		return 0, err
+	payments, ok := resultMap["payments"].([]interface{})
+	if !ok {
+		return 0, fmt.Errorf("payments key not found in result map")
 	}
-	return balance / 1000000000000, nil // convert from atomic units to XMR
+
+	if len(payments) == 0 {
+		return 0, fmt.Errorf("no payments found for payment ID %s", checkID)
+	}
+
+	amount := payments[0].(map[string]interface{})["amount"].(float64)
+
+	return (amount / math.Pow(10, 12)), nil
 }
 
 func processQueue(db *sql.DB) error {
+	dbLock.Lock()
+	defer dbLock.Unlock()
 	// Retrieve oldest entry from queue table
 	row := db.QueryRow(`
 		SELECT id, name, amount, currency FROM queue
@@ -1079,6 +1127,8 @@ func checkObsData(db *sql.DB) (bool, error) {
 }
 
 func updateObsData(db *sql.DB, obsId int, userId int, gifName string, mp3Name string, ttsVoice string, pbData progressbarData) error {
+	dbLock.Lock()
+	defer dbLock.Unlock()
 	updateObsData := `
         UPDATE obs
         SET user_id = ?,
@@ -1747,8 +1797,8 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	s.Media = html.EscapeString(media)
 
 	if mon {
-		handleMoneroPayment(w, &s, params)
-		createNewDono(1, s.Address, s.Name, s.Message, amount, "XMR", encrypted_ip, showAmount)
+		payID := handleMoneroPayment(w, &s, params)
+		createNewDono(1, payID, s.Name, s.Message, amount, "XMR", encrypted_ip, showAmount)
 	} else {
 		walletAddress := handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media, mon)
 		createNewDono(1, walletAddress, s.Name, s.Message, amount, "SOL", encrypted_ip, showAmount)
@@ -1776,6 +1826,7 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	s.IsSolana = !mon_
 
 	params.Add("id", s.Address)
+
 	s.CheckURL = params.Encode()
 
 	tmp, _ := qrcode.Encode("solana:"+address+"?amount="+donoStr, qrcode.Low, 320)
@@ -1789,31 +1840,32 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	return address
 }
 
-func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values) {
+func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values) string {
 
 	payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
 	req, err := http.NewRequest("POST", rpcURL, payload)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return "ERROR CREATING"
 	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return "ERROR CREATING"
 	}
 
 	resp := &rpcResponse{}
 	if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
 		fmt.Println(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return "ERROR CREATING"
 	}
 
 	s.PayID = html.EscapeString(resp.Result.PaymentID)
+	s.Address = html.EscapeString(resp.Result.IntegratedAddress)
 	params.Add("id", resp.Result.PaymentID)
-	s.Address = resp.Result.IntegratedAddress
+	params.Add("address", resp.Result.IntegratedAddress)
 	s.CheckURL = params.Encode()
 
 	tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", resp.Result.IntegratedAddress, s.Amount), qrcode.Low, 320)
@@ -1823,48 +1875,52 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values)
 	if err != nil {
 		fmt.Println(err)
 	}
+	return s.PayID
 }
 
-func SendSolana(senderPublicKey string, senderPrivateKey ed25519.PrivateKey, recipientAddress string, amount float64) {
+func SendSolana(senderPublicKey string, senderPrivateKey ed25519.PrivateKey, recipientAddress string, amount float64, currencyType string) {
+	if currencyType != "SOL" {
+		if amount > 0 {
+			var feePayer, _ = types.AccountFromBytes(senderPrivateKey) // fill your private key here (u8 array)
 
-	if amount > 0 {
-		var feePayer, _ = types.AccountFromBytes(senderPrivateKey) // fill your private key here (u8 array)
+			resp, err := c.GetLatestBlockhash(context.Background())
+			if err != nil {
+				log.Fatalf("failed to get recent blockhash, err: %v", err)
+			}
 
-		resp, err := c.GetLatestBlockhash(context.Background())
-		if err != nil {
-			log.Fatalf("failed to get recent blockhash, err: %v", err)
-		}
+			toPubkey := common.PublicKeyFromString(recipientAddress)
+			log.Println(toPubkey)
+			if err != nil {
+				log.Fatalf("failed to parse recipient public key, err: %v", err)
+			}
 
-		toPubkey := common.PublicKeyFromString(recipientAddress)
-		log.Println(toPubkey)
-		if err != nil {
-			log.Fatalf("failed to parse recipient public key, err: %v", err)
+			log.Println("Public Key Payer:", feePayer.PublicKey)
+			amountLamports := uint64(math.Round(amount * math.Pow10(9)))
+			tx, err := types.NewTransaction(types.NewTransactionParam{
+				Message: types.NewMessage(types.NewMessageParam{
+					FeePayer:        feePayer.PublicKey,
+					RecentBlockhash: resp.Blockhash,
+					Instructions: []types.Instruction{
+						system.Transfer(system.TransferParam{
+							From:   feePayer.PublicKey,
+							To:     toPubkey,
+							Amount: amountLamports - uint64(lamportFee),
+						}),
+					},
+				}),
+				Signers: []types.Account{feePayer},
+			})
+			if err != nil {
+				log.Fatalf("failed to build raw tx, err: %v", err)
+			}
+			sig, err := c.SendTransaction(context.Background(), tx)
+			if err != nil {
+				log.Fatalf("failed to send tx, err: %v", err)
+			}
+			fmt.Println(sig)
 		}
-
-		log.Println("Public Key Payer:", feePayer.PublicKey)
-		amountLamports := uint64(math.Round(amount * math.Pow10(9)))
-		tx, err := types.NewTransaction(types.NewTransactionParam{
-			Message: types.NewMessage(types.NewMessageParam{
-				FeePayer:        feePayer.PublicKey,
-				RecentBlockhash: resp.Blockhash,
-				Instructions: []types.Instruction{
-					system.Transfer(system.TransferParam{
-						From:   feePayer.PublicKey,
-						To:     toPubkey,
-						Amount: amountLamports - uint64(lamportFee),
-					}),
-				},
-			}),
-			Signers: []types.Account{feePayer},
-		})
-		if err != nil {
-			log.Fatalf("failed to build raw tx, err: %v", err)
-		}
-		sig, err := c.SendTransaction(context.Background(), tx)
-		if err != nil {
-			log.Fatalf("failed to send tx, err: %v", err)
-		}
-		fmt.Println(sig)
+	} else {
+		log.Println("ERROR, tried to send", currencyType, "through SendSolana(). Not sending since XMR but continuing as everything else is fine.")
 	}
 
 }

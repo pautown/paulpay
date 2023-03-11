@@ -4,6 +4,10 @@
 <meta http-equiv="refresh" content="{{.Refresh}}">
 <title>OBS Alert</title>
 <style>
+
+  small{
+    zoom: 0.3;
+  }
 body {
   background: #262b3b;
   color: white;
@@ -15,6 +19,10 @@ body {
   animation-duration: {{.Refresh}}s;
   animation-fill-mode: forwards;
   animation-iteration-count: 1;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
 }
 svg {
   width: 48px;
@@ -42,9 +50,9 @@ blockquote {
 </style>
 </head>
 <body>
-
+    <small><img src="/dono.gif"></small>
 <h1>
-    <b>{{.Name}}</b> sent <b>{{.Amount}}{{.Currency}}</b></h1>
+    <br><b>{{.Name}}</b> sent <b>{{.Amount}}{{.Currency}}</b></h1>
 <blockquote>{{.Message}}</blockquote>
 
 </body>
