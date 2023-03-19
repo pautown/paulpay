@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+
 	"encoding/json"
 	"fmt"
 	"github.com/gabstv/go-monero/walletrpc"
@@ -30,10 +31,10 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"text/template"
 	"time"
 	"unicode/utf8"
@@ -41,7 +42,6 @@ import (
 
 const username = "admin"
 
-var dbLock sync.Mutex
 var USDMinimum float64 = 5
 var MediaMin float64 = 0.025 // Currently unused
 var MessageMaxChar int = 250
@@ -73,13 +73,14 @@ var minDonoValue float64 = 5.0   // The global value to equal in USD terms
 var lamportFee = 1000000
 
 // Mainnet
-//var c = client.NewClient(rpc.MainnetRPCEndpoint)
+var c = client.NewClient(rpc.MainnetRPCEndpoint)
 
 // Devnet
 var adminSolanaAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
-var adminEthereumAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
+var adminEthereumAddress = "adWqokePHcAbyF11TgfvvM1eKax3Kxtnn9sZVQh6fXo"
 var adminHexcoinAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
-var c = client.NewClient(rpc.DevnetRPCEndpoint)
+
+//var c = client.NewClient(rpc.DevnetRPCEndpoint)
 
 type priceData struct {
 	Monero struct {
@@ -108,6 +109,9 @@ type User struct {
 type UserPageData struct {
 	ErrorMessage string
 }
+
+var ServerMinMediaDono = 5
+var ServerMediaEnabled = true
 
 var db *sql.DB
 var userSessions = make(map[string]int)
@@ -152,6 +156,8 @@ type alertPageData struct {
 	Message       string
 	Amount        float64
 	Currency      string
+	MediaURL      string
+	USDAmount     float64
 	Refresh       int
 	DisplayToggle string
 }
@@ -250,7 +256,7 @@ func donationsHandler(w http.ResponseWriter, r *http.Request) {
 	var donos []Dono
 	for rows.Next() {
 		var dono Dono
-		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt)
+		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt, &dono.USDAmount, &dono.MediaURL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -291,6 +297,12 @@ func main() {
 
 	// Check if the database and tables exist, and create them if they don't
 	err = createDatabaseIfNotExists(db)
+	if err != nil {
+		panic(err)
+	}
+
+	// Run migrations on database
+	err = runDatabaseMigrations(db)
 	if err != nil {
 		panic(err)
 	}
@@ -362,20 +374,67 @@ func main() {
 	logoutTemplate, _ = template.ParseFiles("web/logout.html")
 	incorrectPasswordTemplate, _ = template.ParseFiles("web/password_change_failed.html")
 
-	user, err := getUserByUsername(username)
-	if err != nil {
-		panic(err)
-	}
+	setServerVars()
 
-	minDonoValue = float64(user.MinDono)
-	adminSolanaAddress = user.SolAddress
-	setMinDonos()
+	go createTestDono("Huge Bob", "XMR", "Hey it's Huge Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+	go createTestDono("Big Bob", "XMR", "Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", 50, 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+	go createTestDono("Little Bob", "XMR", "Hey it's little Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+	go createTestDono("Medium Bob", "XMR", "Hey it's medium Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 
 	err = http.ListenAndServe(":8900", nil)
 	if err != nil {
 		panic(err)
 	}
 
+}
+func setServerVars() {
+	log.Println("Starting.")
+	log.Println("		 ..")
+	time.Sleep(2 * time.Second)
+	log.Println("		 ... setServerVars()")
+	user, err := getUserByUsername(username)
+	if err != nil {
+		panic(err)
+	}
+	minDonoValue = float64(user.MinDono)
+	adminSolanaAddress = user.SolAddress
+
+	ServerMediaEnabled = user.MediaEnabled
+	ServerMinMediaDono = user.MinMediaDono
+	setMinDonos()
+
+	log.Println("ServerMediaEnabled:", ServerMediaEnabled)
+	log.Println("ServerMinMediaDono:", ServerMinMediaDono)
+
+}
+func createTestDono(name string, curr string, message string, amount float64, usdAmount float64, media_url string) {
+	valid, media_url_ := checkDonoForMediaUSDThreshold(media_url, usdAmount)
+
+	if valid == false {
+		media_url_ = ""
+	}
+
+	log.Println("TESTING DONO IN FIVE SECONDS")
+	time.Sleep(5 * time.Second)
+	log.Println("TESTING DONO NOW")
+	err := createNewQueueEntry(db, "TestAddress", name, message, amount, curr, usdAmount, media_url_)
+	if err != nil {
+		panic(err)
+	}
+
+	addDonoToDonoBar(amount, curr)
+}
+
+// extractVideoID extracts the video ID from a YouTube URL
+func extractVideoID(url string) string {
+	videoID := ""
+	// Use a regular expression to extract the video ID from the YouTube URL
+	re := regexp.MustCompile(`v=([\w-]+)`)
+	match := re.FindStringSubmatch(url)
+	if len(match) == 2 {
+		videoID = match[1]
+	}
+	return videoID
 }
 
 func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
@@ -406,13 +465,32 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 	var donos []Dono
 	for rows.Next() {
 		var dono Dono
-		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt)
+		var name, message, address, currencyType, encryptedIP, mediaURL sql.NullString
+		var amountToSend, amountSent, usdAmount sql.NullFloat64
+		var userID sql.NullInt64
+		var anonDono, fulfilled sql.NullBool
+		err := rows.Scan(&dono.ID, &userID, &address, &name, &message, &amountToSend, &amountSent, &currencyType, &anonDono, &fulfilled, &encryptedIP, &dono.CreatedAt, &dono.UpdatedAt, &usdAmount, &mediaURL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		dono.UserID = int(userID.Int64)
+		dono.Address = address.String
+		dono.Name = name.String
+		dono.Message = message.String
+		dono.AmountToSend = amountToSend.Float64
+		dono.AmountSent = amountSent.Float64
+		dono.CurrencyType = currencyType.String
+		dono.AnonDono = anonDono.Bool
+		dono.Fulfilled = fulfilled.Bool
+		dono.EncryptedIP = encryptedIP.String
+		dono.USDAmount = usdAmount.Float64
+		dono.MediaURL = mediaURL.String
+
 		donos = append(donos, dono)
 	}
+
 	if err = rows.Err(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -553,7 +631,7 @@ func checkDonos() {
 		for _, dono := range fulfilledDonos {
 			fmt.Println(dono)
 
-			err := createNewQueueEntry(db, dono.Address, dono.Name, dono.Message, dono.AmountSent, dono.CurrencyType)
+			err := createNewQueueEntry(db, dono.Address, dono.Name, dono.Message, dono.AmountSent, dono.CurrencyType, dono.USDAmount, dono.MediaURL)
 			if err != nil {
 				panic(err)
 			}
@@ -563,7 +641,7 @@ func checkDonos() {
 	}
 }
 
-func addDonoToDonoBar(as float64, c string) float64 {
+func getUSDValue(as float64, c string) float64 {
 	usdVal := 0.00
 
 	if c == "XMR" {
@@ -571,32 +649,100 @@ func addDonoToDonoBar(as float64, c string) float64 {
 	} else if c == "SOL" {
 		usdVal = as * solToUsd
 	}
+
+	usdValStr := fmt.Sprintf("%.2f", usdVal)      // format usdVal as a string with 2 decimal points
+	usdVal, _ = strconv.ParseFloat(usdValStr, 64) // convert the string back to a float
+
+	return usdVal
+}
+
+func addDonoToDonoBar(as float64, c string) float64 {
+	usdVal := getUSDValue(as, c)
 	pb.Sent += usdVal
+
+	sent, err := strconv.ParseFloat(fmt.Sprintf("%.2f", pb.Sent), 64)
+	if err != nil {
+		// handle the error here
+		log.Println("Error converting to cents: ", err)
+	}
+	pb.Sent = sent
+
 	amountSent = pb.Sent
 
-	dbLock.Lock()
-	defer dbLock.Unlock()
-
-	err := updateObsData(db, 1, 1, obsData.FilenameGIF, obsData.FilenameMP3, "alice", pb)
+	err = updateObsData(db, 1, 1, obsData.FilenameGIF, obsData.FilenameMP3, "alice", pb)
 
 	if err != nil {
 		log.Println("Error: ", err)
 		return 0.00
 	}
-	return amountSent
+	return usdVal
 }
 
-func createNewQueueEntry(db *sql.DB, address string, name string, message string, amount float64, currency string) error {
+func formatMediaURL(media_url string) string {
+	isValid, timecode, properLink := isYouTubeLink(media_url)
+	log.Println(isValid, timecode, properLink)
+
+	embedLink := ""
+	// extract the video ID from the YouTube URL
+	if isValid {
+		videoID := extractVideoID(properLink)
+		// Build the embeddable video link
+		embedLink = fmt.Sprintf(videoID)
+	}
+	return embedLink
+}
+
+func createNewQueueEntry(db *sql.DB, address string, name string, message string, amount float64, currency string, dono_usd float64, media_url string) error {
+
+	// extract the video ID (if any) from the YouTube URL
+	embedLink := formatMediaURL(media_url)
+
 	_, err := db.Exec(`
-		INSERT INTO queue (name, message, amount, currency) VALUES (?, ?, ?, ?)
-	`, name, message, amount, currency)
+		INSERT INTO queue (name, message, amount, currency, usd_amount, media_url) VALUES (?, ?, ?, ?, ?, ?)
+	`, name, message, amount, currency, dono_usd, embedLink)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func createNewDono(user_id int, dono_address string, dono_name string, dono_message string, amount_to_send float64, currencyType string, encrypted_ip string, anon_dono bool) {
+func isYouTubeLink(link string) (bool, int, string) {
+	var timecode int
+	var properLink string
+
+	youtubeRegex := regexp.MustCompile(`^(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([^&]+)(?:\?t=)?(\d*)$`)
+	embedRegex := regexp.MustCompile(`^(?:https?://)?(?:www\.)?youtube\.com/embed/([^?]+)(?:\?start=)?(\d*)$`)
+
+	if youtubeMatches := youtubeRegex.FindStringSubmatch(link); youtubeMatches != nil {
+		if len(youtubeMatches[2]) > 0 {
+			fmt.Sscanf(youtubeMatches[2], "%d", &timecode)
+		}
+		properLink = "https://www.youtube.com/watch?v=" + youtubeMatches[1]
+		return true, timecode, properLink
+	}
+
+	if embedMatches := embedRegex.FindStringSubmatch(link); embedMatches != nil {
+		if len(embedMatches[2]) > 0 {
+			fmt.Sscanf(embedMatches[2], "%d", &timecode)
+		}
+		properLink = "https://www.youtube.com/watch?v=" + embedMatches[1]
+		return true, timecode, properLink
+	}
+
+	return false, 0, ""
+}
+
+func checkDonoForMediaUSDThreshold(media_url string, dono_usd float64) (bool, string) {
+	valid := true
+	if dono_usd < float64(ServerMinMediaDono) {
+		media_url = ""
+		valid = false
+
+	}
+	return valid, media_url
+}
+
+func createNewDono(user_id int, dono_address string, dono_name string, dono_message string, amount_to_send float64, currencyType string, encrypted_ip string, anon_dono bool, dono_usd float64, media_url string) {
 	// Open a new database connection
 	db, err := sql.Open("sqlite3", "users.db")
 	if err != nil {
@@ -607,6 +753,12 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
 
 	// Get current time
 	createdAt := time.Now().UTC()
+
+	valid, media_url_ := checkDonoForMediaUSDThreshold(media_url, dono_usd)
+
+	if valid == false {
+		media_url_ = ""
+	}
 
 	// Execute the SQL INSERT statement
 	_, err = db.Exec(`
@@ -622,9 +774,11 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
 			fulfilled,
 			encrypted_ip,
 			created_at,
-			updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, user_id, dono_address, dono_name, dono_message, amount_to_send, 0.0, currencyType, anon_dono, false, encrypted_ip, createdAt, createdAt)
+			updated_at,
+			usd_amount,
+			media_url
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, user_id, dono_address, dono_name, dono_message, amount_to_send, 0.0, currencyType, anon_dono, false, encrypted_ip, createdAt, createdAt, dono_usd, media_url_)
 	if err != nil {
 		log.Println(err)
 		panic(err)
@@ -645,6 +799,8 @@ type Dono struct {
 	EncryptedIP  string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+	USDAmount    float64
+	MediaURL     string
 }
 
 func clearEncryptedIP(dono *Dono) {
@@ -714,7 +870,7 @@ func checkUnfulfilledDonos() []Dono {
 	var rowsToUpdate []int // slice to store row ids to be updated
 	var dono Dono
 	for rows.Next() { // Loop through the unfulfilled donos and check their status
-		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt)
+		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt, &dono.USDAmount, &dono.MediaURL)
 		if err != nil {
 			panic(err)
 		}
@@ -790,8 +946,6 @@ func checkUnfulfilledDonos() []Dono {
 
 	i := 0
 	// Update rows to be update in a way that never throws a database locked error
-	dbLock.Lock()
-	defer dbLock.Unlock()
 	for _, rowID := range rowsToUpdate {
 		_, err = db.Exec(`UPDATE donos SET updated_at = ?, fulfilled = ?, amount_sent = ?, amount_to_send = ? WHERE dono_id = ?`, time.Now(), fulfilledSlice[i], amountSlice[i], amountUSDSlice[i], rowID)
 		if err != nil {
@@ -881,8 +1035,7 @@ func getXMRBalance(checkID string) (float64, error) {
 }
 
 func processQueue(db *sql.DB) error {
-	dbLock.Lock()
-	defer dbLock.Unlock()
+
 	// Retrieve oldest entry from queue table
 	row := db.QueryRow(`
 		SELECT id, name, amount, currency FROM queue
@@ -968,6 +1121,46 @@ func DeleteAddress(publicKey string) error {
 
 func displayNewDono(name string, amount float64, currency string) bool {
 	return false
+}
+
+func runDatabaseMigrations(db *sql.DB) error {
+
+	tables := []string{"queue", "donos"}
+
+	for _, table := range tables {
+		if checkDatabaseColumnExist(db, table, "usd_amount") == false {
+			_, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN usd_amount FLOAT`)
+			if err != nil {
+				return err
+			}
+		}
+
+		if checkDatabaseColumnExist(db, table, "media_url") == false {
+			_, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN media_url TEXT`)
+			if err != nil {
+				return err
+			}
+
+		}
+
+	}
+
+	return nil
+}
+
+func checkDatabaseColumnExist(db *sql.DB, dbTable string, dbColumn string) bool {
+	// check if column already exists
+	var count int
+	err := db.QueryRow("SELECT count(*) FROM pragma_table_info('" + dbTable + "') WHERE name='" + dbColumn + "'").Scan(&count)
+	if err != nil {
+		return false
+	}
+
+	// column doesn't exist
+	if count == 0 {
+		return false
+	}
+	return true // column does exist
 }
 
 func createDatabaseIfNotExists(db *sql.DB) error {
@@ -1127,8 +1320,7 @@ func checkObsData(db *sql.DB) (bool, error) {
 }
 
 func updateObsData(db *sql.DB, obsId int, userId int, gifName string, mp3Name string, ttsVoice string, pbData progressbarData) error {
-	dbLock.Lock()
-	defer dbLock.Unlock()
+
 	updateObsData := `
         UPDATE obs
         SET user_id = ?,
@@ -1646,7 +1838,9 @@ func alertOBSHandler(w http.ResponseWriter, r *http.Request) {
 	if newDono {
 		fmt.Println("Showing NEW DONO!")
 	} else {
+		a.MediaURL = ""
 		a.DisplayToggle = "display: none;"
+		a.Refresh = 3
 	}
 	err = alertTemplate.Execute(w, a)
 	if err != nil {
@@ -1689,13 +1883,16 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 func checkDonoQueue(db *sql.DB) (bool, error) {
 
 	// Fetch oldest entry from queue table
-	row := db.QueryRow("SELECT name, message, amount, currency FROM queue ORDER BY rowid LIMIT 1")
+	row := db.QueryRow("SELECT name, message, amount, currency, media_url, usd_amount FROM queue ORDER BY rowid LIMIT 1")
 
 	var name string
 	var message string
 	var amount float64
 	var currency string
-	err := row.Scan(&name, &message, &amount, &currency)
+	var media_url string
+	var usd_amount float64
+
+	err := row.Scan(&name, &message, &amount, &currency, &media_url, &usd_amount)
 	if err == sql.ErrNoRows {
 		// Queue is empty, do nothing
 		return false, nil
@@ -1710,6 +1907,9 @@ func checkDonoQueue(db *sql.DB) (bool, error) {
 	a.Message = message
 	a.Amount = amount
 	a.Currency = currency
+	a.MediaURL = media_url
+	a.USDAmount = usd_amount
+	a.Refresh = getRefreshFromUSDAmount(usd_amount)
 	a.DisplayToggle = "display: block;"
 
 	// Remove fetched entry from queue table
@@ -1720,7 +1920,17 @@ func checkDonoQueue(db *sql.DB) (bool, error) {
 
 	return true, nil
 }
+func getRefreshFromUSDAmount(x float64) int {
+	minuteCost := 5
+	threeMinuteCost := 10
 
+	if x >= float64(threeMinuteCost) {
+		return 3 * 60
+	} else if x >= float64(minuteCost) {
+		return 1 * 60
+	}
+	return 10
+}
 func returnIPPenalty(ips []string, currentDonoIP string) float64 {
 	// Check if the encrypted IP matches any of the encrypted IPs in the slice of donos
 	sameIPCount := 0
@@ -1797,11 +2007,13 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	s.Media = html.EscapeString(media)
 
 	if mon {
+		USDAmount := getUSDValue(amount, "XMR")
 		payID := handleMoneroPayment(w, &s, params)
-		createNewDono(1, payID, s.Name, s.Message, amount, "XMR", encrypted_ip, showAmount)
+		createNewDono(1, payID, s.Name, s.Message, amount, "XMR", encrypted_ip, showAmount, USDAmount, s.Media)
 	} else {
+		USDAmount := getUSDValue(amount, "SOL")
 		walletAddress := handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media, mon)
-		createNewDono(1, walletAddress, s.Name, s.Message, amount, "SOL", encrypted_ip, showAmount)
+		createNewDono(1, walletAddress, s.Name, s.Message, amount, "SOL", encrypted_ip, showAmount, USDAmount, s.Media)
 	}
 }
 
@@ -1879,7 +2091,7 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values)
 }
 
 func SendSolana(senderPublicKey string, senderPrivateKey ed25519.PrivateKey, recipientAddress string, amount float64, currencyType string) {
-	if currencyType != "SOL" {
+	if currencyType == "SOL" {
 		if amount > 0 {
 			var feePayer, _ = types.AccountFromBytes(senderPrivateKey) // fill your private key here (u8 array)
 
