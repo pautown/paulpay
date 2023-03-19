@@ -234,8 +234,8 @@ func checkLoggedIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println(user)
-	log.Println(cookie)
+	user = user
+	cookie = cookie
 }
 
 // Handler function for the "/donations" endpoint
@@ -452,7 +452,9 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	log.Println(user, cookie)
+	user = user
+	cookie = cookie
+
 	// Retrieve data from the donos table
 	rows, err := db.Query("SELECT * FROM donos WHERE fulfilled = 1 AND amount_sent != 0 ORDER BY created_at DESC")
 	if err != nil {
@@ -869,10 +871,42 @@ func checkUnfulfilledDonos() []Dono {
 	var fulfilledDonos []Dono
 	var rowsToUpdate []int // slice to store row ids to be updated
 	var dono Dono
+	var tmpUSDAmount, tmpAmountToSend, tmpAmountSent sql.NullFloat64
+	var tmpMediaURL sql.NullString
+
 	for rows.Next() { // Loop through the unfulfilled donos and check their status
-		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt, &dono.USDAmount, &dono.MediaURL)
+		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &tmpAmountToSend, &tmpAmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt, &tmpUSDAmount, &tmpMediaURL)
+
 		if err != nil {
 			panic(err)
+		}
+
+		if tmpUSDAmount.Valid {
+			dono.USDAmount = tmpUSDAmount.Float64
+		} else {
+			// Handle NULL value
+			dono.USDAmount = 0.0 // or any default value you want to assign
+		}
+
+		if tmpAmountToSend.Valid {
+			dono.AmountToSend = tmpAmountToSend.Float64
+		} else {
+			// Handle NULL value
+			dono.AmountToSend = 0.0 // or any default value you want to assign
+		}
+
+		if tmpAmountSent.Valid {
+			dono.AmountSent = tmpAmountSent.Float64
+		} else {
+			// Handle NULL value
+			dono.AmountSent = 0.0 // or any default value you want to assign
+		}
+
+		if tmpMediaURL.Valid {
+			dono.MediaURL = tmpMediaURL.String
+		} else {
+			// Handle NULL value
+			dono.MediaURL = "" // or any default value you want to assign
 		}
 
 		// Check if the dono has exceeded the killDono time
