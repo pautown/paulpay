@@ -402,7 +402,7 @@ func setServerVars() {
 	ServerMediaEnabled = user.MediaEnabled
 	ServerMinMediaDono = user.MinMediaDono
 	setMinDonos()
-
+	log.Println("adminSolanaAddress:", adminSolanaAddress)
 	log.Println("ServerMediaEnabled:", ServerMediaEnabled)
 	log.Println("ServerMinMediaDono:", ServerMinMediaDono)
 
