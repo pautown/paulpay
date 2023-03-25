@@ -23,6 +23,7 @@ import (
 	qrcode "github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/bcrypt"
 	"html"
+	"html/template"
 	"io/ioutil"
 	"log"
 	"math"
@@ -35,7 +36,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
 	"unicode/utf8"
 )
@@ -91,6 +91,11 @@ type priceData struct {
 	} `json:"solana"`
 }
 
+type Link struct {
+	URL         string `json:"url"`
+	Description string `json:"description"`
+}
+
 type User struct {
 	UserID               int
 	Username             string
@@ -104,6 +109,7 @@ type User struct {
 	MediaEnabled         bool
 	CreationDatetime     string
 	ModificationDatetime string
+	Links                string
 }
 
 type UserPageData struct {
@@ -148,6 +154,7 @@ type indexDisplay struct {
 	SolPrice  float64
 	XMRPrice  float64
 	MinAmnt   float64
+	Links     template.JS
 	Checked   string
 }
 
@@ -200,6 +207,7 @@ type MoneroPrice struct {
 	} `json:"monero"`
 }
 
+var json_links []Link
 var a alertPageData
 var pb progressbarData
 var obsData obsDataStruct
@@ -376,10 +384,10 @@ func main() {
 
 	setServerVars()
 
-	go createTestDono("Huge Bob", "XMR", "Hey it's Huge Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
-	go createTestDono("Big Bob", "XMR", "Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", 50, 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
-	go createTestDono("Little Bob", "XMR", "Hey it's little Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
-	go createTestDono("Medium Bob", "XMR", "Hey it's medium Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+	// go createTestDono("Huge Bob", "XMR", "Hey it's Huge Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+	// go createTestDono("Big Bob", "XMR", "Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", 50, 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+	// go createTestDono("Little Bob", "XMR", "Hey it's little Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+	// go createTestDono("Medium Bob", "XMR", "Hey it's medium Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 
 	err = http.ListenAndServe(":8900", nil)
 	if err != nil {
@@ -387,15 +395,52 @@ func main() {
 	}
 
 }
+
+// get links for a user
+func getUserLinks(user User) ([]Link, error) {
+	if user.Links == "" {
+		// Insert default links for the user
+		defaultLinks := []Link{
+			{URL: "https://powerchat.live/paultown?tab=donation", Description: "Powerchat"},
+			{URL: "https://cozy.tv/paultown", Description: "cozy.tv/paultown"},
+			{URL: "http://twitter.paul.town/", Description: "Twitter"},
+			{URL: "https://t.me/paultownreal", Description: "Telegram"},
+			{URL: "http://notes.paul.town/", Description: "notes.paul.town"},
+		}
+
+		jsonLinks, err := json.Marshal(defaultLinks)
+		if err != nil {
+			return nil, err
+		}
+
+		user.Links = string(jsonLinks)
+		if err := updateUser(user); err != nil {
+			return nil, err
+		}
+
+		return defaultLinks, nil
+	}
+
+	var links []Link
+	if err := json.Unmarshal([]byte(user.Links), &links); err != nil {
+		return nil, err
+	}
+
+	return links, nil
+}
+
 func setServerVars() {
 	log.Println("Starting.")
 	log.Println("		 ..")
 	time.Sleep(2 * time.Second)
-	log.Println("		 ... setServerVars()")
+	log.Println("------------ setServerVars()")
 	user, err := getUserByUsername(username)
 	if err != nil {
 		panic(err)
 	}
+
+	json_links, _ = getUserLinks(user)
+
 	minDonoValue = float64(user.MinDono)
 	adminSolanaAddress = user.SolAddress
 
@@ -779,7 +824,7 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
 			updated_at,
 			usd_amount,
 			media_url
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, user_id, dono_address, dono_name, dono_message, amount_to_send, 0.0, currencyType, anon_dono, false, encrypted_ip, createdAt, createdAt, dono_usd, media_url_)
 	if err != nil {
 		log.Println(err)
@@ -1158,27 +1203,39 @@ func displayNewDono(name string, amount float64, currency string) bool {
 }
 
 func runDatabaseMigrations(db *sql.DB) error {
-
 	tables := []string{"queue", "donos"}
 
 	for _, table := range tables {
-		if checkDatabaseColumnExist(db, table, "usd_amount") == false {
-			_, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN usd_amount FLOAT`)
-			if err != nil {
-				return err
-			}
+		err := addColumnIfNotExist(db, table, "usd_amount", "FLOAT")
+		if err != nil {
+			return err
 		}
 
-		if checkDatabaseColumnExist(db, table, "media_url") == false {
-			_, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN media_url TEXT`)
-			if err != nil {
-				return err
-			}
-
+		err = addColumnIfNotExist(db, table, "media_url", "TEXT")
+		if err != nil {
+			return err
 		}
-
 	}
 
+	tables = []string{"users"}
+
+	for _, table := range tables {
+		err := addColumnIfNotExist(db, table, "links", "TEXT")
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func addColumnIfNotExist(db *sql.DB, tableName, columnName, columnType string) error {
+	if !checkDatabaseColumnExist(db, tableName, columnName) {
+		_, err := db.Exec(`ALTER TABLE ` + tableName + ` ADD COLUMN ` + columnName + ` ` + columnType)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -1396,9 +1453,10 @@ func createUser(user User) error {
             min_media_threshold,
             media_enabled,
             created_at,
-            modified_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now(), time.Now())
+            modified_at,
+            links
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now(), time.Now(), "")
 
 	adminEthereumAddress = user.EthAddress
 	adminSolanaAddress = user.SolAddress
@@ -1413,12 +1471,12 @@ func updateUser(user User) error {
 	statement := `
 		UPDATE users
 		SET Username=?, HashedPassword=?, eth_address=?, sol_address=?, hex_address=?,
-			xmr_wallet_password=?, min_donation_threshold=?, min_media_threshold=?, media_enabled=?, modified_at=datetime('now')
+			xmr_wallet_password=?, min_donation_threshold=?, min_media_threshold=?, media_enabled=?, modified_at=datetime('now'), links=?
 		WHERE id=?
 	`
 	_, err := db.Exec(statement, user.Username, user.HashedPassword, user.EthAddress,
 		user.SolAddress, user.HexcoinAddress, user.XMRWalletPassword, user.MinDono, user.MinMediaDono,
-		user.MediaEnabled, user.UserID)
+		user.MediaEnabled, []byte(user.Links), user.UserID) // convert user.Links to []byte
 	if err != nil {
 		log.Fatalf("failed, err: %v", err)
 	}
@@ -1428,12 +1486,17 @@ func updateUser(user User) error {
 // get a user by their username
 func getUserByUsername(username string) (User, error) {
 	var user User
+	var links sql.NullString // use a sql.NullString for the "links" field
 	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links) // scan into the sql.NullString
 	if err != nil {
 		return User{}, err
+	}
+	user.Links = links.String // assign the sql.NullString to the user's "Links" field
+	if !links.Valid {         // check if the "links" column is null
+		user.Links = "" // set the user's "Links" field to ""
 	}
 	return user, nil
 }
@@ -1448,7 +1511,7 @@ func getUserBySession(sessionToken string) (User, error) {
 	row := db.QueryRow("SELECT * FROM users WHERE id=?", userID)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &user.Links)
 	if err != nil {
 		return User{}, err
 	}
@@ -1901,14 +1964,30 @@ func getCurrentDateTime() string {
 }
 
 func indexHandler(w http.ResponseWriter, _ *http.Request) {
-	var i indexDisplay
-	i.MaxChar = MessageMaxChar
-	i.MinSolana = minSolana
-	i.MinMonero = minMonero
-	i.SolPrice = solToUsd
-	i.XMRPrice = xmrToUsd
-	i.Checked = checked
-	err := indexTemplate.Execute(w, i)
+	linksJSON, err := json.Marshal(json_links)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	var links []Link
+	err = json.Unmarshal(linksJSON, &links)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	i := indexDisplay{
+		MaxChar:   MessageMaxChar,
+		MinSolana: minSolana,
+		MinMonero: minMonero,
+		SolPrice:  solToUsd,
+		XMRPrice:  xmrToUsd,
+		Checked:   checked,
+		Links:     template.JS(string(linksJSON)),
+	}
+
+	err = indexTemplate.Execute(w, i)
 	if err != nil {
 		fmt.Println(err)
 	}
