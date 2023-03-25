@@ -2022,7 +2022,7 @@ func checkDonoQueue(db *sql.DB) (bool, error) {
 	a.Currency = currency
 	a.MediaURL = media_url
 	a.USDAmount = usd_amount
-	a.Refresh = getRefreshFromUSDAmount(usd_amount)
+	a.Refresh = getRefreshFromUSDAmount(usd_amount, media_url)
 	a.DisplayToggle = "display: block;"
 
 	// Remove fetched entry from queue table
@@ -2033,7 +2033,10 @@ func checkDonoQueue(db *sql.DB) (bool, error) {
 
 	return true, nil
 }
-func getRefreshFromUSDAmount(x float64) int {
+func getRefreshFromUSDAmount(x float64, s string) int {
+	if s == "" {
+		return 10
+	} // if no media then return 10 second time
 	minuteCost := 5
 	threeMinuteCost := 10
 
