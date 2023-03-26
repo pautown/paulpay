@@ -9,7 +9,6 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
-
 	"encoding/json"
 	"fmt"
 	"github.com/gabstv/go-monero/walletrpc"
@@ -23,7 +22,6 @@ import (
 	qrcode "github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/bcrypt"
 	"html"
-	"html/template"
 	"io/ioutil"
 	"log"
 	"math"
@@ -36,6 +34,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 	"unicode/utf8"
 )
@@ -154,7 +153,7 @@ type indexDisplay struct {
 	SolPrice  float64
 	XMRPrice  float64
 	MinAmnt   float64
-	Links     template.JS
+	Links     string
 	Checked   string
 }
 
@@ -1984,7 +1983,7 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 		SolPrice:  solToUsd,
 		XMRPrice:  xmrToUsd,
 		Checked:   checked,
-		Links:     template.JS(string(linksJSON)),
+		Links:     string(linksJSON),
 	}
 
 	err = indexTemplate.Execute(w, i)
