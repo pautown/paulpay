@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta http-equiv="refresh" content="{{.Refresh}}">
+<meta id="refresh-meta" http-equiv="refresh" content="{{.Refresh}}">
+
 <title>OBS Alert</title>
 <style>
   small{
@@ -168,9 +169,9 @@
 
   // When the player is ready, start playing and unmute the video after 1 second
   function onPlayerReady(event) {
-    var displayToggle = document.querySelector("body").getAttribute("data-display-toggle");
 
-    if (displayToggle !== "hidden") {
+
+    if ("{{.DisplayToggle}}" != "display: none;") {
       event.target.playVideo();
       setTimeout(function() {
         event.target.unMute();
@@ -201,6 +202,20 @@
   function setRefreshTime(seconds) {
     var refreshMeta = document.getElementById('refresh-meta');
     refreshMeta.setAttribute('content', seconds);
+  }
+
+  window.onload = function() {
+    if ("{{.DisplayToggle}}" !== "display: none;") {
+      speak("{{.Name}} sent {{.Amount}}{{.Currency}}. {{.Message}}")
+    }
+  }
+
+  function speak(text) {
+    if ('speechSynthesis' in window) {
+      const synth = window.speechSynthesis;
+      const utterance = new SpeechSynthesisUtterance(text);
+      synth.speak(utterance);
+    }
   }
 
 
