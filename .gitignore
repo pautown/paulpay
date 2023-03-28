@@ -9,3 +9,4 @@ apilol.go
 users.db
 *.db
 monero/monero-wallet-rpc.log
+infura_url
