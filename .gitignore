@@ -11,3 +11,5 @@ users.db
 monero/monero-wallet-rpc.log
 infura_url
 alchemy_api
+monero/wallet
+users.db
