@@ -70,6 +70,32 @@ label.radio-label {
     }
 }
 
+
+#toggleSelect {
+  background-color: #262b3b;
+  color: white;
+  border: none;
+  border-radius: 0;
+  padding-left: 8px;
+  padding-right: 6px;
+  padding: 8px;
+  font-size: 16px;
+  appearance: none; /* Removes default styling */
+  -webkit-appearance: none; /* Removes default styling on Safari */
+  -moz-appearance: none; /* Removes default styling on Firefox */
+}
+
+#toggleSelect:focus {
+  outline: none;
+}
+
+#toggleSelect option {
+  background-color: #262b3b;
+  color: white;
+}
+
+
+
 #message {
     padding-top: 8px
 }

@@ -37,8 +37,7 @@ import (
 	"text/template"
 	"time"
 	"unicode/utf8"
-
-	"shadowchat/utils"
+	//"shadowchat/utils"
 )
 
 const username = "admin"
@@ -49,6 +48,7 @@ var MessageMaxChar int = 250
 var NameMaxChar int = 25
 var rpcURL string = "http://127.0.0.1:28088/json_rpc"
 var solToUsd = 0.00
+var ethToUsd = 0.00
 var xmrToUsd = 0.00
 var addressSliceSolana []AddressSolana
 
@@ -69,8 +69,8 @@ var logoutTemplate *template.Template
 var incorrectPasswordTemplate *template.Template
 var baseCheckingRate = 15
 
-var minSolana, minMonero float64 // Global variables to hold minimum SOL and XMR required to equal the global value
-var minDonoValue float64 = 5.0   // The global value to equal in USD terms
+var minSolana, minMonero, minEthereum float64 // Global variables to hold minimum SOL and XMR and ETH required to equal the global value
+var minDonoValue float64 = 5.0                // The global value to equal in USD terms
 var lamportFee = 1000000
 
 // Mainnet
@@ -90,6 +90,9 @@ type priceData struct {
 	Solana struct {
 		Usd float64 `json:"usd"`
 	} `json:"solana"`
+	Ethereum struct {
+		Usd float64 `json:"usd"`
+	} `json:"ethereum"`
 }
 
 type Link struct {
@@ -136,6 +139,15 @@ type getBalanceResponse struct {
 	ID int `json:"id"`
 }
 
+type EthSuperChat struct {
+	Name      string
+	Message   string
+	Media     string
+	Amount    string
+	CreatedAt string
+	CheckedAt string
+}
+
 type superChat struct {
 	Name     string
 	Message  string
@@ -149,14 +161,16 @@ type superChat struct {
 }
 
 type indexDisplay struct {
-	MaxChar   int
-	MinSolana float64
-	MinMonero float64
-	SolPrice  float64
-	XMRPrice  float64
-	MinAmnt   float64
-	Links     string
-	Checked   string
+	MaxChar     int
+	MinSolana   float64
+	MinMonero   float64
+	MinEthereum float64
+	SolPrice    float64
+	XMRPrice    float64
+	ETHPrice    float64
+	MinAmnt     float64
+	Links       string
+	Checked     string
 }
 
 type alertPageData struct {
@@ -332,6 +346,10 @@ func main() {
 	})
 	http.HandleFunc("/xmr.svg", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/xmr.svg")
+	})
+
+	http.HandleFunc("/eth.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/eth.svg")
 	})
 
 	http.HandleFunc("/dono.gif", func(w http.ResponseWriter, r *http.Request) {
@@ -579,17 +597,22 @@ func setMinDonos() {
 	minMonero = minDonoValue / xmrToUsd
 	// Calculate how much Solana is needed to equal the min usd donation var.
 	minSolana = minDonoValue / solToUsd
+	// Calculate how much Solana is needed to equal the min usd donation var.
+	minEthereum = minDonoValue / ethToUsd
+
 	minMonero, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minMonero), 64)
 	minSolana, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minSolana), 64)
+	minEthereum, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minEthereum), 64)
 
 	log.Println("Minimum XMR Dono:", minMonero)
 	log.Println("Minimum SOL Dono:", minSolana)
+	log.Println("Minimum SOL Dono:", minEthereum)
 }
 
 func fetchExchangeRates() {
 	for {
 		// Fetch the exchange rate data from the API
-		resp, err := http.Get("https://api.coingecko.com/api/v3/simple/price?ids=monero,solana&vs_currencies=usd")
+		resp, err := http.Get("https://api.coingecko.com/api/v3/simple/price?ids=monero,solana,ethereum&vs_currencies=usd")
 		if err != nil {
 			fmt.Println("Error fetching price data:", err)
 			// Wait five minutes before trying again
@@ -611,22 +634,26 @@ func fetchExchangeRates() {
 		// Update the exchange rate values
 		xmrToUsd = data.Monero.Usd
 		solToUsd = data.Solana.Usd
+		solToUsd = data.Ethereum.Usd
 
-		fmt.Println("Updated exchange rates:", " 1 XMR:", "$"+fmt.Sprintf("%.2f", xmrToUsd), "1 SOL:", "$"+fmt.Sprintf("%.2f", solToUsd))
+		fmt.Println("Updated exchange rates:", " 1 XMR:", "$"+fmt.Sprintf("%.2f", xmrToUsd), "1 SOL:", "$"+fmt.Sprintf("%.2f", solToUsd), "1 ETH:", "$"+fmt.Sprintf("%.2f", ethToUsd))
 
 		// Calculate how much Monero is needed to equal the min usd donation var.
 		minMonero = minDonoValue / data.Monero.Usd
 		// Calculate how much Solana is needed to equal the min usd donation var.
 		minSolana = minDonoValue / data.Solana.Usd
+		// Calculate how much Ethereum is needed to equal the min usd donation var.
+		minEthereum = minDonoValue / data.Ethereum.Usd
 
 		minMonero, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minMonero), 64)
 		minSolana, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minSolana), 64)
+		minEthereum, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minEthereum), 64)
 
 		// Save the minimum Monero and Solana variables
-		fmt.Println("Minimum Dono:", "$"+fmt.Sprintf("%.2f", minDonoValue), "- XMR:", minMonero, "SOL:", minSolana)
+		fmt.Println("Minimum Dono:", "$"+fmt.Sprintf("%.2f", minDonoValue), "- XMR:", minMonero, "SOL:", minSolana, "ETH:", minEthereum)
 
 		// Wait three minutes before fetching again
-		if xmrToUsd == 0 || solToUsd == 0 {
+		if xmrToUsd == 0 || solToUsd == 0 || ethToUsd == 0 {
 			time.Sleep(180 * time.Second)
 		} else {
 			time.Sleep(30 * time.Second)
@@ -1986,13 +2013,14 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	i := indexDisplay{
-		MaxChar:   MessageMaxChar,
-		MinSolana: minSolana,
-		MinMonero: minMonero,
-		SolPrice:  solToUsd,
-		XMRPrice:  xmrToUsd,
-		Checked:   checked,
-		Links:     string(linksJSON),
+		MaxChar:     MessageMaxChar,
+		MinSolana:   minSolana,
+		MinEthereum: minEthereum,
+		MinMonero:   minMonero,
+		SolPrice:    solToUsd,
+		XMRPrice:    xmrToUsd,
+		Checked:     checked,
+		Links:       string(linksJSON),
 	}
 
 	err = indexTemplate.Execute(w, i)
