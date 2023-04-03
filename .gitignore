@@ -13,3 +13,6 @@ infura_url
 alchemy_api
 monero/wallet
 users.db
+users.db
+monero/wallet
+monero/monero-wallet-rpc.log-part-1
