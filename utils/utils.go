@@ -158,3 +158,8 @@ func isEqual(a, b float64) bool {
 	const epsilon = 1e-18 // threshold for difference
 	return math.Abs(a-b) < epsilon
 }
+
+func IsEqual(a, b float64) bool {
+	const epsilon = 1e-18 // threshold for difference
+	return math.Abs(a-b) < epsilon
+}
