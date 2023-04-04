@@ -31,6 +31,7 @@ import (
 	"os/exec"
 	"reflect"
 	"regexp"
+	"shadowchat/utils"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,12 +42,15 @@ import (
 
 const username = "admin"
 
+var pending_donos []utils.EthSuperChat
+
 var USDMinimum float64 = 5
 var MediaMin float64 = 0.025 // Currently unused
 var MessageMaxChar int = 250
 var NameMaxChar int = 25
 var rpcURL string = "http://127.0.0.1:28088/json_rpc"
 var solToUsd = 0.00
+var ethToUsd = 0.00
 var xmrToUsd = 0.00
 var addressSliceSolana []AddressSolana
 
@@ -65,10 +69,10 @@ var incorrectLoginTemplate *template.Template
 var userTemplate *template.Template
 var logoutTemplate *template.Template
 var incorrectPasswordTemplate *template.Template
-var baseCheckingRate = 15
+var baseCheckingRate = 25
 
-var minSolana, minMonero float64 // Global variables to hold minimum SOL and XMR required to equal the global value
-var minDonoValue float64 = 5.0   // The global value to equal in USD terms
+var minSolana, minMonero, minEthereum float64 // Global variables to hold minimum SOL and XMR and ETH required to equal the global value
+var minDonoValue float64 = 5.0                // The global value to equal in USD terms
 var lamportFee = 1000000
 
 // Mainnet
@@ -88,6 +92,9 @@ type priceData struct {
 	Solana struct {
 		Usd float64 `json:"usd"`
 	} `json:"solana"`
+	Ethereum struct {
+		Usd float64 `json:"usd"`
+	} `json:"ethereum"`
 }
 
 type Link struct {
@@ -134,6 +141,15 @@ type getBalanceResponse struct {
 	ID int `json:"id"`
 }
 
+type EthSuperChat struct {
+	Name      string
+	Message   string
+	Media     string
+	Amount    string
+	CreatedAt string
+	CheckedAt string
+}
+
 type superChat struct {
 	Name     string
 	Message  string
@@ -143,18 +159,20 @@ type superChat struct {
 	QRB64    string
 	PayID    string
 	CheckURL string
-	IsSolana bool
+	Currency string
 }
 
 type indexDisplay struct {
-	MaxChar   int
-	MinSolana float64
-	MinMonero float64
-	SolPrice  float64
-	XMRPrice  float64
-	MinAmnt   float64
-	Links     string
-	Checked   string
+	MaxChar     int
+	MinSolana   float64
+	MinMonero   float64
+	MinEthereum float64
+	SolPrice    float64
+	XMRPrice    float64
+	ETHPrice    float64
+	MinAmnt     float64
+	Links       string
+	Checked     string
 }
 
 type alertPageData struct {
@@ -332,6 +350,10 @@ func main() {
 		http.ServeFile(w, r, "web/xmr.svg")
 	})
 
+	http.HandleFunc("/eth.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/eth.svg")
+	})
+
 	http.HandleFunc("/dono.gif", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/obs/media/ezgif-1-fd55d7ca73.gif")
 	})
@@ -385,7 +407,14 @@ func main() {
 
 	// go createTestDono("Huge Bob", "XMR", "Hey it's Huge Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 	// go createTestDono("Big Bob", "XMR", "Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", 50, 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+	go createTestDono("Little Bob", "XMR", "Hey it's little Bob you foo", 0.1, 3, "")
 	go createTestDono("Little Bob", "XMR", "Hey it's little Bob ", 0.1, 3, "")
+	go createTestDono("Little Bob", "XMR", "Hey it's little Bob you foo", 0.1, 3, "")
+	go createTestDono("Little Bob", "XMR", "Hey it's little Bob ", 0.1, 3, "")
+	go createTestDono("Little Bob", "XMR", "Hey it's little Bob you foo", 0.1, 3, "")
+	go createTestDono("Little Bob", "XMR", "Hey it's little Bob ", 0.1, 3, "")
+	go createTestDono("Little Bob", "XMR", "Hey it's little Bob ", 0.1, 3, "")
+	go createTestDono("Little Bob", "XMR", "Hey it's little Bob you foo", 0.1, 3, "")
 	// go createTestDono("Medium Bob", "XMR", "Hey it's medium Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 
 	err = http.ListenAndServe(":8900", nil)
@@ -570,17 +599,22 @@ func setMinDonos() {
 	minMonero = minDonoValue / xmrToUsd
 	// Calculate how much Solana is needed to equal the min usd donation var.
 	minSolana = minDonoValue / solToUsd
+	// Calculate how much Solana is needed to equal the min usd donation var.
+	minEthereum = minDonoValue / ethToUsd
+
 	minMonero, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minMonero), 64)
 	minSolana, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minSolana), 64)
+	minEthereum, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minEthereum), 64)
 
 	log.Println("Minimum XMR Dono:", minMonero)
 	log.Println("Minimum SOL Dono:", minSolana)
+	log.Println("Minimum ETH Dono:", minEthereum)
 }
 
 func fetchExchangeRates() {
 	for {
 		// Fetch the exchange rate data from the API
-		resp, err := http.Get("https://api.coingecko.com/api/v3/simple/price?ids=monero,solana&vs_currencies=usd")
+		resp, err := http.Get("https://api.coingecko.com/api/v3/simple/price?ids=monero,solana,ethereum&vs_currencies=usd")
 		if err != nil {
 			fmt.Println("Error fetching price data:", err)
 			// Wait five minutes before trying again
@@ -602,28 +636,52 @@ func fetchExchangeRates() {
 		// Update the exchange rate values
 		xmrToUsd = data.Monero.Usd
 		solToUsd = data.Solana.Usd
+		ethToUsd = data.Ethereum.Usd
 
-		fmt.Println("Updated exchange rates:", " 1 XMR:", "$"+fmt.Sprintf("%.2f", xmrToUsd), "1 SOL:", "$"+fmt.Sprintf("%.2f", solToUsd))
+		fmt.Println("Updated exchange rates:", " 1 XMR:", "$"+fmt.Sprintf("%.2f", xmrToUsd), "1 SOL:", "$"+fmt.Sprintf("%.2f", solToUsd), "1 ETH:", "$"+fmt.Sprintf("%.2f", ethToUsd))
 
 		// Calculate how much Monero is needed to equal the min usd donation var.
 		minMonero = minDonoValue / data.Monero.Usd
 		// Calculate how much Solana is needed to equal the min usd donation var.
 		minSolana = minDonoValue / data.Solana.Usd
+		// Calculate how much Ethereum is needed to equal the min usd donation var.
+		minEthereum = minDonoValue / data.Ethereum.Usd
 
 		minMonero, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minMonero), 64)
 		minSolana, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minSolana), 64)
+		minEthereum, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minEthereum), 64)
 
 		// Save the minimum Monero and Solana variables
-		fmt.Println("Minimum Dono:", "$"+fmt.Sprintf("%.2f", minDonoValue), "- XMR:", minMonero, "SOL:", minSolana)
+		fmt.Println("Minimum Dono:", "$"+fmt.Sprintf("%.2f", minDonoValue), "- XMR:", minMonero, "SOL:", minSolana, "ETH:", minEthereum)
 
 		// Wait three minutes before fetching again
-		if xmrToUsd == 0 || solToUsd == 0 {
+		if xmrToUsd == 0 || solToUsd == 0 || ethToUsd == 0 {
 			time.Sleep(180 * time.Second)
 		} else {
 			time.Sleep(30 * time.Second)
 		}
 
 	}
+}
+
+func createNewEthDono(name string, message string, mediaURL string, amountNeeded float64) utils.EthSuperChat {
+	new_dono := utils.CreatePendingDono(name, message, mediaURL, amountNeeded)
+	pending_donos = utils.AppendPendingDono(pending_donos, new_dono)
+
+	return new_dono
+}
+
+func checkEthDonos(ethAddress string) []utils.EthSuperChat {
+
+	transfers, err := utils.GetEth(ethAddress)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return []utils.EthSuperChat{}
+	}
+	completed_donos := utils.CheckEthDonos(transfers, pending_donos)
+	pending_donos = utils.RemoveCompletedDonos(pending_donos)
+
+	return completed_donos
 }
 
 func startMoneroWallet() {
@@ -694,6 +752,8 @@ func getUSDValue(as float64, c string) float64 {
 		usdVal = as * xmrToUsd
 	} else if c == "SOL" {
 		usdVal = as * solToUsd
+	} else if c == "ETH" {
+		usdVal = as * ethToUsd
 	}
 
 	usdValStr := fmt.Sprintf("%.2f", usdVal)      // format usdVal as a string with 2 decimal points
@@ -918,6 +978,8 @@ func checkUnfulfilledDonos() []Dono {
 	var tmpUSDAmount, tmpAmountToSend, tmpAmountSent sql.NullFloat64
 	var tmpMediaURL sql.NullString
 
+	completed_donos := checkEthDonos(adminEthereumAddress)
+
 	for rows.Next() { // Loop through the unfulfilled donos and check their status
 		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &tmpAmountToSend, &tmpAmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt, &tmpUSDAmount, &tmpMediaURL)
 
@@ -953,6 +1015,28 @@ func checkUnfulfilledDonos() []Dono {
 			dono.MediaURL = "" // or any default value you want to assign
 		}
 
+		if dono.CurrencyType == "ETH" {
+			// Check if amount matches a completed dono amount
+			for _, completedDono := range completed_donos {
+				if utils.IsEqual(dono.AmountSent, completedDono.AmountNeeded) == true {
+					fmt.Println("ETH dono completed:", tmpAmountSent)
+
+					dono.AmountToSend = addDonoToDonoBar(dono.AmountSent, dono.CurrencyType) // change Amount To Send to USD value of sent
+					dono.Fulfilled = true
+					// add true to fulfilledSlice
+					fulfilledDonos = append(fulfilledDonos, dono)
+					rowsToUpdate = append(rowsToUpdate, dono.ID)
+					fulfilledSlice = append(fulfilledSlice, true)
+					amountSlice = append(amountSlice, dono.AmountSent)
+					amountUSDSlice = append(amountUSDSlice, dono.AmountToSend)
+
+					continue
+				}
+			}
+			fmt.Println("ETH dono not completed:", tmpAmountSent)
+			continue
+		}
+
 		// Check if the dono has exceeded the killDono time
 		timeElapsedFromDonoCreation := time.Since(dono.CreatedAt)
 		if timeElapsedFromDonoCreation > killDono || dono.Address == " " || dono.AmountToSend == 0.00 {
@@ -978,6 +1062,7 @@ func checkUnfulfilledDonos() []Dono {
 		secondsNeededToCheck := math.Pow(float64(baseCheckingRate)-0.02, expoAdder)
 		log.Println("Dono ID:", dono.ID, "Name:", dono.Name)
 		log.Println("Message:", dono.Message)
+		log.Println("Media URL:", dono.MediaURL)
 		log.Println(dono.CurrencyType, "Needed:", dono.AmountToSend, "Recieved:", dono.AmountSent)
 		log.Println("Address:", dono.Address)
 		log.Println("Time since check:", fmt.Sprintf("%.2f", secondsElapsedSinceLastCheck), "Needed:", fmt.Sprintf("%.2f", secondsNeededToCheck))
@@ -1977,13 +2062,15 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	i := indexDisplay{
-		MaxChar:   MessageMaxChar,
-		MinSolana: minSolana,
-		MinMonero: minMonero,
-		SolPrice:  solToUsd,
-		XMRPrice:  xmrToUsd,
-		Checked:   checked,
-		Links:     string(linksJSON),
+		MaxChar:     MessageMaxChar,
+		MinSolana:   minSolana,
+		MinEthereum: minEthereum,
+		MinMonero:   minMonero,
+		SolPrice:    solToUsd,
+		ETHPrice:    ethToUsd,
+		XMRPrice:    xmrToUsd,
+		Checked:     checked,
+		Links:       string(linksJSON),
 	}
 
 	err = indexTemplate.Execute(w, i)
@@ -2074,7 +2161,7 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	ip := r.RemoteAddr
 
 	// Get form values
-	fMon := r.FormValue("mon")
+	fCrypto := r.FormValue("crypto")
 	fAmount := r.FormValue("amount")
 	fName := r.FormValue("name")
 	fMessage := r.FormValue("message")
@@ -2082,14 +2169,14 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	fShowAmount := r.FormValue("showAmount")
 	encrypted_ip := encryptIP(ip)
 
-	// Parse and handle errors for each form value
-	mon, _ := strconv.ParseBool(fMon)
 	amount, err := strconv.ParseFloat(fAmount, 64)
 	if (err != nil) || amount == 0 {
-		if mon {
+		if fCrypto == "monero" {
 			amount = minMonero
-		} else {
+		} else if fCrypto == "solana" {
 			amount = minSolana
+		} else if fCrypto == "ethereum" {
+			amount = minEthereum
 		}
 	}
 
@@ -2121,18 +2208,51 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	s.Message = html.EscapeString(truncateStrings(condenseSpaces(message), MessageMaxChar))
 	s.Media = html.EscapeString(media)
 
-	if mon {
+	if fCrypto == "monero" {
 		USDAmount := getUSDValue(amount, "XMR")
 		payID := handleMoneroPayment(w, &s, params)
 		createNewDono(1, payID, s.Name, s.Message, amount, "XMR", encrypted_ip, showAmount, USDAmount, s.Media)
-	} else {
+	} else if fCrypto == "solana" {
 		USDAmount := getUSDValue(amount, "SOL")
-		walletAddress := handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media, mon)
+		walletAddress := handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media)
 		createNewDono(1, walletAddress, s.Name, s.Message, amount, "SOL", encrypted_ip, showAmount, USDAmount, s.Media)
+	} else if fCrypto == "ethereum" {
+		USDAmount := getUSDValue(amount, "ETH")
+		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount)
+		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL)
+		createNewDono(1, adminEthereumAddress, s.Name, s.Message, amount, "ETH", encrypted_ip, showAmount, USDAmount, s.Media)
 	}
 }
 
-func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, mon_ bool) string {
+func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string) {
+	address := adminEthereumAddress
+	donoStr := fmt.Sprintf("%.18f", amount_)
+
+	s.Amount = donoStr
+
+	if name_ == "" {
+		s.Name = "Anonymous"
+		name_ = s.Name
+	} else {
+		s.Name = html.EscapeString(truncateStrings(condenseSpaces(name_), NameMaxChar))
+	}
+
+	s.Media = html.EscapeString(media_)
+	s.Address = address
+	s.Currency = "ETH"
+
+	donationLink := fmt.Sprintf("ethereum:%s?value=%s", address, donoStr)
+
+	tmp, _ := qrcode.Encode(donationLink, qrcode.Low, 320)
+	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
+
+	err := payTemplate.Execute(w, s)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string) string {
 	var wallet_ = createWalletSolana(name_, message_, amount_, showAmount_)
 	// Get Solana address and desired balance from request
 	address := wallet_.KeyPublic
@@ -2150,7 +2270,7 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	s.Media = html.EscapeString(media_)
 	s.PayID = wallet_.KeyPublic
 	s.Address = wallet_.KeyPublic
-	s.IsSolana = !mon_
+	s.Currency = "SOL"
 
 	params.Add("id", s.Address)
 
@@ -2191,6 +2311,7 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values)
 
 	s.PayID = html.EscapeString(resp.Result.PaymentID)
 	s.Address = html.EscapeString(resp.Result.IntegratedAddress)
+	s.Currency = "XMR"
 	params.Add("id", resp.Result.PaymentID)
 	params.Add("address", resp.Result.IntegratedAddress)
 	s.CheckURL = params.Encode()

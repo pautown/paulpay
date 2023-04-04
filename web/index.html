@@ -30,75 +30,77 @@
         };
 
 
-        var buttonText = "Change to Monero";
-        var mon = true;
+        var buttonText = "Switch Cryptocurrency";
+        var crypto = "monero"
       
         function toggleText() {
-          mon = !mon; // Toggle the value of mon
-          document.getElementById("mon").value = mon; // Update the value of the hidden input field
-          var elements = document.querySelectorAll('h2, label, input, textarea, button');
-          elements.forEach(function(element) {
-              if (element.innerHTML.includes("Monero")) {
-                  element.innerHTML = element.innerHTML.replace(/Monero/g, "Solana");
-              } else if (element.innerHTML.includes("monero")) {
-                  element.innerHTML = element.innerHTML.replace(/monero/g, "solana");
-              } else if (element.innerHTML.includes("Solana")) {
-                  element.innerHTML = element.innerHTML.replace(/Solana/g, "Monero");
-              } else if (element.innerHTML.includes("solana")) {
-                  element.innerHTML = element.innerHTML.replace(/solana/g, "monero");
-              }
-            
-            if (element.innerHTML.includes("XMR")) {
-                  element.innerHTML = element.innerHTML.replace(/XMR/g, "SOL");
-              } else if (element.innerHTML.includes("SOL")) {
-                  element.innerHTML = element.innerHTML.replace(/SOL/g, "XMR");
-              } 
-          });
-
+          var select = document.getElementById("toggleSelect");
+          var selectedValue = select.options[select.selectedIndex].value;
           
-          var button = document.getElementById("toggleButton");
-          if (buttonText === "Switch to Monero") {
-              buttonText = "Switch to Solana";
-          } else {
-              buttonText = "Switch to Monero";
-          }
-          button.innerHTML = buttonText;
+          var mon = selectedValue === "monero";
           
-          var img = document.querySelector("#currencyIcon");
-          if (img.getAttribute("src") === "xmr.svg") {
-            img.setAttribute("src", "sol.svg");
-          } else {
-            img.setAttribute("src", "xmr.svg");
-          }
-
-
+          
           var amountInput = document.getElementById("amount");
-          if (mon) {
-            amountInput.setAttribute("placeholder", "{{.MinMonero}} Minimum");
-          } else {
+          var buttonText, imgSrc;
+          if (selectedValue === "solana") {
+            replaceText("Solana", "solana", "SOL")
+            imgSrc = "sol.svg";
             amountInput.setAttribute("placeholder", "{{.MinSolana}} Minimum");
+          } else if (selectedValue === "monero") {
+            replaceText("Monero", "monero", "XMR")
+            imgSrc = "xmr.svg";
+            amountInput.setAttribute("placeholder", "{{.MinMonero}} Minimum");
+          } else if (selectedValue === "ethereum") {
+            replaceText("Ethereum", "ethereum", "ETH")
+            imgSrc = "eth.svg";
+            amountInput.setAttribute("placeholder", "{{.MinEthereum}} Minimum");
           }
+          document.getElementById("crypto").value = selectedValue;
+
+          select.options[select.selectedIndex].selectedIndex = 0;
+          document.querySelector("#currencyIcon").setAttribute("src", imgSrc);
           amountInput.value = "";
 
+          // switch focus to amount input field
+          document.getElementById("amount").focus();
+        }
 
-          
-
-
-      }
-
-
-
-      
-      
-      
+        function replaceText(newText, newTextLowercase, newTextCode)
+        {
+          var elements = document.querySelectorAll('h2, label, input, textarea, button');
+          elements.forEach(function(element) {
+            if (element.innerHTML.includes("Monero")) {
+              element.innerHTML = element.innerHTML.replace(/Monero/g, newText);
+            } else if (element.innerHTML.includes("monero")) {
+              element.innerHTML = element.innerHTML.replace(/monero/g, newTextLowercase);
+            } else if (element.innerHTML.includes("Solana")) {
+              element.innerHTML = element.innerHTML.replace(/Solana/g, newText);
+            } else if (element.innerHTML.includes("solana")) {
+              element.innerHTML = element.innerHTML.replace(/solana/g, newTextLowercase);
+            } else if (element.innerHTML.includes("Ethereum")) {
+              element.innerHTML = element.innerHTML.replace(/Ethereum/g, newText);
+            } else if (element.innerHTML.includes("ethereum")) {
+              element.innerHTML = element.innerHTML.replace(/ethereum/g, newTextLowercase);
+            }
+              
+            if (element.innerHTML.includes("XMR")) {
+              element.innerHTML = element.innerHTML.replace(/XMR/g, newTextCode);
+            } else if (element.innerHTML.includes("SOL")) {
+              element.innerHTML = element.innerHTML.replace(/SOL/g, newTextCode);
+            } else if (element.innerHTML.includes("ETH")) {
+              element.innerHTML = element.innerHTML.replace(/ETH/g, newTextCode);
+            }
+          });
+        }
+ 
     </script>
 </head>
 
 <body>
-
   <form action="/pay" method="POST">
     <h2>PayPaul in Monero.</h2>
-    <hr><br><br><br>
+    <hr>
+    <br>
     
     <label for="name">Name:</label><br>
     <input id="name" maxlength="25" name="name" placeholder="Anonymous" type="text"><br>
@@ -109,33 +111,31 @@
   <label for="media">Media (Optional) - Minimum donation of $5:</label><br>
   
     <input id="media" name="media" type="text" placeholder="YouTube link"><br><br>
-    
-  
-    
-    <input type="hidden" id="mon" name="mon" value=true>
+    <input type="hidden" id="crypto" name="crypto" value="monero">
     
     <button id="submit" type="submit" data-original-text="Pay in Monero(XMR)">
       <img id="currencyIcon" src="xmr.svg">Monero PayPaul
     </button>
     
+    <select id="toggleSelect" onchange="toggleText()" onblur="this.selectedIndex=0;">
+      <option value="" disabled selected>Switch Cryptocurrency</option>
+      <option value="monero">Switch to Monero</option>
+      <option value="solana">Switch to Solana</option>
+      <option value="ethereum">Switch to Ethereum</option>
+    </select>
+
     <input id="showAmount" name="showAmount" type="checkbox" value="true" {{.Checked}}>
-    <small><label for="showAmount">Show amount on stream?</label><small>
-      
-    
-    <button id="toggleButton" type="button" onclick="toggleText()">Switch to Solana</button>
+    <small><label for="showAmount">Show amount on stream?</label> </small>
+
     <div id="currencyRates">
-      <p style="display: inline-block;">1 XMR = ${{.XMRPrice}}</p>
-      <p style="display: inline-block; margin-left: 15px;">1 SOL = ${{.SolPrice}}</p>
-     </div>
+         <i><small><small><p style="display: inline-block;">1 XMR = ${{.XMRPrice}}</p></small></small></i>
+         <i><small><small><p style="display: inline-block; margin-left: 15px;">1 SOL = ${{.SolPrice}}</p></small></small></i>
+         <i><small><small><p style="display: inline-block; margin-left: 15px;">1 ETH = ${{.ETHPrice}}</p></small></small></i>
+    </div>
 
-
-    <div id="links"></div>
-
+    <small></small><div id="links"></div></small>
      
   </form>
-
-
-
       
 </body>
 

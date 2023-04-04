@@ -1,20 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Payment</title>
-    {{ if .IsSolana }}
+    <title>PayPaul Payment</title>
+    {{if eq .Currency "SOL"}}
         <link href=sol.svg rel=icon>
-    {{ else }}
+    {{else if eq .Currency "XMR"}}
         <link href=xmr.svg rel=icon>
-    {{ end }}
+    {{else if eq .Currency "ETH"}}
+        <link href=eth.svg rel=icon>
+    {{end}}
     <link href=style.css rel=stylesheet>
 </head>
 <body>
-{{ if .IsSolana }}
-    <h2>Send at least <b>{{.Amount}}</b> SOL to confirm superchat:</h2>
-{{ else }}
-    <h2>Send at least <b>{{.Amount}}</b> XMR to confirm superchat:</h2>
-{{ end }}
+    <h2>Send exactly <b>{{.Amount}}</b> {{.Currency}} to confirm superchat:</h2>
 <label>Name:</label><br>
 <blockquote>
     {{.Name}}
@@ -23,6 +21,14 @@
 <blockquote>
     {{.Message}}
 </blockquote>
+
+{{if ne .Media ""}}
+    <label>Media:</label><br>
+    <blockquote>
+        {{.Media}}
+    </blockquote>
+{{end}}
+
 <label>Payment Address</label><br>
 <blockquote style="user-select: all">
     {{.Address}}
@@ -34,7 +40,7 @@
 
 
        
-<small>You must stay on this screen until transaction is seen. Do not manually refresh this page.</small><br>
+<small>Stay on this screen until transaction is seen.</small><br>
         
 </body>
 </html>

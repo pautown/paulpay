@@ -169,9 +169,7 @@
 
   // When the player is ready, start playing and unmute the video after 1 second
   function onPlayerReady(event) {
-
-
-    if ("{{.DisplayToggle}}" != "display: none;") {
+    if ("{{.DisplayToggle}}" !== "display: none;") {
       event.target.playVideo();
       setTimeout(function() {
         event.target.unMute();
