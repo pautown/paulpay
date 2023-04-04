@@ -1,6 +1,6 @@
 # PayPaul
 
-- Self-hosted, noncustodial crypto-currency (currently Monero(XMR) and Solana(SOL)) superchat system written in Go.
+- Self-hosted, noncustodial crypto-currency (currently Monero(XMR), Ethereum(ETH) and Solana(SOL)) superchat system written in Go.
 - Provides notifications and a progress bar usable in OBS as well as admin pages for settings like minimum donos.
 - Settings pages /user /userobs (default login is user:admin password:hunter123)
 
@@ -41,7 +41,6 @@ This is currently designed to be run on a cloud server with nginx proxypass for 
 - Youtube Media Links
 - Sound and GIF for dono
 - TTS integration for donos
-- Eth donations using batch transaction processing
 - Hex donations using batch transaction processing
 - API integration for getting Powerchat and Streamlabs Donos and keeping track of USD value
 - Selection of which dono methods are available
