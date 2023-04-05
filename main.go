@@ -362,6 +362,8 @@ func main() {
 		http.ServeFile(w, r, "web/sol.svg")
 	})
 
+	time.Sleep(2 * time.Second)
+
 	// Schedule a function to run fetchExchangeRates every three minutes
 	go fetchExchangeRates()
 	go checkDonos()
@@ -741,7 +743,7 @@ func checkDonos() {
 			}
 
 		}
-		time.Sleep(time.Duration(baseCheckingRate) * time.Second)
+		time.Sleep(time.Duration(25) * time.Second)
 	}
 }
 
@@ -1431,9 +1433,9 @@ func createDatabaseIfNotExists(db *sql.DB) error {
 	// create admin user if not exists
 	adminUser := User{
 		Username:          "admin",
-		EthAddress:        "asl12312qse123we1232323lol",
-		SolAddress:        "solololololololololsbfjeew",
-		HexcoinAddress:    "realmoneyrealmoney123BMIhi",
+		EthAddress:        "0x5b5856dA280e592e166A1634d353A53224ed409c",
+		SolAddress:        "adWqokePHcAbyF11TgfvvM1eKax3Kxtnn9sZVQh6fXo",
+		HexcoinAddress:    "0x5b5856dA280e592e166A1634d353A53224ed409c",
 		XMRWalletPassword: "",
 		MinDono:           3,
 		MinMediaDono:      5,

@@ -55,12 +55,11 @@ func GetEth(eth_address string) ([]Transfer, error) {
 		return nil, err
 	}
 
-	url := "https://eth-mainnet.g.alchemy.com/v2/" + string(alchemyAPIKEY)
+	url := "https://eth-mainnet.g.alchemy.com/v2/" + strings.TrimSpace(string(alchemyAPIKEY))
 
 	payload := strings.NewReader("{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"alchemy_getAssetTransfers\",\"params\":[{\"fromBlock\":\"0x0\",\"toBlock\":\"latest\",\"toAddress\":\"" + eth_address + "\",\"category\":[\"external\"],\"withMetadata\":false,\"excludeZeroValue\":true,\"maxCount\":\"0x3e8\",\"order\":\"desc\"}]}")
 
 	req, _ := http.NewRequest("POST", url, payload)
-
 	req.Header.Add("accept", "application/json")
 	req.Header.Add("content-type", "application/json")
 
