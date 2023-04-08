@@ -12,21 +12,25 @@ import (
 	"time"
 )
 
+type RawContract struct {
+	Value   string `json:"value"`
+	Address string `json:"address"`
+	Decimal string `json:"decimal"`
+}
+
 type Transfer struct {
-	BlockNum         string  `json:"blockNum"`
-	UniqueId         string  `json:"uniqueId"`
-	Hash             string  `json:"hash"`
-	From             string  `json:"from"`
-	To               string  `json:"to"`
-	Value            float64 `json:"value"`
-	Erc721TokenId    string  `json:"erc721TokenId"`
-	Erc1155Metadata  string  `json:"erc1155Metadata"`
-	TokenId          string  `json:"tokenId"`
-	Asset            string  `json:"asset"`
-	Category         string  `json:"category"`
-	RawContractValue string  `json:"rawContract.value"`
-	RawContractAddr  string  `json:"rawContract.address"`
-	RawContractDec   string  `json:"rawContract.decimal"`
+	BlockNum        string      `json:"blockNum"`
+	UniqueId        string      `json:"uniqueId"`
+	Hash            string      `json:"hash"`
+	From            string      `json:"from"`
+	To              string      `json:"to"`
+	Value           float64     `json:"value"`
+	Erc721TokenId   interface{} `json:"erc721TokenId"`
+	Erc1155Metadata interface{} `json:"erc1155Metadata"`
+	TokenId         interface{} `json:"tokenId"`
+	Asset           string      `json:"asset"`
+	Category        string      `json:"category"`
+	RawContract     RawContract `json:"rawContract"`
 }
 
 type EthSuperChat struct {
@@ -55,11 +59,12 @@ func GetEth(eth_address string) ([]Transfer, error) {
 		return nil, err
 	}
 
-	url := "https://eth-mainnet.g.alchemy.com/v2/" + strings.TrimSpace(string(alchemyAPIKEY))
+	url := "https://eth-mainnet.g.alchemy.com/v2/" + string(alchemyAPIKEY)
 
-	payload := strings.NewReader("{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"alchemy_getAssetTransfers\",\"params\":[{\"fromBlock\":\"0x0\",\"toBlock\":\"latest\",\"toAddress\":\"" + eth_address + "\",\"category\":[\"external\"],\"withMetadata\":false,\"excludeZeroValue\":true,\"maxCount\":\"0x3e8\",\"order\":\"desc\"}]}")
+	payload := strings.NewReader("{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"alchemy_getAssetTransfers\",\"params\":[{\"fromBlock\":\"0x0\",\"toBlock\":\"latest\",\"toAddress\":\"" + eth_address + "\",\"category\":[\"external\", \"erc20\"],\"withMetadata\":false,\"excludeZeroValue\":true,\"maxCount\":\"0x3e8\",\"order\":\"desc\"}]}")
 
 	req, _ := http.NewRequest("POST", url, payload)
+
 	req.Header.Add("accept", "application/json")
 	req.Header.Add("content-type", "application/json")
 
@@ -82,16 +87,58 @@ func GetEth(eth_address string) ([]Transfer, error) {
 
 	transfers := response.Result.Transfers
 	var result []Transfer
-	for _, transfer := range transfers {
+	for i, transfer := range transfers {
 		if transfer.Category != "internal" {
-			fmt.Println("From address:", transfer.From)
-			fmt.Println("To address:", transfer.To)
-			fmt.Println("Asset:", transfer.Asset)
-			fmt.Printf("Value: %.18f\n", transfer.Value)
-			fmt.Println("-----")
+			fmt.Println("TX", i)
+			asset := ""
+			if transfer.RawContract.Address == "" {
+				asset = "ETH"
+			} else {
+				asset = GetTokenName(transfer.RawContract.Address)
+			}
+			valueStr := fmt.Sprintf("%.18f", transfer.Value)
+			fmt.Printf("ASSET: %-10s AMT: %30s\n------------------------\n", asset, valueStr)
 		}
 	}
+
 	return result, nil
+}
+
+var contracts = map[string]string{
+	"PAINT":     "0x4c6ec08cf3fc987c6c4beb03184d335a2dfc4042",
+	"HEX":       "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+	"MATIC":     "0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0",
+	"BUSD":      "0x4Fabb145d64652a948d72533023f6E7A623C7C53",
+	"SHIBA_INU": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+	"USDC":      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+	"TETHER":    "0xdac17f958d2ee523a2206206994597c13d831ec7",
+	"WBTC":      "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+	"PNK":       "0x93ed3fbe21207ec2e8f2d3c3de6e058cb73bc04d",
+}
+
+func GetTokenName(contractAddr string) string {
+	switch contractAddr {
+	case contracts["PAINT"]:
+		return "PAINT"
+	case contracts["HEX"]:
+		return "HEX"
+	case contracts["MATIC"]:
+		return "MATIC"
+	case contracts["BUSD"]:
+		return "BUSD"
+	case contracts["SHIBA_INU"]:
+		return "SHIBA_INU"
+	case contracts["USDC"]:
+		return "USDC"
+	case contracts["TETHER"]:
+		return "TETHER"
+	case contracts["WBTC"]:
+		return "WBTC"
+	case contracts["PNK"]:
+		return "PNK"
+	default:
+		return "UNKNOWN"
+	}
 }
 
 func CheckEthDonos(transfers []Transfer, pending_donos []EthSuperChat) []EthSuperChat {
@@ -99,7 +146,7 @@ func CheckEthDonos(transfers []Transfer, pending_donos []EthSuperChat) []EthSupe
 	for i, pending_dono := range pending_donos {
 		if !pending_dono.Completed {
 			for _, transfer := range transfers {
-				if isEqual(transfer.Value, pending_dono.AmountNeeded) {
+				if transfer.Value == pending_dono.AmountNeeded {
 					pending_donos[i].Completed = true
 					pending_donos[i].CheckedAt = time.Now().String()
 					completed_donos = append(completed_donos, pending_donos[i])

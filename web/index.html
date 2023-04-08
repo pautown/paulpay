@@ -46,14 +46,17 @@
             replaceText("Solana", "solana", "SOL")
             imgSrc = "sol.svg";
             amountInput.setAttribute("placeholder", "{{.MinSolana}} Minimum");
+            amountInput.setAttribute("min", "{{.MinSolana}} Minimum");
           } else if (selectedValue === "monero") {
             replaceText("Monero", "monero", "XMR")
             imgSrc = "xmr.svg";
             amountInput.setAttribute("placeholder", "{{.MinMonero}} Minimum");
+            amountInput.setAttribute("min", "{{.MinMonero}} Minimum");
           } else if (selectedValue === "ethereum") {
             replaceText("Ethereum", "ethereum", "ETH")
             imgSrc = "eth.svg";
             amountInput.setAttribute("placeholder", "{{.MinEthereum}} Minimum");
+            amountInput.setAttribute("min", "{{.MinEthereum}} Minimum");
           }
           document.getElementById("crypto").value = selectedValue;
 

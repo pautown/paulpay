@@ -2172,14 +2172,16 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	encrypted_ip := encryptIP(ip)
 
 	amount, err := strconv.ParseFloat(fAmount, 64)
-	if (err != nil) || amount == 0 {
-		if fCrypto == "monero" {
-			amount = minMonero
-		} else if fCrypto == "solana" {
-			amount = minSolana
-		} else if fCrypto == "ethereum" {
-			amount = minEthereum
-		}
+	if err != nil {
+		log.Println(err)
+	}
+
+	if fCrypto == "monero" && amount < minMonero {
+		amount = minMonero
+	} else if fCrypto == "solana" && amount < minSolana {
+		amount = minSolana
+	} else if fCrypto == "ethereum" && amount < minEthereum {
+		amount = minEthereum
 	}
 
 	name := fName
@@ -2222,7 +2224,7 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 		USDAmount := getUSDValue(amount, "ETH")
 		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount)
 		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL)
-		createNewDono(1, adminEthereumAddress, s.Name, s.Message, amount, "ETH", encrypted_ip, showAmount, USDAmount, s.Media)
+		createNewDono(1, adminEthereumAddress, s.Name, s.Message, new_dono.AmountNeeded, "ETH", encrypted_ip, showAmount, USDAmount, s.Media)
 	}
 }
 
