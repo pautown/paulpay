@@ -10,6 +10,81 @@
 
     <script>
         
+         // Define an object to map cryptocurrency codes to their names and minimum values
+      var cryptoMap = {
+        "monero": {
+          "name": "Monero",
+          "code": "XMR",
+          "svg": "xmr.svg",
+          "min": "{{.MinMonero}}"
+        },
+        "solana": {
+          "name": "Solana",
+          "code": "SOL",
+          "svg": "sol.svg",
+          "min": "{{.MinSolana}}"
+        },
+        "ethereum": {
+          "name": "Ethereum",
+          "code": "ETH",
+          "svg": "eth.svg",
+          "min": "{{.MinEthereum}}"
+        },
+        "paint": {
+          "name": "Paint",
+          "code": "PAINT",
+          "svg": "paint.svg",
+          "min": "{{.MinEthereum}}"
+        },
+        "hex": {
+          "name": "Hexcoin",
+          "code": "HEX",
+          "svg": "hex.svg",
+          "min": "{{.MinEthereum}}"
+        },
+        "matic": {
+          "name": "Polygon",
+          "code": "MATIC",
+          "svg": "matic.svg",
+          "min": "{{.MinEthereum}}"
+        },
+        "busd": {
+          "name": "Binance USD",
+          "code": "BUSD",
+          "svg": "busd.svg",
+          "min": "{{.MinEthereum}}"
+        },
+        "shiba_inu": {
+          "name": "Shiba Inu",
+          "code": "SHIB",
+          "svg": "shiba_inu.svg",
+          "min": "{{.MinEthereum}}"
+        },
+        "usdc": {
+          "name": "USD Coin",
+          "code": "USDC",
+          "svg": "usdc.svg",
+          "min": "{{.MinEthereum}}"
+        },
+        "tether": {
+          "name": "Tether",
+          "code": "TUSD",
+          "svg": "tether.svg",
+          "min": "{{.MinEthereum}}"
+        },
+        "wbtc": {
+          "name": "Wrapped Bitcoin",
+          "code": "WBTC",
+          "svg": "wbtc.svg",
+          "min": "{{.MinEthereum}}"
+        },
+        "pnk": {
+          "name": "Kleros",
+          "code": "PNK",
+          "svg": "pnk.svg",
+          "min": "{{.MinEthereum}}"
+        }
+      };
 
         window.onload = function() {
           var linksData = JSON.parse('{{.Links}}');
@@ -42,72 +117,57 @@
           
           var amountInput = document.getElementById("amount");
           var buttonText, imgSrc;
-          if (selectedValue === "solana") {
-            replaceText("Solana", "solana", "SOL")
-            imgSrc = "sol.svg";
-            amountInput.setAttribute("placeholder", "{{.MinSolana}} Minimum");
-            amountInput.setAttribute("min", "{{.MinSolana}} Minimum");
-          } else if (selectedValue === "monero") {
-            replaceText("Monero", "monero", "XMR")
-            imgSrc = "xmr.svg";
-            amountInput.setAttribute("placeholder", "{{.MinMonero}} Minimum");
-            amountInput.setAttribute("min", "{{.MinMonero}} Minimum");
-          } else if (selectedValue === "ethereum") {
-            replaceText("Ethereum", "ethereum", "ETH")
-            imgSrc = "eth.svg";
-            amountInput.setAttribute("placeholder", "{{.MinEthereum}} Minimum");
-            amountInput.setAttribute("min", "{{.MinEthereum}} Minimum");
+          if (selectedValue in cryptoMap) {
+            var cryptoData = cryptoMap[selectedValue];
+            replaceText(cryptoData.name, selectedValue, cryptoData.code);
+            imgSrc = `${cryptoData.svg}`;
+            amountInput.setAttribute("placeholder", `${cryptoData.min} Minimum`);
+            amountInput.setAttribute("min", `${cryptoData.min} Minimum`);
           }
+
           document.getElementById("crypto").value = selectedValue;
 
           select.options[select.selectedIndex].selectedIndex = 0;
           document.querySelector("#currencyIcon").setAttribute("src", imgSrc);
+          document.querySelector("#currencyText").textContent = "PayPaul " + cryptoData.code;
+
           amountInput.value = "";
 
           // switch focus to amount input field
           document.getElementById("amount").focus();
         }
 
-        function replaceText(newText, newTextLowercase, newTextCode)
-        {
-          var elements = document.querySelectorAll('h2, label, input, textarea, button');
-          elements.forEach(function(element) {
-            if (element.innerHTML.includes("Monero")) {
-              element.innerHTML = element.innerHTML.replace(/Monero/g, newText);
-            } else if (element.innerHTML.includes("monero")) {
-              element.innerHTML = element.innerHTML.replace(/monero/g, newTextLowercase);
-            } else if (element.innerHTML.includes("Solana")) {
-              element.innerHTML = element.innerHTML.replace(/Solana/g, newText);
-            } else if (element.innerHTML.includes("solana")) {
-              element.innerHTML = element.innerHTML.replace(/solana/g, newTextLowercase);
-            } else if (element.innerHTML.includes("Ethereum")) {
-              element.innerHTML = element.innerHTML.replace(/Ethereum/g, newText);
-            } else if (element.innerHTML.includes("ethereum")) {
-              element.innerHTML = element.innerHTML.replace(/ethereum/g, newTextLowercase);
-            }
-              
-            if (element.innerHTML.includes("XMR")) {
-              element.innerHTML = element.innerHTML.replace(/XMR/g, newTextCode);
-            } else if (element.innerHTML.includes("SOL")) {
-              element.innerHTML = element.innerHTML.replace(/SOL/g, newTextCode);
-            } else if (element.innerHTML.includes("ETH")) {
-              element.innerHTML = element.innerHTML.replace(/ETH/g, newTextCode);
-            }
-          });
+        function replaceText(newText, newTextLowercase, newTextCode) {
+          
+          
+
+          // Update the text content of the amount label
+          var amountLabel = document.getElementById("amountLabel");
+          amountLabel.textContent = `${newText} (${newTextCode}) Amount:`;
+
+          // Update the text content of the header label
+          var amountLabel = document.getElementById("paypaul-header");
+          amountLabel.textContent = `PayPaul in ${newText}.`;
         }
+
+
+
+
  
     </script>
 </head>
 
 <body>
   <form action="/pay" method="POST">
-    <h2>PayPaul in Monero.</h2>
+    <h2>
+    <div id="paypaul-header">PayPaul in Monero.</div>
+    </h2>
     <hr>
     <br>
     
     <label for="name">Name:</label><br>
     <input id="name" maxlength="25" name="name" placeholder="Anonymous" type="text"><br>
-    <label for="amount">Monero (XMR) Amount:</label><br>
+    <label id="amountLabel" for="amount">Monero (XMR) Amount:</label><br>
     <input id="amount" min="{{.MinMonero}}" name="amount" placeholder="{{.MinMonero}} Minimum" step="0.0001" type="number">
     <label for="message">Message:</label><br>
     <textarea id="message" maxlength="{{.MaxChar}}" name="message" placeholder="{{.MaxChar}} character max" rows="6"></textarea><br>
@@ -115,20 +175,29 @@
   
     <input id="media" name="media" type="text" placeholder="YouTube link"><br><br>
     <input type="hidden" id="crypto" name="crypto" value="monero">
+    <input id="showAmount" name="showAmount" type="hidden" value="true" >
     
-    <button id="submit" type="submit" data-original-text="Pay in Monero(XMR)">
-      <img id="currencyIcon" src="xmr.svg">Monero PayPaul
-    </button>
-    
-    <select id="toggleSelect" onchange="toggleText()" onblur="this.selectedIndex=0;">
-      <option value="" disabled selected>Switch Cryptocurrency</option>
-      <option value="monero">Switch to Monero</option>
-      <option value="solana">Switch to Solana</option>
-      <option value="ethereum">Switch to Ethereum</option>
-    </select>
-
-    <input id="showAmount" name="showAmount" type="checkbox" value="true" {{.Checked}}>
-    <small><label for="showAmount">Show amount on stream?</label> </small>
+    <div style="display: flex; align-items: center;">
+      <button id="submit" type="submit" data-original-text="Pay in Monero(XMR)" style="display: flex; align-items: center;">
+        <img id="currencyIcon" src="xmr.svg" style="margin-right: 10px;">
+        <span id="currencyText">PayPaul XMR</span>
+      </button>
+      <select id="toggleSelect" onchange="toggleText()" onblur="this.selectedIndex=0;">
+        <option value="" disabled selected>Switch Cryptocurrency</option>
+        <option value="monero">Switch to Monero</option>
+        <option value="solana">Switch to Solana</option>
+        <option value="ethereum">Switch to Ethereum</option>
+        <option value="paint">Switch to Paint</option>
+        <option value="hex">Switch to Hexcoin</option>
+        <option value="matic">Switch to Polygon</option>
+        <option value="busd">Switch to Binance USD</option>
+        <option value="shiba_inu">Switch to Shiba Inu</option>
+        <option value="usdc">Switch to USDC</option>
+        <option value="tether">Switch to Tether</option>
+        <option value="wbtc">Switch to Wrapped Bitcoin</option>
+        <option value="pnk">Switch to Kleros</option>
+      </select>
+    </div>
 
     <div id="currencyRates">
          <i><small><small><p style="display: inline-block;">1 XMR = ${{.XMRPrice}}</p></small></small></i>

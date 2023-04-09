@@ -118,6 +118,21 @@ type User struct {
 	Links                string
 }
 
+type CryptoPrice struct {
+	Monero     float64 `json:"monero"`
+	Solana     float64 `json:"solana"`
+	Ethereum   float64 `json:"ethereum"`
+	Paint      float64 `json:"paint"`
+	Hexcoin    float64 `json:"hex"`
+	Polygon    float64 `json:"matic"`
+	BinanceUSD float64 `json:"binance-usd"`
+	ShibaInu   float64 `json:"shiba-inu"`
+	USDcoin    float64 `json:"usd-coin"`
+	Tether     float64 `json:"tether"`
+	WrappedBTC float64 `json:"wrapped-bitcoin"`
+	Kleros     float64 `json:"pnk"`
+}
+
 type UserPageData struct {
 	ErrorMessage string
 }
@@ -228,6 +243,9 @@ var json_links []Link
 var a alertPageData
 var pb progressbarData
 var obsData obsDataStruct
+
+var prices CryptoPrice
+
 var pbMessage = "Stream Tomorrow"
 
 // Define a new template that only contains the table content
@@ -346,6 +364,7 @@ func main() {
 	http.HandleFunc("/style.css", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/style.css")
 	})
+
 	http.HandleFunc("/xmr.svg", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/xmr.svg")
 	})
@@ -354,12 +373,48 @@ func main() {
 		http.ServeFile(w, r, "web/eth.svg")
 	})
 
-	http.HandleFunc("/dono.gif", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "web/obs/media/ezgif-1-fd55d7ca73.gif")
-	})
-
 	http.HandleFunc("/sol.svg", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/sol.svg")
+	})
+
+	http.HandleFunc("/busd.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/busd.svg")
+	})
+
+	http.HandleFunc("/hex.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/hex.svg")
+	})
+
+	http.HandleFunc("/matic.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/matic.svg")
+	})
+
+	http.HandleFunc("/paint.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/paint.svg")
+	})
+
+	http.HandleFunc("/pnk.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/pnk.svg")
+	})
+
+	http.HandleFunc("/shiba_inu.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/shiba_inu.svg")
+	})
+
+	http.HandleFunc("/tether.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/tether.svg")
+	})
+
+	http.HandleFunc("/usdc.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/usdc.svg")
+	})
+
+	http.HandleFunc("/wbtc.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/wbtc.svg")
+	})
+
+	http.HandleFunc("/dono.gif", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/obs/media/ezgif-1-fd55d7ca73.gif")
 	})
 
 	time.Sleep(2 * time.Second)
@@ -424,6 +479,40 @@ func main() {
 		panic(err)
 	}
 
+}
+
+func getCryptoPrices() (CryptoPrice, error) {
+
+	// Call the Coingecko API to get the current price for each cryptocurrency
+	url := "https://api.coingecko.com/api/v3/simple/price?ids=monero,solana,ethereum,paint,hex,matic-network,binance-usd,shiba-inu,usd-coin,tether,wrapped-bitcoin,kleros&vs_currencies=usd"
+	resp, err := http.Get(url)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	var data map[string]map[string]float64
+	err = json.NewDecoder(resp.Body).Decode(&data)
+	if err != nil {
+		panic(err)
+	}
+
+	prices := CryptoPrice{
+		Monero:     data["monero"]["usd"],
+		Solana:     data["solana"]["usd"],
+		Ethereum:   data["ethereum"]["usd"],
+		Paint:      data["paint"]["usd"],
+		Hexcoin:    data["hex"]["usd"],
+		Polygon:    data["matic-network"]["usd"],
+		BinanceUSD: data["binance-usd"]["usd"],
+		ShibaInu:   data["shiba-inu"]["usd"],
+		USDcoin:    data["usd-coin"]["usd"],
+		Tether:     data["tether"]["usd"],
+		WrappedBTC: data["wrapped-bitcoin"]["usd"],
+		Kleros:     data["kleros"]["usd"],
+	}
+
+	return prices, nil
 }
 
 // get links for a user
@@ -616,38 +705,21 @@ func setMinDonos() {
 func fetchExchangeRates() {
 	for {
 		// Fetch the exchange rate data from the API
-		resp, err := http.Get("https://api.coingecko.com/api/v3/simple/price?ids=monero,solana,ethereum&vs_currencies=usd")
-		if err != nil {
-			fmt.Println("Error fetching price data:", err)
-			// Wait five minutes before trying again
-			time.Sleep(300 * time.Second)
-			continue
-		}
-		defer resp.Body.Close()
-
-		// Parse the JSON response
-		var data priceData
-		err = json.NewDecoder(resp.Body).Decode(&data)
-		if err != nil {
-			fmt.Println("Error decoding price data:", err)
-			// Wait five minutes before trying again
-			time.Sleep(300 * time.Second)
-			continue
-		}
+		prices, _ = getCryptoPrices()
 
 		// Update the exchange rate values
-		xmrToUsd = data.Monero.Usd
-		solToUsd = data.Solana.Usd
-		ethToUsd = data.Ethereum.Usd
+		xmrToUsd = prices.Monero
+		solToUsd = prices.Solana
+		ethToUsd = prices.Ethereum
 
 		fmt.Println("Updated exchange rates:", " 1 XMR:", "$"+fmt.Sprintf("%.2f", xmrToUsd), "1 SOL:", "$"+fmt.Sprintf("%.2f", solToUsd), "1 ETH:", "$"+fmt.Sprintf("%.2f", ethToUsd))
 
 		// Calculate how much Monero is needed to equal the min usd donation var.
-		minMonero = minDonoValue / data.Monero.Usd
+		minMonero = minDonoValue / prices.Monero
 		// Calculate how much Solana is needed to equal the min usd donation var.
-		minSolana = minDonoValue / data.Solana.Usd
+		minSolana = minDonoValue / prices.Solana
 		// Calculate how much Ethereum is needed to equal the min usd donation var.
-		minEthereum = minDonoValue / data.Ethereum.Usd
+		minEthereum = minDonoValue / prices.Ethereum
 
 		minMonero, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minMonero), 64)
 		minSolana, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minSolana), 64)
