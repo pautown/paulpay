@@ -9,8 +9,7 @@
    
 
     <script>
-        
-         // Define an object to map cryptocurrency codes to their names and minimum values
+      // Define an object to map cryptocurrency codes to their names and minimum values
       var cryptoMap = {
         "monero": {
           "name": "Monero",
@@ -34,55 +33,55 @@
           "name": "Paint",
           "code": "PAINT",
           "svg": "paint.svg",
-          "min": "{{.MinEthereum}}"
+          "min": "{{.MinPaint}}"
         },
         "hex": {
           "name": "Hexcoin",
           "code": "HEX",
           "svg": "hex.svg",
-          "min": "{{.MinEthereum}}"
+          "min": "{{.MinHex}}"
         },
         "matic": {
           "name": "Polygon",
           "code": "MATIC",
           "svg": "matic.svg",
-          "min": "{{.MinEthereum}}"
+          "min": "{{.MinPolygon}}"
         },
         "busd": {
           "name": "Binance USD",
           "code": "BUSD",
           "svg": "busd.svg",
-          "min": "{{.MinEthereum}}"
+          "min": "{{.MinBusd}}"
         },
         "shiba_inu": {
           "name": "Shiba Inu",
           "code": "SHIB",
           "svg": "shiba_inu.svg",
-          "min": "{{.MinEthereum}}"
+          "min": "{{.MinShib}}"
         },
         "usdc": {
           "name": "USD Coin",
           "code": "USDC",
           "svg": "usdc.svg",
-          "min": "{{.MinEthereum}}"
+          "min": "{{.MinUsdc}}"
         },
         "tether": {
           "name": "Tether",
           "code": "TUSD",
           "svg": "tether.svg",
-          "min": "{{.MinEthereum}}"
+          "min": "{{.MinTusd}}"
         },
         "wbtc": {
           "name": "Wrapped Bitcoin",
           "code": "WBTC",
           "svg": "wbtc.svg",
-          "min": "{{.MinEthereum}}"
+          "min": "{{.MinWbtc}}"
         },
         "pnk": {
           "name": "Kleros",
           "code": "PNK",
           "svg": "pnk.svg",
-          "min": "{{.MinEthereum}}"
+          "min": "{{.MinPnk}}"
         }
       };
 
@@ -111,31 +110,31 @@
         function toggleText() {
           var select = document.getElementById("toggleSelect");
           var selectedValue = select.options[select.selectedIndex].value;
-          
-          var mon = selectedValue === "monero";
-          
-          
-          var amountInput = document.getElementById("amount");
-          var buttonText, imgSrc;
-          if (selectedValue in cryptoMap) {
-            var cryptoData = cryptoMap[selectedValue];
-            replaceText(cryptoData.name, selectedValue, cryptoData.code);
-            imgSrc = `${cryptoData.svg}`;
-            amountInput.setAttribute("placeholder", `${cryptoData.min} Minimum`);
-            amountInput.setAttribute("min", `${cryptoData.min} Minimum`);
+
+          var selectedCrypto = Object.values(cryptoMap).find(function(crypto) {
+            return crypto.code === selectedValue;
+          });
+
+            var amountInput = document.getElementById("amount");
+          if (selectedCrypto) {
+            replaceText(selectedCrypto.name, selectedCrypto.name.toLowerCase(), selectedCrypto.code);
+            imgSrc = `${selectedCrypto.svg}`;
+            amountInput.setAttribute("placeholder", `${selectedCrypto.min} Minimum`);
+            amountInput.setAttribute("min", `${selectedCrypto.min} Minimum`);
           }
 
           document.getElementById("crypto").value = selectedValue;
 
           select.options[select.selectedIndex].selectedIndex = 0;
           document.querySelector("#currencyIcon").setAttribute("src", imgSrc);
-          document.querySelector("#currencyText").textContent = "PayPaul " + cryptoData.code;
+          document.querySelector("#currencyText").textContent = "PayPaul " + selectedCrypto.code;
 
           amountInput.value = "";
 
           // switch focus to amount input field
           document.getElementById("amount").focus();
         }
+
 
         function replaceText(newText, newTextLowercase, newTextCode) {
           
@@ -184,18 +183,18 @@
       </button>
       <select id="toggleSelect" onchange="toggleText()" onblur="this.selectedIndex=0;">
         <option value="" disabled selected>Switch Cryptocurrency</option>
-        <option value="monero">Switch to Monero</option>
-        <option value="solana">Switch to Solana</option>
-        <option value="ethereum">Switch to Ethereum</option>
-        <option value="paint">Switch to Paint</option>
-        <option value="hex">Switch to Hexcoin</option>
-        <option value="matic">Switch to Polygon</option>
-        <option value="busd">Switch to Binance USD</option>
-        <option value="shiba_inu">Switch to Shiba Inu</option>
-        <option value="usdc">Switch to USDC</option>
-        <option value="tether">Switch to Tether</option>
-        <option value="wbtc">Switch to Wrapped Bitcoin</option>
-        <option value="pnk">Switch to Kleros</option>
+        <option value="XMR">Switch to Monero</option>
+        <option value="SOL">Switch to Solana</option>
+        <option value="ETH">Switch to Ethereum</option>
+        <option value="PAINT">Switch to Paint</option>
+        <option value="HEX">Switch to Hexcoin</option>
+        <option value="MATIC">Switch to Polygon</option>
+        <option value="BUSD">Switch to Binance USD</option>
+        <option value="SHIB">Switch to Shiba Inu</option>
+        <option value="USDC">Switch to USD Coin</option>
+        <option value="TUSD">Switch to Tether</option>
+        <option value="WBTC">Switch to Wrapped Bitcoin</option>
+        <option value="PNK">Switch to Kleros</option>
       </select>
     </div>
 

@@ -1,14 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PayPaul Payment</title>
-    {{if eq .Currency "SOL"}}
-        <link href=sol.svg rel=icon>
-    {{else if eq .Currency "XMR"}}
-        <link href=xmr.svg rel=icon>
-    {{else if eq .Currency "ETH"}}
-        <link href=eth.svg rel=icon>
-    {{end}}
+   <title>PayPaul Payment</title>
+        {{if eq .Currency "SOL"}}
+            <link href=sol.svg rel=icon>
+        {{else if eq .Currency "XMR"}}
+            <link href=xmr.svg rel=icon>
+        {{else if eq .Currency "ETH"}}
+            <link href=eth.svg rel=icon>
+        {{else if eq .Currency "BUSD"}}
+            <link href=busd.svg rel=icon>
+        {{else if eq .Currency "HEX"}}
+            <link href=hex.svg rel=icon>
+        {{else if eq .Currency "MATIC"}}
+            <link href=matic.svg rel=icon>
+        {{else if eq .Currency "PAINT"}}
+            <link href=paint.svg rel=icon>
+        {{else if eq .Currency "PNK"}}
+            <link href=pnk.svg rel=icon>
+        {{else if eq .Currency "SHIB"}}
+            <link href=shiba_inu.svg rel=icon>
+        {{else if eq .Currency "TUSD"}}
+            <link href=tether.svg rel=icon>
+        {{else if eq .Currency "USDC"}}
+            <link href=usdc.svg rel=icon>
+        {{else if eq .Currency "WBTC"}}
+            <link href=wbtc.svg rel=icon>
+        {{end}}
     <link href=style.css rel=stylesheet>
 </head>
 <body>
