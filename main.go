@@ -42,7 +42,7 @@ import (
 
 const username = "admin"
 
-var pending_donos []utils.EthSuperChat
+var pending_donos []utils.SuperChat
 
 var USDMinimum float64 = 5
 var MediaMin float64 = 0.025 // Currently unused
@@ -166,7 +166,7 @@ type getBalanceResponse struct {
 	ID int `json:"id"`
 }
 
-type EthSuperChat struct {
+type SuperChat struct {
 	Name      string
 	Message   string
 	Media     string
@@ -492,14 +492,6 @@ func main() {
 
 	// go createTestDono("Huge Bob", "XMR", "Hey it's Huge Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 	// go createTestDono("Big Bob", "XMR", "Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", 50, 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
-	go createTestDono("Little Bob", "XMR", "Hey it's little Bob you foo", 0.1, 3, "")
-	go createTestDono("Little Bob", "XMR", "Hey it's little Bob ", 0.1, 3, "")
-	go createTestDono("Little Bob", "XMR", "Hey it's little Bob you foo", 0.1, 3, "")
-	go createTestDono("Little Bob", "XMR", "Hey it's little Bob ", 0.1, 3, "")
-	go createTestDono("Little Bob", "XMR", "Hey it's little Bob you foo", 0.1, 3, "")
-	go createTestDono("Little Bob", "XMR", "Hey it's little Bob ", 0.1, 3, "")
-	go createTestDono("Little Bob", "XMR", "Hey it's little Bob ", 0.1, 3, "")
-	go createTestDono("Little Bob", "XMR", "Hey it's little Bob you foo", 0.1, 3, "")
 	// go createTestDono("Medium Bob", "XMR", "Hey it's medium Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 
 	err = http.ListenAndServe(":8900", nil)
@@ -714,65 +706,38 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 
 func setMinDonos() {
 
-	// Calculate how much Monero is needed to equal the min usd donation var.
-	minMonero = minDonoValue / xmrToUsd
-	// Calculate how much Solana is needed to equal the min usd donation var.
-	minSolana = minDonoValue / solToUsd
-	// Calculate how much Solana is needed to equal the min usd donation var.
-	minEthereum = minDonoValue / ethToUsd
+	// Calculate all minimum donations
+	minMonero := minDonoValue / xmrToUsd
+	minSolana := minDonoValue / solToUsd
+	minEthereum := minDonoValue / ethToUsd
+	minHex := minDonoValue / hexToUsd
+	minPolygon := minDonoValue / maticToUsd
+	minBusd := minDonoValue / busdToUsd
+	minShib := minDonoValue / shibToUsd
+	minUsdc := minDonoValue / usdcToUsd
+	minTusd := minDonoValue / tusdToUsd
+	minWbtc := minDonoValue / wbtcToUsd
+	minPnk := minDonoValue / pnkToUsd
+	minPaint := minDonoValue / paintToUsd
 
+	// Format all minimums with 5 decimal places
 	minMonero, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minMonero), 64)
 	minSolana, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minSolana), 64)
 	minEthereum, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minEthereum), 64)
-
-	log.Println("Minimum XMR Dono:", minMonero)
-	log.Println("Minimum SOL Dono:", minSolana)
-	log.Println("Minimum ETH Dono:", minEthereum)
-
-	// Calculate how much Hexcoin is needed to equal the min usd donation var.
-	minHex = minDonoValue / hexToUsd
 	minHex, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minHex), 64)
-	log.Println("Minimum HEX Dono:", minHex)
-
-	// Calculate how much Polygon is needed to equal the min usd donation var.
-	minPolygon = minDonoValue / maticToUsd
 	minPolygon, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minPolygon), 64)
-	log.Println("Minimum MATIC Dono:", minPolygon)
-
-	// Calculate how much Binance USD is needed to equal the min usd donation var.
-	minBusd = minDonoValue / busdToUsd
 	minBusd, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minBusd), 64)
-	log.Println("Minimum BUSD Dono:", minBusd)
-
-	// Calculate how much Shiba Inu is needed to equal the min usd donation var.
-	minShib = minDonoValue / shibToUsd
 	minShib, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minShib), 64)
-	log.Println("Minimum SHIB Dono:", minShib)
-
-	// Calculate how much USD Coin is needed to equal the min usd donation var.
-	minUsdc = minDonoValue / usdcToUsd
 	minUsdc, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minUsdc), 64)
-	log.Println("Minimum USDC Dono:", minUsdc)
-
-	// Calculate how much Tether is needed to equal the min usd donation var.
-	minTusd = minDonoValue / tusdToUsd
 	minTusd, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minTusd), 64)
-	log.Println("Minimum TUSD Dono:", minTusd)
-
-	// Calculate how much Wrapped Bitcoin is needed to equal the min usd donation var.
-	minWbtc = minDonoValue / wbtcToUsd
 	minWbtc, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minWbtc), 64)
-	log.Println("Minimum WBTC Dono:", minWbtc)
-
-	// Calculate how much Kleros is needed to equal the min usd donation var.
-	minPnk = minDonoValue / pnkToUsd
 	minPnk, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minPnk), 64)
-	log.Println("Minimum PNK Dono:", minPnk)
-
-	// Calculate how much Paint is needed to equal the min usd donation var.
-	minPaint = minDonoValue / paintToUsd
 	minPaint, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minPaint), 64)
-	log.Println("Minimum PAINT Dono:", minPaint)
+
+	// Output all minimums in a single line
+	log.Printf("Minimums: Monero=%.5f, Solana=%.5f, Ethereum=%.5f, HEX=%.5f, Polygon=%.5f, BUSD=%.5f, SHIB=%.5f, USDC=%.5f, TUSD=%.5f, WBTC=%.5f, PNK=%.5f, PAINT=%.5f",
+		minMonero, minSolana, minEthereum, minHex, minPolygon, minBusd, minShib, minUsdc, minTusd, minWbtc, minPnk, minPaint)
+
 }
 
 func fetchExchangeRates() {
@@ -840,24 +805,11 @@ func fetchExchangeRates() {
 	}
 }
 
-func createNewEthDono(name string, message string, mediaURL string, amountNeeded float64) utils.EthSuperChat {
-	new_dono := utils.CreatePendingDono(name, message, mediaURL, amountNeeded)
+func createNewEthDono(name string, message string, mediaURL string, amountNeeded float64, cryptoCode string) utils.SuperChat {
+	new_dono := utils.CreatePendingDono(name, message, mediaURL, amountNeeded, cryptoCode)
 	pending_donos = utils.AppendPendingDono(pending_donos, new_dono)
 
 	return new_dono
-}
-
-func checkEthDonos(ethAddress string) []utils.EthSuperChat {
-
-	transfers, err := utils.GetEth(ethAddress)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return []utils.EthSuperChat{}
-	}
-	completed_donos := utils.CheckEthDonos(transfers, pending_donos)
-	pending_donos = utils.RemoveCompletedDonos(pending_donos)
-
-	return completed_donos
 }
 
 func startMoneroWallet() {
@@ -992,6 +944,11 @@ func formatMediaURL(media_url string) string {
 }
 
 func createNewQueueEntry(db *sql.DB, address string, name string, message string, amount float64, currency string, dono_usd float64, media_url string) error {
+
+	// Round the amount to 6 decimal places if it has more than 6 decimal places
+	if math.Abs(amount-math.Round(amount)) >= 0.000001 {
+		amount = math.Round(amount*1e6) / 1e6
+	}
 
 	// extract the video ID (if any) from the YouTube URL
 	embedLink := formatMediaURL(media_url)
@@ -1171,7 +1128,8 @@ func checkUnfulfilledDonos() []Dono {
 	var tmpUSDAmount, tmpAmountToSend, tmpAmountSent sql.NullFloat64
 	var tmpMediaURL sql.NullString
 
-	completed_donos := checkEthDonos(adminEthereumAddress)
+	eth_transactions, _ := utils.GetEth(adminEthereumAddress)
+	log.Println("Eth address checked:", adminEthereumAddress)
 
 	for rows.Next() { // Loop through the unfulfilled donos and check their status
 		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &tmpAmountToSend, &tmpAmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt, &tmpUSDAmount, &tmpMediaURL)
@@ -1210,10 +1168,12 @@ func checkUnfulfilledDonos() []Dono {
 
 		if dono.CurrencyType != "XMR" && dono.CurrencyType != "SOL" {
 			// Check if amount matches a completed dono amount
-			for _, completedDono := range completed_donos {
-				if utils.IsEqual(dono.AmountSent, completedDono.AmountNeeded) == true {
+			for _, transaction := range eth_transactions {
+				tA := utils.GetTransactionAmount(transaction)
+				tN := utils.GetTransactionToken(transaction)
+				if utils.IsEqual(tA, dono.AmountToSend) && tN == dono.CurrencyType {
 					fmt.Println(dono.CurrencyType, "dono completed:", tmpAmountSent)
-
+					dono.AmountSent = tA
 					dono.AmountToSend = addDonoToDonoBar(dono.AmountSent, dono.CurrencyType) // change Amount To Send to USD value of sent
 					dono.Fulfilled = true
 					// add true to fulfilledSlice
@@ -1225,7 +1185,9 @@ func checkUnfulfilledDonos() []Dono {
 
 					continue
 				}
+
 			}
+			//fmt.Println("Amount sent", completedDono.AmountNeeded)
 			fmt.Println(dono.CurrencyType, "dono not completed:", tmpAmountSent)
 			continue
 		}
@@ -2447,7 +2409,7 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 		createNewDono(1, walletAddress, s.Name, s.Message, amount, "SOL", encrypted_ip, showAmount, USDAmount, s.Media)
 	} else {
 		s.Currency = fCrypto
-		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount)
+		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount, fCrypto)
 		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL)
 		createNewDono(1, adminEthereumAddress, s.Name, s.Message, new_dono.AmountNeeded, fCrypto, encrypted_ip, showAmount, USDAmount, s.Media)
 	}

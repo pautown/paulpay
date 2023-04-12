@@ -33,7 +33,7 @@ type Transfer struct {
 	RawContract     RawContract `json:"rawContract"`
 }
 
-type EthSuperChat struct {
+type SuperChat struct {
 	Name         string
 	Message      string
 	Address      string
@@ -42,6 +42,7 @@ type EthSuperChat struct {
 	Completed    bool
 	CreatedAt    string
 	CheckedAt    string
+	CryptoCode   string
 }
 
 type Response struct {
@@ -86,10 +87,10 @@ func GetEth(eth_address string) ([]Transfer, error) {
 	}
 
 	transfers := response.Result.Transfers
-	var result []Transfer
-	for i, transfer := range transfers {
+	//var result []Transfer
+	/*for i, transfer := range transfers {
 		if transfer.Category != "internal" {
-			fmt.Println("TX", i)
+			fmt.Println("TX %.18f", i)
 			asset := ""
 			if transfer.RawContract.Address == "" {
 				asset = "ETH"
@@ -97,11 +98,11 @@ func GetEth(eth_address string) ([]Transfer, error) {
 				asset = GetTokenName(transfer.RawContract.Address)
 			}
 			valueStr := fmt.Sprintf("%.18f", transfer.Value)
-			fmt.Printf("ASSET: %-10s AMT: %30s\n------------------------\n", asset, valueStr)
+			//fmt.Printf("ASSET: %-10s AMT: %30s\n------------------------\n", asset, valueStr)
 		}
-	}
+	}*/
 
-	return result, nil
+	return transfers, nil
 }
 
 var contracts = map[string]string{
@@ -114,6 +115,20 @@ var contracts = map[string]string{
 	"TETHER":    "0xdac17f958d2ee523a2206206994597c13d831ec7",
 	"WBTC":      "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
 	"PNK":       "0x93ed3fbe21207ec2e8f2d3c3de6e058cb73bc04d",
+}
+
+func GetTransactionAmount(t Transfer) float64 {
+	return t.Value
+}
+
+func GetTransactionToken(t Transfer) string {
+	asset := ""
+	if t.RawContract.Address == "" {
+		asset = "ETH"
+	} else {
+		asset = GetTokenName(t.RawContract.Address)
+	}
+	return asset
 }
 
 func GetTokenName(contractAddr string) string {
@@ -141,12 +156,14 @@ func GetTokenName(contractAddr string) string {
 	}
 }
 
-func CheckEthDonos(transfers []Transfer, pending_donos []EthSuperChat) []EthSuperChat {
-	var completed_donos []EthSuperChat
+func CheckDonos(transfers []Transfer, pending_donos []SuperChat) []SuperChat {
+	var completed_donos []SuperChat
 	for i, pending_dono := range pending_donos {
 		if !pending_dono.Completed {
 			for _, transfer := range transfers {
-				if transfer.Value == pending_dono.AmountNeeded {
+				log.Println("Transfer value:", transfer.Value)
+				log.Println("Needed amount:", pending_dono.AmountNeeded)
+				if isEqual(transfer.Value, pending_dono.AmountNeeded) {
 					pending_donos[i].Completed = true
 					pending_donos[i].CheckedAt = time.Now().String()
 					completed_donos = append(completed_donos, pending_donos[i])
@@ -155,12 +172,18 @@ func CheckEthDonos(transfers []Transfer, pending_donos []EthSuperChat) []EthSupe
 			}
 		}
 	}
+
+	fmt.Println("Completed Donations:")
+	for _, dono := range completed_donos {
+		fmt.Printf("Amount: %.18f %v, Completed: %v, Checked At: %v\n", dono.CryptoCode, dono.AmountNeeded, dono.Completed, dono.CheckedAt)
+	}
+
 	return completed_donos
 }
 
-func CreatePendingDono(name string, message string, mediaURL string, amountNeeded float64) EthSuperChat {
+func CreatePendingDono(name string, message string, mediaURL string, amountNeeded float64, cryptoCode string) SuperChat {
 	amountNeeded = FuzzDono(amountNeeded)
-	pendingDono := EthSuperChat{
+	pendingDono := SuperChat{
 		Name:         name,
 		Message:      message,
 		MediaURL:     mediaURL,
@@ -168,6 +191,7 @@ func CreatePendingDono(name string, message string, mediaURL string, amountNeede
 		Completed:    false,
 		CreatedAt:    time.Now().String(),
 		CheckedAt:    time.Now().String(),
+		CryptoCode:   cryptoCode,
 	}
 	return pendingDono
 }
@@ -183,21 +207,18 @@ func FuzzDono(ethAmount float64) float64 {
 	return newAmount
 }
 
-func AppendPendingDono(pending_donos []EthSuperChat, new_dono EthSuperChat) []EthSuperChat {
+func AppendPendingDono(pending_donos []SuperChat, new_dono SuperChat) []SuperChat {
 	pending_donos = append(pending_donos, new_dono)
 	return pending_donos
 }
 
-func RemoveCompletedDonos(pending_donos []EthSuperChat) []EthSuperChat {
-	var updated_donos []EthSuperChat
-
-	for _, dono := range pending_donos {
-		if !dono.Completed {
-			updated_donos = append(updated_donos, dono)
+func CheckMatchingDono(amount float64, cryptoCode string, pending_donos []SuperChat) bool {
+	for _, potential_dono := range pending_donos {
+		if potential_dono.AmountNeeded == amount && potential_dono.CryptoCode == cryptoCode {
+			return true
 		}
 	}
-
-	return updated_donos
+	return false
 }
 
 func isEqual(a, b float64) bool {

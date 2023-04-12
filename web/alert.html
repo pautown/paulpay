@@ -55,6 +55,15 @@
 }
 
 
+  beginquote { 
+    text-shadow: 
+    -1px -1px 0 black,
+    1px -1px 0 black,
+    -1px 1px 0 black,
+    1px 1px 0 black;
+  }
+
+
   .centered-container {
     display: flex;
     justify-content: center;
@@ -116,7 +125,9 @@
         <div id="center1" style="display: flex; justify-content: center; align-items: center;">
           <br>
           <small><img src="/dono.gif"></small>
-          <b style="margin-right: 10px">{{.Name}} </b> sent <b style="margin-left: 10px">{{.Amount}}{{.Currency}}</b>
+          <beginquote>
+            <b style="margin-right: 10px">{{.Name}} </b> sent <b style="margin-left: 10px">{{.Amount}}{{.Currency}}</b>
+          </beginquote>
         </div>
       </h1>
 
