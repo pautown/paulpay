@@ -30,7 +30,9 @@
     <link href=style.css rel=stylesheet>
 </head>
 <body>
-    <h2>Send exactly <b>{{.Amount}}</b> {{.Currency}} to confirm superchat:</h2>
+    <h2>Send exactly <b>{{.Amount}}</b> {{.Currency}} to confirm superchat <span class="tooltip">?</span>:</h2>
+    <div class="tooltip-text">The exact amount needs to be sent in order to ensure the proper donation is shown. That is why there is a slight difference between the amount here and the amount selected to pay.</div>
+
 <label>Name:</label><br>
 <blockquote>
     {{.Name}}

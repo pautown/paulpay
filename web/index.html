@@ -162,17 +162,33 @@
     <div id="paypaul-header">PayPaul in Monero.</div>
     </h2>
     <hr>
+         <div class="ticker-wrap">
+      <div class="ticker">
+        <div class="ticker__item"><span>XMR = ${{.XMRPrice}}</span></div>
+        <div class="ticker__item"><span>ETH = ${{.ETHPrice}}</span></div>
+        <div class="ticker__item"><span>BTC = ${{.WbtcPrice}}</span></div>
+        <div class="ticker__item"><span>SOL = ${{.SolPrice}}</span></div>
+        <div class="ticker__item"><span>HEX = ${{.HexPrice}}</span></div>
+        <div class="ticker__item"><span>PNK = ${{.PnkPrice}}</span></div>
+        <div class="ticker__item"><span>PAINT = ${{.PaintPrice}}</span></div>
+        <div class="ticker__item"><span>SHIB = ${{.ShibPrice}}</span></div>
+        <div class="ticker__item"><span>MATIC = ${{.PolygonPrice}}</span></div>
+        <div class="ticker__item"><span>BUSD = ${{.BusdPrice}}</span></div>
+        <div class="ticker__item"><span>USDC = ${{.UsdcPrice}}</span></div>
+        <div class="ticker__item"><span>TUSD = ${{.TusdPrice}}</span></div>
+      </div>
+    </div>
     <br>
     
-    <label for="name">Name:</label><br>
+    <label for="name">Payee Name:</label><br>
     <input id="name" maxlength="25" name="name" placeholder="Anonymous" type="text"><br>
     <label id="amountLabel" for="amount">Monero (XMR) Amount:</label><br>
     <input id="amount" min="{{.MinMonero}}" name="amount" placeholder="{{.MinMonero}} Minimum" step="0.0001" type="number">
-    <label for="message">Message:</label><br>
-    <textarea id="message" maxlength="{{.MaxChar}}" name="message" placeholder="{{.MaxChar}} character max" rows="6"></textarea><br>
-  <label for="media">Media (Optional) - Minimum donation of $5:</label><br>
+    <label for="message">Payee Message:</label><br>
+    <textarea id="message" maxlength="{{.MaxChar}}" name="message" placeholder="{{.MaxChar}} Character Max" rows="6"></textarea><br>
+  <label for="media">Payee Media Link:</label><br>
   
-    <input id="media" name="media" type="text" placeholder="YouTube link"><br><br>
+    <input id="media" name="media" type="text" placeholder="YouTube Link (Optional)"><br><br>
     <input type="hidden" id="crypto" name="crypto" value="monero">
     <input id="showAmount" name="showAmount" type="hidden" value="true" >
     
@@ -198,16 +214,19 @@
       </select>
     </div>
 
-    <div id="currencyRates">
-         <i><small><small><p style="display: inline-block;">1 XMR = ${{.XMRPrice}}</p></small></small></i>
-         <i><small><small><p style="display: inline-block; margin-left: 15px;">1 SOL = ${{.SolPrice}}</p></small></small></i>
-         <i><small><small><p style="display: inline-block; margin-left: 15px;">1 ETH = ${{.ETHPrice}}</p></small></small></i>
-    </div>
 
+
+
+    <br>
     <small></small><div id="links"></div></small>
      
   </form>
-      
+  
+  <footer>
+    <small><small>
+      <p>PayPaul &copy; 2023. Developed by <a href="http://www.paul.town/" target="_blank">Paul Town</a> with <a href="https://github.com/pautown/paulpay" target="_blank">PayPaul GitHub Source Code</a></p>
+    </small></small>
+  </footer>
 </body>
 
 </html>

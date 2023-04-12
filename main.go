@@ -75,6 +75,7 @@ var userOBSTemplate *template.Template
 var viewTemplate *template.Template
 
 var loginTemplate *template.Template
+var footerTemplate *template.Template
 var incorrectLoginTemplate *template.Template
 var userTemplate *template.Template
 var logoutTemplate *template.Template
@@ -476,6 +477,9 @@ func main() {
 	getObsData(db, 1)
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
+
+	footerTemplate, _ = template.ParseFiles("web/footer.html")
+
 	payTemplate, _ = template.ParseFiles("web/pay.html")
 	alertTemplate, _ = template.ParseFiles("web/alert.html")
 
@@ -761,11 +765,9 @@ func fetchExchangeRates() {
 
 		fmt.Println("Updated exchange rates:", " 1 XMR:", "$"+fmt.Sprintf("%.2f", xmrToUsd), "1 SOL:", "$"+fmt.Sprintf("%.2f", solToUsd), "1 ETH:", "$"+fmt.Sprintf("%.2f", ethToUsd), "1 PAINT:", "$"+fmt.Sprintf("%.2f", paintToUsd), "1 HEX:", "$"+fmt.Sprintf("%.2f", hexToUsd), "1 MATIC:", "$"+fmt.Sprintf("%.2f", maticToUsd), "1 BUSD:", "$"+fmt.Sprintf("%.2f", busdToUsd), "1 SHIB:", "$"+fmt.Sprintf("%.2f", shibToUsd), "1 USDC:", "$"+fmt.Sprintf("%.2f", usdcToUsd), "1 TUSD:", "$"+fmt.Sprintf("%.2f", tusdToUsd), "1 WBTC:", "$"+fmt.Sprintf("%.2f", wbtcToUsd), "1 PNK:", "$"+fmt.Sprintf("%.2f", pnkToUsd))
 
-		// Calculate how much Monero is needed to equal the min usd donation var.
+		// Calculate how much is needed to equal the min usd donation.
 		minMonero = minDonoValue / prices.Monero
-		// Calculate how much Solana is needed to equal the min usd donation var.
 		minSolana = minDonoValue / prices.Solana
-		// Calculate how much Ethereum is needed to equal the min usd donation var.
 		minEthereum = minDonoValue / prices.Ethereum
 		minPaint = minDonoValue / prices.Paint
 		minHex = minDonoValue / prices.Hexcoin
@@ -934,10 +936,8 @@ func formatMediaURL(media_url string) string {
 	log.Println(isValid, timecode, properLink)
 
 	embedLink := ""
-	// extract the video ID from the YouTube URL
 	if isValid {
 		videoID := extractVideoID(properLink)
-		// Build the embeddable video link
 		embedLink = fmt.Sprintf(videoID)
 	}
 	return embedLink
@@ -950,7 +950,6 @@ func createNewQueueEntry(db *sql.DB, address string, name string, message string
 		amount = math.Round(amount*1e6) / 1e6
 	}
 
-	// extract the video ID (if any) from the YouTube URL
 	embedLink := formatMediaURL(media_url)
 
 	_, err := db.Exec(`
@@ -2234,6 +2233,7 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 		ETHPrice:     ethToUsd,
 		XMRPrice:     xmrToUsd,
 		PolygonPrice: maticToUsd,
+		HexPrice:     hexToUsd,
 		BusdPrice:    busdToUsd,
 		ShibPrice:    shibToUsd,
 		UsdcPrice:    usdcToUsd,
