@@ -105,7 +105,7 @@
 
 
         var buttonText = "Switch Cryptocurrency";
-        var crypto = "monero"
+        var crypto = "XMR"
       
         function toggleText() {
           var select = document.getElementById("toggleSelect");
@@ -180,16 +180,16 @@
     </div>
     <br>
     
-    <label for="name">Payee Name:</label><br>
+    <label for="name">Name:</label><br>
     <input id="name" maxlength="25" name="name" placeholder="Anonymous" type="text"><br>
     <label id="amountLabel" for="amount">Monero (XMR) Amount:</label><br>
     <input id="amount" min="{{.MinMonero}}" name="amount" placeholder="{{.MinMonero}} Minimum" step="0.0001" type="number">
-    <label for="message">Payee Message:</label><br>
+    <label for="message">Message:</label><br>
     <textarea id="message" maxlength="{{.MaxChar}}" name="message" placeholder="{{.MaxChar}} Character Max" rows="6"></textarea><br>
-  <label for="media">Payee Media Link:</label><br>
+  <label for="media">Media Link:</label><br>
   
     <input id="media" name="media" type="text" placeholder="YouTube Link (Optional)"><br><br>
-    <input type="hidden" id="crypto" name="crypto" value="monero">
+    <input type="hidden" id="crypto" name="crypto" value="XMR">
     <input id="showAmount" name="showAmount" type="hidden" value="true" >
     
     <div style="display: flex; align-items: center;">

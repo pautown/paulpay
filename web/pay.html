@@ -28,10 +28,10 @@
             <link href=wbtc.svg rel=icon>
         {{end}}
     <link href=style.css rel=stylesheet>
+
 </head>
 <body>
-    <h2>Send exactly <b>{{.Amount}}</b> {{.Currency}} to confirm superchat <span class="tooltip">?</span>:</h2>
-    <div class="tooltip-text">The exact amount needs to be sent in order to ensure the proper donation is shown. That is why there is a slight difference between the amount here and the amount selected to pay.</div>
+    <h2>Send exactly <b>{{.Amount}}</b> {{.Currency}} to confirm superchat:</h2>
 
 <label>Name:</label><br>
 <blockquote>
@@ -61,6 +61,10 @@
 
        
 <small>Stay on this screen until transaction is seen.</small><br>
-        
+<footer>
+    <small><small>
+      <p>PayPaul &copy; 2023. Developed by <a href="http://www.paul.town/" target="_blank">Paul Town</a> with <a href="https://github.com/pautown/paulpay" target="_blank">PayPaul GitHub Source Code</a></p>
+    </small></small>
+  </footer>
 </body>
 </html>
