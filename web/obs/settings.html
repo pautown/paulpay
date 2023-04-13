@@ -9,12 +9,16 @@
    <br><br><br>
   <h1>OBS Settings Panel</h1>
   <hr>
-  <form method="POST" action="/viewdonos">
-    <a href="/viewdonos" class="button">View Donations</a>
-  </form>
-  <form method="POST" action="/user">
-    <a href="/user" class="button">User Settings</a>
-  </form>
+
+   <div style="display: flex; align-items: center; margin-right: 10px;">
+      <form method="GET" action="/viewdonos">
+        <button style="margin: 0 10px 0 0;">View Donations</button>
+      </form>
+      <form method="GET" action="/user">
+        <button>User Settings</button>
+      </form>
+  </div>
+
   <br><br>
   <form method="POST" action="/userobs" enctype="multipart/form-data">
     <label for="dono-animation">Dono Animation (GIF):</label>

@@ -1,15 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-	 <br><br><br>
-  <h1>Donations Panel</h1>
-  <hr>
-  <form method="POST" action="/user">
-    <a href="/user" class="button">User Settings</a>
-  </form>
-  <form method="POST" action="/userobs">
-    <a href="/userobs" class="button">OBS Settings</a>
-  </form>
+    <br>
+    <link href=style.css rel=stylesheet>
+    <h1>Donations Panel</h1>
+    <hr>
+    <div style="display: flex; align-items: center; margin-right: 10px;">
+      <form method="GET" action="/user">
+        <button style="margin: 0 10px 0 0;">User Settings</button>
+      </form>
+      <form method="GET" action="/userobs">
+        <button>OBS Settings</button>
+      </form>
+    </div>
   <br><br>
 	<style>
 		body {
@@ -175,7 +178,7 @@ function updateDonations() {
 
 
 // Call the updateDonations function every 5 seconds
-setInterval(updateDonations, 5000);
+setInterval(updateDonations, 4000);
 
 
 	</script>
