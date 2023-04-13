@@ -33,6 +33,12 @@
 <body>
     <h2>Send exactly <b>{{.Amount}}</b> {{.Currency}} to confirm superchat:</h2>
 
+    <small>
+    <p id="donation-status">
+        <img src="loader.svg" class="loading-wheel" alt="Loading wheel"> Checking For Donation...
+    </p>
+</small>
+
 <label>Name:</label><br>
 <blockquote>
     {{.Name}}
@@ -67,4 +73,72 @@
     </small></small>
   </footer>
 </body>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+   $(document).ready(function() {
+      console.log("Document is ready"); // Add this line
+      var donation_id = "{{.DonationID}}";
+      var status_indicator = $(".donation-status");
+      updateDonationStatus(donation_id, status_indicator);
+      var interval_id = setInterval(function() {
+        updateDonationStatus(donation_id, status_indicator);
+      }, 5000);
+
+      // Stop the interval when the status is complete
+      if (status_indicator.hasClass("complete")) {
+        clearInterval(interval_id);
+      }
+    });
+
+    function updateDonationStatus(donation_id, status_indicator) {
+      console.log("Checking donation status...");
+      $.ajax({
+        url: "/check_donation_status/",
+        data: {donation_id: donation_id},
+        success: function(data) {
+          if (data == 'true') {
+            console.log("Donation received");
+            status_indicator.find(".loading-wheel").remove();
+            status_indicator.append('<img src="checkmark.png" class="checkmark" alt="Checkmark">');
+            status_indicator.addClass("complete");
+            document.title = "Donation Received, Thank You!";
+            blinkTab();
+            clearInterval(interval_id);
+          } else {
+            console.log(data)
+            console.log("Donation not received");
+          }
+        },
+        error: function() {
+          console.log("Error checking donation status");
+        }
+      });
+    }
+
+
+    function blinkTab() {
+        var oldTitle = document.title;
+        var timeoutId;
+
+        function blink() {
+            document.title = (document.title == oldTitle) ? "Donation Received, Thank You!" : oldTitle;
+        }
+
+        function clear() {
+            clearInterval(timeoutId);
+            document.title = oldTitle;
+            window.onmousemove = null;
+            timeoutId = null;
+        }
+
+        if (!timeoutId) {
+            timeoutId = setInterval(blink, 1000);
+            window.onmousemove = clear;
+        }
+    }
+
+</script>
+
+
 </html>

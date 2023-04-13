@@ -167,25 +167,17 @@ type getBalanceResponse struct {
 	ID int `json:"id"`
 }
 
-type SuperChat struct {
-	Name      string
-	Message   string
-	Media     string
-	Amount    string
-	CreatedAt string
-	CheckedAt string
-}
-
 type superChat struct {
-	Name     string
-	Message  string
-	Media    string
-	Amount   string
-	Address  string
-	QRB64    string
-	PayID    string
-	CheckURL string
-	Currency string
+	Name       string
+	Message    string
+	Media      string
+	Amount     string
+	Address    string
+	QRB64      string
+	PayID      string
+	CheckURL   string
+	Currency   string
+	DonationID int64
 }
 
 type indexDisplay struct {
@@ -394,8 +386,18 @@ func main() {
 		http.ServeFile(w, r, "web/style.css")
 	})
 
+	http.HandleFunc("/check_donation_status/", checkDonationStatusHandler)
+
 	http.HandleFunc("/xmr.svg", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/xmr.svg")
+	})
+
+	http.HandleFunc("/checkmark.png", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/xmr.png")
+	})
+
+	http.HandleFunc("/loader.svg", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/loader.svg")
 	})
 
 	http.HandleFunc("/eth.svg", func(w http.ResponseWriter, r *http.Request) {
@@ -474,12 +476,11 @@ func main() {
 	http.HandleFunc("/logout", logoutHandler)
 	http.HandleFunc("/changepassword", changePasswordHandler)
 	http.HandleFunc("/changeuser", changeUserHandler)
+
 	getObsData(db, 1)
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
-
 	footerTemplate, _ = template.ParseFiles("web/footer.html")
-
 	payTemplate, _ = template.ParseFiles("web/pay.html")
 	alertTemplate, _ = template.ParseFiles("web/alert.html")
 
@@ -997,11 +998,10 @@ func checkDonoForMediaUSDThreshold(media_url string, dono_usd float64) (bool, st
 	return valid, media_url
 }
 
-func createNewDono(user_id int, dono_address string, dono_name string, dono_message string, amount_to_send float64, currencyType string, encrypted_ip string, anon_dono bool, dono_usd float64, media_url string) {
+func createNewDono(user_id int, dono_address string, dono_name string, dono_message string, amount_to_send float64, currencyType string, encrypted_ip string, anon_dono bool, dono_usd float64, media_url string) int64 {
 	// Open a new database connection
 	db, err := sql.Open("sqlite3", "users.db")
 	if err != nil {
-
 		panic(err)
 	}
 	defer db.Close()
@@ -1016,7 +1016,7 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
 	}
 
 	// Execute the SQL INSERT statement
-	_, err = db.Exec(`
+	result, err := db.Exec(`
 		INSERT INTO donos (
 			user_id,
 			dono_address,
@@ -1038,6 +1038,15 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
 		log.Println(err)
 		panic(err)
 	}
+
+	// Get the id of the newly created dono
+	id, err := result.LastInsertId()
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
+
+	return id
 }
 
 type Dono struct {
@@ -2403,16 +2412,23 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	USDAmount := getUSDValue(amount, fCrypto)
 	if fCrypto == "XMR" {
 		payID := handleMoneroPayment(w, &s, params)
-		createNewDono(1, payID, s.Name, s.Message, amount, "XMR", encrypted_ip, showAmount, USDAmount, s.Media)
+		s.DonationID = createNewDono(1, payID, s.Name, s.Message, amount, "XMR", encrypted_ip, showAmount, USDAmount, s.Media)
 	} else if fCrypto == "SOL" {
 		walletAddress := handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media)
-		createNewDono(1, walletAddress, s.Name, s.Message, amount, "SOL", encrypted_ip, showAmount, USDAmount, s.Media)
+		s.DonationID = createNewDono(1, walletAddress, s.Name, s.Message, amount, "SOL", encrypted_ip, showAmount, USDAmount, s.Media)
 	} else {
 		s.Currency = fCrypto
 		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount, fCrypto)
 		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL)
-		createNewDono(1, adminEthereumAddress, s.Name, s.Message, new_dono.AmountNeeded, fCrypto, encrypted_ip, showAmount, USDAmount, s.Media)
+		s.DonationID = createNewDono(1, adminEthereumAddress, s.Name, s.Message, new_dono.AmountNeeded, fCrypto, encrypted_ip, showAmount, USDAmount, s.Media)
 	}
+}
+
+func checkDonationStatusHandler(w http.ResponseWriter, r *http.Request) {
+	//donationID := r.FormValue("donation_id") // Get the donation ID from the query string
+	// TODO: Use the donation ID to check the status and return a bool
+	//completed := true                         // For example, assume the status is always completed
+	fmt.Fprintf(w, `true`) // Return the status as a JSON response
 }
 
 func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string) {

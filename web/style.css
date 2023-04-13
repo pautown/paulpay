@@ -150,6 +150,31 @@ label.radio-label {
   font-size: 16px;
 }
 
+.donation-status {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 3px solid #ccc;
+  animation: spin 2s linear infinite;
+}
+
+.donation-status.complete {
+  border-color: green;
+  animation: none;
+  background: url('checkmark.png') no-repeat center center / contain;
+}
+
+.loading-wheel {
+  animation: spin 1s infinite linear;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+
 
 
 small, ::placeholder {
