@@ -72,7 +72,7 @@
 					<td>{{.UpdatedAt.Format "15:04:05 01-02-2006"}}</td>
 					<td>{{.Name}}</td>
 					<td>{{.Message}} {{.MediaURL}}</td>
-					<td>${{.AmountToSend}}</td>
+					<td>${{.USDAmount}}</td>
 					<td>{{.AmountSent}}</td>
 					<td>{{.CurrencyType}}</td>
 				</tr>
@@ -167,6 +167,7 @@ function updateDonations() {
             if (xhr.status === 200) {
                 var tableBody = document.getElementById("donations-table-body");
                 tableBody.innerHTML = xhr.responseText;
+                console.log(xhr.responseText);
             } else {
                 console.log("Error fetching donations: " + xhr.status);
             }

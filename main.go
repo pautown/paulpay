@@ -320,13 +320,32 @@ func donationsHandler(w http.ResponseWriter, r *http.Request) {
 	var donos []Dono
 	for rows.Next() {
 		var dono Dono
-		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &dono.AmountToSend, &dono.AmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt, &dono.USDAmount, &dono.MediaURL)
+		var name, message, address, currencyType, encryptedIP, mediaURL sql.NullString
+		var amountToSend, amountSent, usdAmount sql.NullFloat64
+		var userID sql.NullInt64
+		var anonDono, fulfilled sql.NullBool
+		err := rows.Scan(&dono.ID, &userID, &address, &name, &message, &amountToSend, &amountSent, &currencyType, &anonDono, &fulfilled, &encryptedIP, &dono.CreatedAt, &dono.UpdatedAt, &usdAmount, &mediaURL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		dono.UserID = int(userID.Int64)
+		dono.Address = address.String
+		dono.Name = name.String
+		dono.Message = message.String
+		dono.AmountToSend = usdAmount.Float64
+		dono.AmountSent = amountSent.Float64
+		dono.CurrencyType = currencyType.String
+		dono.AnonDono = anonDono.Bool
+		dono.Fulfilled = fulfilled.Bool
+		dono.EncryptedIP = encryptedIP.String
+		dono.USDAmount = usdAmount.Float64
+		dono.MediaURL = mediaURL.String
+
 		donos = append(donos, dono)
 	}
+
 	if err = rows.Err(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -670,7 +689,7 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 		dono.Address = address.String
 		dono.Name = name.String
 		dono.Message = message.String
-		dono.AmountToSend = amountToSend.Float64
+		dono.AmountToSend = usdAmount.Float64
 		dono.AmountSent = amountSent.Float64
 		dono.CurrencyType = currencyType.String
 		dono.AnonDono = anonDono.Bool
@@ -696,7 +715,7 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 		})
 	case "amount":
 		sort.Slice(donos, func(i, j int) bool {
-			return donos[i].AmountToSend < donos[j].AmountToSend
+			return donos[i].USDAmount < donos[j].USDAmount
 		})
 	}
 
