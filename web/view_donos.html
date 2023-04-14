@@ -167,7 +167,6 @@ function updateDonations() {
             if (xhr.status === 200) {
                 var tableBody = document.getElementById("donations-table-body");
                 tableBody.innerHTML = xhr.responseText;
-                console.log(xhr.responseText);
             } else {
                 console.log("Error fetching donations: " + xhr.status);
             }
