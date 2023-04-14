@@ -219,13 +219,20 @@
     }
   }
 
-  function speak(text) {
-    if ('speechSynthesis' in window) {
-      const synth = window.speechSynthesis;
-      const utterance = new SpeechSynthesisUtterance(text);
-      synth.speak(utterance);
-    }
+function speak(text) {
+  if ('speechSynthesis' in window) {
+    const synth = window.speechSynthesis;
+    const voices = synth.getVoices();
+    const selectedVoice = voices.find(voice => voice.name === 'Microsoft David Desktop - English (United States)');
+    const utterance = new SpeechSynthesisUtterance(decodeURIComponent(text));
+    utterance.voice = selectedVoice;
+    utterance.rate = 1.5;
+    utterance.pitch = 1;
+    utterance.volume = 0.8;
+    synth.speak(utterance);
   }
+}
+
 
 
 </script>
