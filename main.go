@@ -2430,27 +2430,55 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	USDAmount := getUSDValue(amount, fCrypto)
 	if fCrypto == "XMR" {
-		payID := handleMoneroPayment(w, &s, params)
-		s.DonationID = createNewDono(1, payID, s.Name, s.Message, amount, "XMR", encrypted_ip, showAmount, USDAmount, s.Media)
+		handleMoneroPayment(w, &s, params, amount, encrypted_ip, showAmount, USDAmount)
 	} else if fCrypto == "SOL" {
-		walletAddress := handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media)
-		s.DonationID = createNewDono(1, walletAddress, s.Name, s.Message, amount, "SOL", encrypted_ip, showAmount, USDAmount, s.Media)
+		handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media, encrypted_ip, USDAmount)
 	} else {
 		s.Currency = fCrypto
 		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount, fCrypto)
-		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL)
-		s.DonationID = createNewDono(1, adminEthereumAddress, s.Name, s.Message, new_dono.AmountNeeded, fCrypto, encrypted_ip, showAmount, USDAmount, s.Media)
+		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL, fCrypto, encrypted_ip, USDAmount)
+
 	}
 }
 
 func checkDonationStatusHandler(w http.ResponseWriter, r *http.Request) {
-	//donationID := r.FormValue("donation_id") // Get the donation ID from the query string
-	// TODO: Use the donation ID to check the status and return a bool
-	//completed := true                         // For example, assume the status is always completed
-	fmt.Fprintf(w, `true`) // Return the status as a JSON response
+	donationIDStr := r.FormValue("donation_id") // Get the donation ID from the query string
+	donationID, err := strconv.Atoi(donationIDStr)
+	log.Println("User Page Checking DonationID:", donationID)
+	if err != nil {
+		http.Error(w, "Invalid donation ID", http.StatusBadRequest)
+		return
+	}
+
+	completed := isDonoFulfilled(donationID)
+	if completed {
+		fmt.Fprintf(w, `true`) // Return the status as a JSON response
+	} else {
+		fmt.Fprintf(w, `false`) // Return the status as a JSON response
+	}
 }
 
-func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string) {
+func isDonoFulfilled(donoID int) bool {
+	// Open a new database connection
+	db, err := sql.Open("sqlite3", "users.db")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	// Retrieve the dono with the given ID
+	row := db.QueryRow("SELECT fulfilled FROM donos WHERE dono_id = ?", donoID)
+
+	var fulfilled bool
+	err = row.Scan(&fulfilled)
+	if err != nil {
+		panic(err)
+	}
+
+	return fulfilled
+}
+
+func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, fCrypto string, encrypted_ip string, USDAmount float64) {
 	address := adminEthereumAddress
 	donoStr := fmt.Sprintf("%.18f", amount_)
 
@@ -2471,13 +2499,14 @@ func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, me
 	tmp, _ := qrcode.Encode(donationLink, qrcode.Low, 320)
 	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
 
+	s.DonationID = createNewDono(1, adminEthereumAddress, s.Name, s.Message, amount_, fCrypto, encrypted_ip, showAmount_, USDAmount, media_)
 	err := payTemplate.Execute(w, s)
 	if err != nil {
 		fmt.Println(err)
 	}
 }
 
-func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string) string {
+func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, encrypted_ip string, USDAmount float64) {
 	var wallet_ = createWalletSolana(name_, message_, amount_, showAmount_)
 	// Get Solana address and desired balance from request
 	address := wallet_.KeyPublic
@@ -2504,34 +2533,33 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	tmp, _ := qrcode.Encode("solana:"+address+"?amount="+donoStr, qrcode.Low, 320)
 	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
 
+	s.DonationID = createNewDono(1, address, name_, message_, amount_, "SOL", encrypted_ip, showAmount_, USDAmount, media_)
+
 	err := payTemplate.Execute(w, s)
 	if err != nil {
 		fmt.Println(err)
 	}
-
-	return address
 }
 
-func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values) string {
-
+func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values, amount float64, encrypted_ip string, showAmount bool, USDAmount float64) {
 	payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
 	req, err := http.NewRequest("POST", rpcURL, payload)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		return "ERROR CREATING"
+		log.Println("ERROR CREATING")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		return "ERROR CREATING"
+		log.Println("ERROR CREATING")
 	}
 
 	resp := &rpcResponse{}
 	if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
 		fmt.Println(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		return "ERROR CREATING"
+		log.Println("ERROR CREATING")
 	}
 
 	s.PayID = html.EscapeString(resp.Result.PaymentID)
@@ -2544,11 +2572,12 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values)
 	tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", resp.Result.IntegratedAddress, s.Amount), qrcode.Low, 320)
 	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
 
+	s.DonationID = createNewDono(1, s.PayID, s.Name, s.Message, amount, "XMR", encrypted_ip, showAmount, USDAmount, s.Media)
+
 	err = payTemplate.Execute(w, s)
 	if err != nil {
 		fmt.Println(err)
 	}
-	return s.PayID
 }
 
 func SendSolana(senderPublicKey string, senderPrivateKey ed25519.PrivateKey, recipientAddress string, amount float64, currencyType string) {
