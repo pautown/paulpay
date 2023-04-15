@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math"
+	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -168,16 +169,18 @@ type getBalanceResponse struct {
 }
 
 type superChat struct {
-	Name       string
-	Message    string
-	Media      string
-	Amount     string
-	Address    string
-	QRB64      string
-	PayID      string
-	CheckURL   string
-	Currency   string
-	DonationID int64
+	Name            string
+	Message         string
+	Media           string
+	Amount          string
+	Address         string
+	QRB64           string
+	PayID           string
+	CheckURL        string
+	Currency        string
+	DonationID      int64
+	ContractAddress string
+	WeiAmount       *big.Int
 }
 
 type indexDisplay struct {
@@ -411,6 +414,10 @@ func main() {
 		http.ServeFile(w, r, "web/xmr.svg")
 	})
 
+	http.HandleFunc("/bignumber.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/js/bignumber.js")
+	})
+
 	http.HandleFunc("/checkmark.png", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/xmr.png")
 	})
@@ -430,6 +437,15 @@ func main() {
 	http.HandleFunc("/busd.svg", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/busd.svg")
 	})
+
+	// TODO
+	/*Adjust fuzzing to accurately reflect decimals of contract as per
+		  // Get the decimals of the token
+	    const decimals = await contract.methods.decimals().call();
+
+	    console.log(decimals)
+
+	*/
 
 	http.HandleFunc("/hex.svg", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/hex.svg")
@@ -2437,7 +2453,6 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 		s.Currency = fCrypto
 		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount, fCrypto)
 		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL, fCrypto, encrypted_ip, USDAmount)
-
 	}
 }
 
@@ -2478,11 +2493,32 @@ func isDonoFulfilled(donoID int) bool {
 	return fulfilled
 }
 
+func ethToWei(ethStr string) *big.Int {
+	etherValue := big.NewFloat(1000000000000000000)
+	f, err := strconv.ParseFloat(ethStr, 64)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return nil
+	}
+	number := big.NewFloat(f)
+
+	weiValue := new(big.Int)
+	weiValue, _ = weiValue.SetString(number.Mul(number, etherValue).Text('f', 0), 10)
+
+	return weiValue
+}
+
 func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, fCrypto string, encrypted_ip string, USDAmount float64) {
 	address := adminEthereumAddress
 	donoStr := fmt.Sprintf("%.18f", amount_)
 
 	s.Amount = donoStr
+
+	if fCrypto != "ETH" {
+		s.ContractAddress, _ = utils.GetCryptoContractByCode(fCrypto)
+	} else {
+		s.ContractAddress = "ETH"
+	}
 
 	if name_ == "" {
 		s.Name = "Anonymous"
@@ -2491,6 +2527,7 @@ func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, me
 		s.Name = html.EscapeString(truncateStrings(condenseSpaces(name_), NameMaxChar))
 	}
 
+	s.WeiAmount = ethToWei(donoStr)
 	s.Media = html.EscapeString(media_)
 	s.Address = address
 

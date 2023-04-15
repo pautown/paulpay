@@ -1,12 +1,25 @@
 <!DOCTYPE html>
 <html>
 <head>
+
+  <script src="https://cdn.jsdelivr.net/npm/web3@1.3.6/dist/web3.min.js"></script>
+  <script src="bignumber.js"></script>
    <title>PayPaul Payment</title>
+
+        {{$ethtoken := false}}
+        {{$erc20token := true}}
+
         {{if eq .Currency "SOL"}}
+            {{$ethtoken = false}}
+            {{$erc20token = false}}
             <link href=sol.svg rel=icon>
         {{else if eq .Currency "XMR"}}
+            {{$ethtoken = false}}
+            {{$erc20token = false}}
             <link href=xmr.svg rel=icon>
         {{else if eq .Currency "ETH"}}
+            {{$ethtoken = true}}
+            {{$erc20token = false}}
             <link href=eth.svg rel=icon>
         {{else if eq .Currency "BUSD"}}
             <link href=busd.svg rel=icon>
@@ -62,6 +75,9 @@
 <blockquote style="user-select: all">
     {{.Address}}
 </blockquote>
+<p id="donation-metamask">
+    
+</p>
 <label>Or scan:</label><br>
 <blockquote>
     <img src="data:image/png;base64,{{.QRB64}}"/>
@@ -80,6 +96,11 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
     var interval_id; // Declare interval_id in global scope
+    const receiverAddress = "{{.Address}}";
+    const tokenAmount = "{{.Amount}}";
+    const tokenContractAddress = "{{.ContractAddress}}";
+
+    console.log("receiverAddress " + {{.Address}} + "tokenAmount" + {{.Amount}} + "tokenContractAddress" + {{.ContractAddress}});
 
     $(document).ready(function() {
       console.log("Document is ready");
@@ -89,12 +110,133 @@
       interval_id = setInterval(function() { // Assign value to interval_id in global scope
         updateDonationStatus(donation_id, status_indicator);
       }, 5000);
+        var ethtoken = {{$ethtoken}};
+        var erc20token = {{$erc20token}};
+
+        if (ethtoken === true) {
+            addETHMetamaskButton();
+        }
+        else if (erc20token === true){
+            addERC20MetamaskButton();
+        }
 
       // Stop the interval when the status is complete
       if (status_indicator.hasClass("complete")) {
         clearInterval(interval_id);
       }
     });
+    
+   function addETHMetamaskButton() {
+    document.querySelector("#donation-metamask").innerHTML = `<button id="button" type="button" data-original-text="Pay ETH with Metamask" style="display: flex; align-items: center;">
+    <span id="currencyText">Pay ETH with Metamask</span>
+      </button>`;
+
+      document.querySelector("#button").addEventListener("click", function() {
+            sendMetamaskEthereum();
+        });
+
+    }
+
+
+    function addERC20MetamaskButton() {
+        document.querySelector("#donation-metamask").innerHTML = `<button id="button" type="button" data-original-text="Pay ERC20 with Metamask" style="display: flex; align-items: center;">
+        <span id="currencyText">Pay ERC20 with Metamask</span>
+      </button>`;
+
+      document.querySelector("#button").addEventListener("click", function() {
+            sendToken();
+        });
+
+    }
+
+        // Get the Ethereum-enabled status of the user's browser
+    const ethEnabled = async () => {
+      if (window.ethereum) {
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        window.web3 = new Web3(window.ethereum);
+        return true;
+      }
+      return false;
+    }
+
+    // Send Ethereum to a given address
+    const sendMetamaskEthereum = async () => {
+                  // Check if the user has enabled their Ethereum wallet
+                  if (await ethEnabled()) {
+                    // Get the user's Ethereum account address
+                    const accounts = await window.web3.eth.getAccounts();
+                    const from = accounts[0];
+
+                    // Set the recipient address and the amount of Ethereum to send
+                    const to =  receiverAddress;
+
+
+
+                    // Send the Ethereum transaction
+                    window.web3.eth.sendTransaction({ from, to, dividedNum}, (err, transactionHash) => {
+                      if (err) {
+                        console.error(err);
+                      } else {
+                        console.log(transactionHash);
+                      }
+                    });
+                  } else {
+                    console.log("Please install Metamask to use this feature.");
+      }
+    }
+
+
+          
+    const sendToken = async () => {
+  // Check if the user has enabled their Ethereum wallet
+  if (await ethEnabled()) {
+    // Get the user's Ethereum account address
+    const accounts = await window.web3.eth.getAccounts();
+    const from = accounts[0];
+
+    // Get the token contract instance
+    const contract = new window.web3.eth.Contract([{
+      "inputs": [],
+      "name": "decimals",
+      "outputs": [{"internalType": "uint8","name": "","type": "uint8"}],
+      "stateMutability": "view",
+      "type": "function"
+    },{
+      "inputs": [{"internalType": "address","name": "","type": "address"}],
+      "name": "balanceOf",
+      "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
+      "stateMutability": "view",
+      "type": "function"
+    },{
+      "inputs": [{"internalType": "address","name": "","type": "address"},{"internalType": "uint256","name": "","type": "uint256"}],
+      "name": "transfer",
+      "outputs": [{"internalType": "bool","name": "","type": "bool"}],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }], tokenContractAddress);
+
+    // Get the decimals of the token
+    const decimals = await contract.methods.decimals().call();
+    console.log(decimals);
+
+    // Send the token transaction
+    contract.methods.transfer(receiverAddress, '4093122422').send({ from }, (err, transactionHash) => {
+      if (err) {
+        console.error(err);
+      } else {
+        console.log(transactionHash);
+      }
+    });
+  } else {
+    console.log("Please install Metamask to use this feature.");
+  }
+}
+    function removePeriod(number) {
+      const str = number.toString();
+      const parts = str.split('.');
+      return parseInt(parts.join(''));
+    }
+
 
     function updateDonationStatus(donation_id, status_indicator) {
       console.log("Checking donation status...");

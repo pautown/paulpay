@@ -118,6 +118,72 @@ var contracts = map[string]string{
 	"PNK":       "0x93ed3fbe21207ec2e8f2d3c3de6e058cb73bc04d",
 }
 
+var cryptoMap = map[string]map[string]string{
+	"paint": {
+		"name":     "Paint",
+		"code":     "PAINT",
+		"svg":      "paint.svg",
+		"min":      "{{.MinPaint}}",
+		"contract": contracts["PAINT"],
+	},
+	"hex": {
+		"name":     "Hexcoin",
+		"code":     "HEX",
+		"svg":      "hex.svg",
+		"min":      "{{.MinHex}}",
+		"contract": contracts["HEX"],
+	},
+	"matic": {
+		"name":     "Polygon",
+		"code":     "MATIC",
+		"svg":      "matic.svg",
+		"min":      "{{.MinPolygon}}",
+		"contract": contracts["MATIC"],
+	},
+	"busd": {
+		"name":     "Binance USD",
+		"code":     "BUSD",
+		"svg":      "busd.svg",
+		"min":      "{{.MinBusd}}",
+		"contract": contracts["BUSD"],
+	},
+	"shiba_inu": {
+		"name":     "Shiba Inu",
+		"code":     "SHIB",
+		"svg":      "shiba_inu.svg",
+		"min":      "{{.MinShib}}",
+		"contract": contracts["SHIBA_INU"],
+	},
+	"usdc": {
+		"name":     "USD Coin",
+		"code":     "USDC",
+		"svg":      "usdc.svg",
+		"min":      "{{.MinUsdc}}",
+		"contract": contracts["USDC"],
+	},
+	"tether": {
+		"name":     "Tether",
+		"code":     "TUSD",
+		"svg":      "tether.svg",
+		"min":      "{{.MinTusd}}",
+		"contract": contracts["TETHER"],
+	},
+	"wbtc": {
+		"name":     "Wrapped Bitcoin",
+		"code":     "WBTC",
+		"svg":      "wbtc.svg",
+		"min":      "{{.MinWbtc}}",
+		"contract": contracts["WBTC"],
+	},
+	"pnk": {
+		"name":     "Kleros",
+		"code":     "PNK",
+		"svg":      "pnk.svg",
+		"min":      "{{.MinPnk}}",
+		"contract": contracts["PNK"],
+	},
+}
+
 func GetTransactionAmount(t Transfer) float64 {
 	return t.Value
 }
@@ -155,6 +221,16 @@ func GetTokenName(contractAddr string) string {
 	default:
 		return "UNKNOWN"
 	}
+}
+
+func GetCryptoContractByCode(code string) (string, error) {
+	code = strings.ToUpper(code)
+	for _, cryptoInfo := range cryptoMap {
+		if cryptoInfo["code"] == code {
+			return cryptoInfo["contract"], nil
+		}
+	}
+	return "", fmt.Errorf("crypto with code %s not found", code)
 }
 
 func CheckDonos(transfers []Transfer, pending_donos []SuperChat) []SuperChat {
