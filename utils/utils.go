@@ -88,21 +88,6 @@ func GetEth(eth_address string) ([]Transfer, error) {
 	}
 
 	transfers := response.Result.Transfers
-	//var result []Transfer
-	/*for i, transfer := range transfers {
-		if transfer.Category != "internal" {
-			fmt.Println("TX %.18f", i)
-			asset := ""
-			if transfer.RawContract.Address == "" {
-				asset = "ETH"
-			} else {
-				asset = GetTokenName(transfer.RawContract.Address)
-			}
-			valueStr := fmt.Sprintf("%.18f", transfer.Value)
-			//fmt.Printf("ASSET: %-10s AMT: %30s\n------------------------\n", asset, valueStr)
-		}
-	}*/
-
 	return transfers, nil
 }
 
@@ -112,19 +97,17 @@ var contracts = map[string]string{
 	"MATIC":     "0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0",
 	"BUSD":      "0x4Fabb145d64652a948d72533023f6E7A623C7C53",
 	"SHIBA_INU": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
-	"USDC":      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-	"TETHER":    "0xdac17f958d2ee523a2206206994597c13d831ec7",
-	"WBTC":      "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
 	"PNK":       "0x93ed3fbe21207ec2e8f2d3c3de6e058cb73bc04d",
 }
 
-var cryptoMap = map[string]map[string]string{
+var cryptoMap = map[string]map[string]interface{}{
 	"paint": {
 		"name":     "Paint",
 		"code":     "PAINT",
 		"svg":      "paint.svg",
 		"min":      "{{.MinPaint}}",
 		"contract": contracts["PAINT"],
+		"decimals": 18,
 	},
 	"hex": {
 		"name":     "Hexcoin",
@@ -132,6 +115,7 @@ var cryptoMap = map[string]map[string]string{
 		"svg":      "hex.svg",
 		"min":      "{{.MinHex}}",
 		"contract": contracts["HEX"],
+		"decimals": 8,
 	},
 	"matic": {
 		"name":     "Polygon",
@@ -139,6 +123,7 @@ var cryptoMap = map[string]map[string]string{
 		"svg":      "matic.svg",
 		"min":      "{{.MinPolygon}}",
 		"contract": contracts["MATIC"],
+		"decimals": 18,
 	},
 	"busd": {
 		"name":     "Binance USD",
@@ -146,6 +131,7 @@ var cryptoMap = map[string]map[string]string{
 		"svg":      "busd.svg",
 		"min":      "{{.MinBusd}}",
 		"contract": contracts["BUSD"],
+		"decimals": 18,
 	},
 	"shiba_inu": {
 		"name":     "Shiba Inu",
@@ -153,27 +139,7 @@ var cryptoMap = map[string]map[string]string{
 		"svg":      "shiba_inu.svg",
 		"min":      "{{.MinShib}}",
 		"contract": contracts["SHIBA_INU"],
-	},
-	"usdc": {
-		"name":     "USD Coin",
-		"code":     "USDC",
-		"svg":      "usdc.svg",
-		"min":      "{{.MinUsdc}}",
-		"contract": contracts["USDC"],
-	},
-	"tether": {
-		"name":     "Tether",
-		"code":     "TUSD",
-		"svg":      "tether.svg",
-		"min":      "{{.MinTusd}}",
-		"contract": contracts["TETHER"],
-	},
-	"wbtc": {
-		"name":     "Wrapped Bitcoin",
-		"code":     "WBTC",
-		"svg":      "wbtc.svg",
-		"min":      "{{.MinWbtc}}",
-		"contract": contracts["WBTC"],
+		"decimals": 18,
 	},
 	"pnk": {
 		"name":     "Kleros",
@@ -181,6 +147,7 @@ var cryptoMap = map[string]map[string]string{
 		"svg":      "pnk.svg",
 		"min":      "{{.MinPnk}}",
 		"contract": contracts["PNK"],
+		"decimals": 18,
 	},
 }
 
@@ -210,12 +177,6 @@ func GetTokenName(contractAddr string) string {
 		return "BUSD"
 	case contracts["SHIBA_INU"]:
 		return "SHIBA_INU"
-	case contracts["USDC"]:
-		return "USDC"
-	case contracts["TETHER"]:
-		return "TETHER"
-	case contracts["WBTC"]:
-		return "WBTC"
 	case contracts["PNK"]:
 		return "PNK"
 	default:
@@ -227,10 +188,32 @@ func GetCryptoContractByCode(code string) (string, error) {
 	code = strings.ToUpper(code)
 	for _, cryptoInfo := range cryptoMap {
 		if cryptoInfo["code"] == code {
-			return cryptoInfo["contract"], nil
+			contract, ok := cryptoInfo["contract"].(string)
+			if !ok {
+				return "", fmt.Errorf("contract value for %s is not a string", code)
+			}
+			return contract, nil
 		}
 	}
 	return "", fmt.Errorf("crypto with code %s not found", code)
+}
+
+func GetCryptoDecimalsByCode(code string) (int, error) {
+	if code == "ETH" {
+		return 18, nil
+	} else {
+		code = strings.ToUpper(code)
+		for _, cryptoInfo := range cryptoMap {
+			if cryptoInfo["code"] == code {
+				decimals, ok := cryptoInfo["decimals"].(int)
+				if !ok {
+					return 0, fmt.Errorf("decimals value for crypto with code %s is not an integer", code)
+				}
+				return decimals, nil
+			}
+		}
+		return 0, fmt.Errorf("crypto with code %s not found", code)
+	}
 }
 
 func CheckDonos(transfers []Transfer, pending_donos []SuperChat) []SuperChat {
@@ -274,9 +257,9 @@ func CreatePendingDono(name string, message string, mediaURL string, amountNeede
 }
 
 func FuzzDono(ethAmount float64) float64 {
-	// generate random value between 0 and 100 billionth
+	// generate random value between 0 and 1 millionth
 	rand.Seed(time.Now().UnixNano())
-	randVal := rand.Float64() / 10000000.0
+	randVal := rand.Float64() / 1000000.0
 
 	// add random value to input amount
 	newAmount := ethAmount + randVal

@@ -139,9 +139,6 @@ type CryptoPrice struct {
 	Polygon    float64 `json:"matic"`
 	BinanceUSD float64 `json:"binance-usd"`
 	ShibaInu   float64 `json:"shiba-inu"`
-	USDcoin    float64 `json:"usd-coin"`
-	Tether     float64 `json:"tether"`
-	WrappedBTC float64 `json:"wrapped-bitcoin"`
 	Kleros     float64 `json:"pnk"`
 }
 
@@ -193,9 +190,6 @@ type indexDisplay struct {
 	MinPolygon   float64
 	MinBusd      float64
 	MinShib      float64
-	MinUsdc      float64
-	MinTusd      float64
-	MinWbtc      float64
 	MinPnk       float64
 	SolPrice     float64
 	XMRPrice     float64
@@ -205,9 +199,6 @@ type indexDisplay struct {
 	PolygonPrice float64
 	BusdPrice    float64
 	ShibPrice    float64
-	UsdcPrice    float64
-	TusdPrice    float64
-	WbtcPrice    float64
 	PnkPrice     float64
 	MinAmnt      float64
 	Links        string
@@ -544,7 +535,7 @@ func main() {
 func getCryptoPrices() (CryptoPrice, error) {
 
 	// Call the Coingecko API to get the current price for each cryptocurrency
-	url := "https://api.coingecko.com/api/v3/simple/price?ids=monero,solana,ethereum,paint,hex,matic-network,binance-usd,shiba-inu,usd-coin,tether,wrapped-bitcoin,kleros&vs_currencies=usd"
+	url := "https://api.coingecko.com/api/v3/simple/price?ids=monero,solana,ethereum,paint,hex,matic-network,binance-usd,shiba-inu,kleros&vs_currencies=usd"
 	resp, err := http.Get(url)
 	if err != nil {
 		panic(err)
@@ -566,9 +557,6 @@ func getCryptoPrices() (CryptoPrice, error) {
 		Polygon:    data["matic-network"]["usd"],
 		BinanceUSD: data["binance-usd"]["usd"],
 		ShibaInu:   data["shiba-inu"]["usd"],
-		USDcoin:    data["usd-coin"]["usd"],
-		Tether:     data["tether"]["usd"],
-		WrappedBTC: data["wrapped-bitcoin"]["usd"],
 		Kleros:     data["kleros"]["usd"],
 	}
 
@@ -775,8 +763,8 @@ func setMinDonos() {
 	minPaint, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minPaint), 64)
 
 	// Output all minimums in a single line
-	log.Printf("Minimums: Monero=%.5f, Solana=%.5f, Ethereum=%.5f, HEX=%.5f, Polygon=%.5f, BUSD=%.5f, SHIB=%.5f, USDC=%.5f, TUSD=%.5f, WBTC=%.5f, PNK=%.5f, PAINT=%.5f",
-		minMonero, minSolana, minEthereum, minHex, minPolygon, minBusd, minShib, minUsdc, minTusd, minWbtc, minPnk, minPaint)
+	log.Printf("Minimums: Monero=%.5f, Solana=%.5f, Ethereum=%.5f, HEX=%.5f, Polygon=%.5f, BUSD=%.5f, SHIB=%.5f, PNK=%.5f, PAINT=%.5f",
+		minMonero, minSolana, minEthereum, minHex, minPolygon, minBusd, minShib, minPnk, minPaint)
 
 }
 
@@ -794,9 +782,6 @@ func fetchExchangeRates() {
 		maticToUsd = prices.Polygon
 		busdToUsd = prices.BinanceUSD
 		shibToUsd = prices.ShibaInu
-		usdcToUsd = prices.USDcoin
-		tusdToUsd = prices.Tether
-		wbtcToUsd = prices.WrappedBTC
 		pnkToUsd = prices.Kleros
 
 		fmt.Println("Updated exchange rates:", " 1 XMR:", "$"+fmt.Sprintf("%.2f", xmrToUsd), "1 SOL:", "$"+fmt.Sprintf("%.2f", solToUsd), "1 ETH:", "$"+fmt.Sprintf("%.2f", ethToUsd), "1 PAINT:", "$"+fmt.Sprintf("%.2f", paintToUsd), "1 HEX:", "$"+fmt.Sprintf("%.2f", hexToUsd), "1 MATIC:", "$"+fmt.Sprintf("%.2f", maticToUsd), "1 BUSD:", "$"+fmt.Sprintf("%.2f", busdToUsd), "1 SHIB:", "$"+fmt.Sprintf("%.2f", shibToUsd), "1 USDC:", "$"+fmt.Sprintf("%.2f", usdcToUsd), "1 TUSD:", "$"+fmt.Sprintf("%.2f", tusdToUsd), "1 WBTC:", "$"+fmt.Sprintf("%.2f", wbtcToUsd), "1 PNK:", "$"+fmt.Sprintf("%.2f", pnkToUsd))
@@ -810,9 +795,6 @@ func fetchExchangeRates() {
 		minPolygon = minDonoValue / prices.Polygon
 		minBusd = minDonoValue / prices.BinanceUSD
 		minShib = minDonoValue / prices.ShibaInu
-		minUsdc = minDonoValue / prices.USDcoin
-		minTusd = minDonoValue / prices.Tether
-		minWbtc = minDonoValue / prices.WrappedBTC
 		minPnk = minDonoValue / prices.Kleros
 
 		minMonero, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minMonero), 64)
@@ -2268,9 +2250,6 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 		MinPolygon:   minPolygon,
 		MinBusd:      minBusd,
 		MinShib:      minShib,
-		MinUsdc:      minUsdc,
-		MinTusd:      minTusd,
-		MinWbtc:      minWbtc,
 		MinPnk:       minPnk,
 		MinPaint:     minPaint,
 		SolPrice:     solToUsd,
@@ -2280,9 +2259,6 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 		HexPrice:     hexToUsd,
 		BusdPrice:    busdToUsd,
 		ShibPrice:    shibToUsd,
-		UsdcPrice:    usdcToUsd,
-		TusdPrice:    tusdToUsd,
-		WbtcPrice:    wbtcToUsd,
 		PnkPrice:     pnkToUsd,
 		PaintPrice:   paintToUsd,
 		Checked:      checked,
@@ -2406,12 +2382,6 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 		amount = minBusd
 	} else if fCrypto == "SHIB" && amount < minShib {
 		amount = minShib
-	} else if fCrypto == "USDC" && amount < minUsdc {
-		amount = minUsdc
-	} else if fCrypto == "TUSD" && amount < minTusd {
-		amount = minTusd
-	} else if fCrypto == "WBTC" && amount < minWbtc {
-		amount = minWbtc
 	} else if fCrypto == "PNK" && amount < minPnk {
 		amount = minPnk
 	}
@@ -2510,7 +2480,9 @@ func ethToWei(ethStr string) *big.Int {
 
 func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, fCrypto string, encrypted_ip string, USDAmount float64) {
 	address := adminEthereumAddress
-	donoStr := fmt.Sprintf("%.18f", amount_)
+
+	decimals, _ := utils.GetCryptoDecimalsByCode(fCrypto)
+	donoStr := fmt.Sprintf("%.*f", decimals, amount_)
 
 	s.Amount = donoStr
 

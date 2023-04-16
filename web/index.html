@@ -59,24 +59,6 @@
           "svg": "shiba_inu.svg",
           "min": "{{.MinShib}}"
         },
-        "usdc": {
-          "name": "USD Coin",
-          "code": "USDC",
-          "svg": "usdc.svg",
-          "min": "{{.MinUsdc}}"
-        },
-        "tether": {
-          "name": "Tether",
-          "code": "TUSD",
-          "svg": "tether.svg",
-          "min": "{{.MinTusd}}"
-        },
-        "wbtc": {
-          "name": "Wrapped Bitcoin",
-          "code": "WBTC",
-          "svg": "wbtc.svg",
-          "min": "{{.MinWbtc}}"
-        },
         "pnk": {
           "name": "Kleros",
           "code": "PNK",
@@ -103,7 +85,6 @@
           }
         };
 
-
         var buttonText = "Switch Cryptocurrency";
         var crypto = "XMR"
       
@@ -115,7 +96,7 @@
             return crypto.code === selectedValue;
           });
 
-            var amountInput = document.getElementById("amount");
+          var amountInput = document.getElementById("amount");
           if (selectedCrypto) {
             replaceText(selectedCrypto.name, selectedCrypto.name.toLowerCase(), selectedCrypto.code);
             imgSrc = `${selectedCrypto.svg}`;
@@ -124,11 +105,9 @@
           }
 
           document.getElementById("crypto").value = selectedValue;
-
           select.options[select.selectedIndex].selectedIndex = 0;
           document.querySelector("#currencyIcon").setAttribute("src", imgSrc);
           document.querySelector("#currencyText").textContent = "PayPaul " + selectedCrypto.code;
-
           amountInput.value = "";
 
           // switch focus to amount input field
@@ -136,10 +115,7 @@
         }
 
 
-        function replaceText(newText, newTextLowercase, newTextCode) {
-          
-          
-
+        function replaceText(newText, newTextLowercase, newTextCode) {          
           // Update the text content of the amount label
           var amountLabel = document.getElementById("amountLabel");
           amountLabel.textContent = `${newText} (${newTextCode}) Amount:`;
@@ -148,10 +124,6 @@
           var amountLabel = document.getElementById("paypaul-header");
           amountLabel.textContent = `PayPaul in ${newText}.`;
         }
-
-
-
-
  
     </script>
 </head>
@@ -162,21 +134,18 @@
     <div id="paypaul-header">PayPaul in Monero.</div>
     </h2>
     <hr>
-         <div class="ticker-wrap">
-      <div class="ticker">
-        <div class="ticker__item"><span>XMR = ${{.XMRPrice}}</span></div>
-        <div class="ticker__item"><span>ETH = ${{.ETHPrice}}</span></div>
-        <div class="ticker__item"><span>BTC = ${{.WbtcPrice}}</span></div>
-        <div class="ticker__item"><span>SOL = ${{.SolPrice}}</span></div>
-        <div class="ticker__item"><span>HEX = ${{.HexPrice}}</span></div>
-        <div class="ticker__item"><span>PNK = ${{.PnkPrice}}</span></div>
-        <div class="ticker__item"><span>PAINT = ${{.PaintPrice}}</span></div>
-        <div class="ticker__item"><span>SHIB = ${{.ShibPrice}}</span></div>
-        <div class="ticker__item"><span>MATIC = ${{.PolygonPrice}}</span></div>
-        <div class="ticker__item"><span>BUSD = ${{.BusdPrice}}</span></div>
-        <div class="ticker__item"><span>USDC = ${{.UsdcPrice}}</span></div>
-        <div class="ticker__item"><span>TUSD = ${{.TusdPrice}}</span></div>
-      </div>
+      <div class="ticker-wrap">
+        <div class="ticker">
+          <div class="ticker__item"><span>XMR = ${{.XMRPrice}}</span></div>
+          <div class="ticker__item"><span>ETH = ${{.ETHPrice}}</span></div>
+          <div class="ticker__item"><span>SOL = ${{.SolPrice}}</span></div>
+          <div class="ticker__item"><span>HEX = ${{.HexPrice}}</span></div>
+          <div class="ticker__item"><span>PNK = ${{.PnkPrice}}</span></div>
+          <div class="ticker__item"><span>PAINT = ${{.PaintPrice}}</span></div>
+          <div class="ticker__item"><span>SHIB = ${{.ShibPrice}}</span></div>
+          <div class="ticker__item"><span>MATIC = ${{.PolygonPrice}}</span></div>
+          <div class="ticker__item"><span>BUSD = ${{.BusdPrice}}</span></div>
+        </div>      
     </div>
     <br>
     
@@ -186,7 +155,7 @@
     <input id="amount" min="{{.MinMonero}}" name="amount" placeholder="{{.MinMonero}} Minimum" step="0.0001" type="number">
     <label for="message">Message:</label><br>
     <textarea id="message" maxlength="{{.MaxChar}}" name="message" placeholder="{{.MaxChar}} Character Max" rows="6"></textarea><br>
-  <label for="media">Media Link:</label><br>
+    <label for="media">Media Link:</label><br>
   
     <input id="media" name="media" type="text" placeholder="YouTube Link (Optional)"><br><br>
     <input type="hidden" id="crypto" name="crypto" value="XMR">
@@ -207,19 +176,11 @@
         <option value="MATIC">Switch to Polygon</option>
         <option value="BUSD">Switch to Binance USD</option>
         <option value="SHIB">Switch to Shiba Inu</option>
-        <option value="USDC">Switch to USD Coin</option>
-        <option value="TUSD">Switch to Tether</option>
-        <option value="WBTC">Switch to Wrapped Bitcoin</option>
         <option value="PNK">Switch to Kleros</option>
       </select>
     </div>
-
-
-
-
     <br>
-    <small></small><div id="links"></div></small>
-     
+    <small></small><div id="links"></div></small>     
   </form>
   
   <footer>
