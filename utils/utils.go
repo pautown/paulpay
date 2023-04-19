@@ -292,3 +292,14 @@ func IsEqual(a, b float64) bool {
 	const epsilon = 1e-18 // threshold for difference
 	return math.Abs(a-b) < epsilon
 }
+
+func GenerateUniqueURL() string {
+	rand.Seed(time.Now().UnixNano())
+	const charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	const length = 30
+	randomString := make([]byte, length)
+	for i := range randomString {
+		randomString[i] = charset[rand.Intn(len(charset))]
+	}
+	return (string(randomString))
+}

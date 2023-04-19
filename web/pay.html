@@ -124,11 +124,11 @@
     });
     
    function addETHMetamaskButton() {
-    document.querySelector("#donation-metamask").innerHTML = `<button id="button" type="button" data-original-text="Pay ETH with Metamask" style="display: flex; align-items: center;">
+    document.querySelector("#donation-metamask").innerHTML = `<button id="submit" type="button" data-original-text="Pay ETH with Metamask" style="display: flex; align-items: center;">
     <span id="currencyText">Pay ETH with Metamask</span>
       </button>`;
 
-      document.querySelector("#button").addEventListener("click", function() {
+      document.querySelector("#submit").addEventListener("click", function() {
             sendMetamaskEthereum();
         });
 
@@ -136,11 +136,11 @@
 
 
     function addERC20MetamaskButton() {
-        document.querySelector("#donation-metamask").innerHTML = `<button id="button" type="button" data-original-text="Pay ERC20 with Metamask" style="display: flex; align-items: center;">
-        <span id="currencyText">Pay ERC20 with Metamask</span>
+        document.querySelector("#donation-metamask").innerHTML = `<button id="submit" type="button" data-original-text="Send with Metamask" style="display: flex; align-items: center;">
+        <span id="currencyText">Send with Metamask</span>
       </button>`;
 
-      document.querySelector("#button").addEventListener("click", function() {
+      document.querySelector("#submit").addEventListener("click", function() {
             sendToken();
         });
 

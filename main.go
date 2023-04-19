@@ -128,6 +128,9 @@ type User struct {
 	CreationDatetime     string
 	ModificationDatetime string
 	Links                string
+	DonoGIF              string
+	DonoSound            string
+	AlertURL             string
 }
 
 type CryptoPrice struct {
@@ -228,6 +231,9 @@ type obsDataStruct struct {
 	FilenameMP3 string
 	URLdisplay  string
 	URLdonobar  string
+	Message     string
+	Needed      float64
+	Sent        float64
 }
 
 type rpcResponse struct {
@@ -470,9 +476,8 @@ func main() {
 		http.ServeFile(w, r, "web/wbtc.svg")
 	})
 
-	http.HandleFunc("/dono.gif", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "web/obs/media/ezgif-1-fd55d7ca73.gif")
-	})
+	http.Handle("/media/", http.StripPrefix("/media/", http.FileServer(http.Dir("web/obs/media/"))))
+	http.Handle("/users/", http.StripPrefix("/users/", http.FileServer(http.Dir("users/"))))
 
 	time.Sleep(2 * time.Second)
 
@@ -503,7 +508,7 @@ func main() {
 	http.HandleFunc("/changepassword", changePasswordHandler)
 	http.HandleFunc("/changeuser", changeUserHandler)
 
-	getObsData(db, 1)
+	obsData = getObsData(db, 1)
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
 	footerTemplate, _ = template.ParseFiles("web/footer.html")
@@ -1480,7 +1485,6 @@ func runDatabaseMigrations(db *sql.DB) error {
 			return err
 		}
 	}
-
 	tables = []string{"users"}
 
 	for _, table := range tables {
@@ -1488,8 +1492,54 @@ func runDatabaseMigrations(db *sql.DB) error {
 		if err != nil {
 			return err
 		}
+
+		err = addColumnIfNotExist(db, table, "dono_gif", "TEXT")
+		if err != nil {
+			return err
+		}
+
+		err = addColumnIfNotExist(db, table, "dono_sound", "TEXT")
+		if err != nil {
+			return err
+		}
+
+		err = addColumnIfNotExist(db, table, "alert_url", "TEXT")
+		if err != nil {
+			return err
+		}
+
+		err = removeColumnIfExist(db, table, "progressbar_url")
+		if err != nil {
+			return err
+		}
 	}
 
+	err := updateColumnAlertURLIfNull(db, "users", "alert_url")
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func updateColumnAlertURLIfNull(db *sql.DB, tableName, columnName string) error {
+	if checkDatabaseColumnExist(db, tableName, columnName) {
+		value := utils.GenerateUniqueURL()
+		_, err := db.Exec(`UPDATE `+tableName+` SET `+columnName+` = ? WHERE `+columnName+` IS NULL`, value)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func removeColumnIfExist(db *sql.DB, tableName, columnName string) error {
+	if checkDatabaseColumnExist(db, tableName, columnName) {
+		_, err := db.Exec(`ALTER TABLE ` + tableName + ` DROP COLUMN ` + columnName)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -1625,6 +1675,8 @@ func createDatabaseIfNotExists(db *sql.DB) error {
 		log.Fatal(err)
 	}
 	adminUser.HashedPassword = adminHashedPassword
+	adminUser.DonoGIF = "default.gif"
+	adminUser.DonoSound = "default.mp3"
 
 	err = createUser(adminUser)
 	if err != nil {
@@ -1690,20 +1742,37 @@ func updateObsData(db *sql.DB, obsId int, userId int, gifName string, mp3Name st
 	return err
 }
 
-func getObsData(db *sql.DB, userId int) {
+func getObsData(db *sql.DB, userId int) obsDataStruct {
+	var tempObsData obsDataStruct
 	err := db.QueryRow("SELECT gif_name, mp3_name, `message`, needed, sent FROM obs WHERE user_id = ?", userId).
-		Scan(&obsData.FilenameGIF, &obsData.FilenameMP3, &pbMessage, &amountNeeded, &amountSent)
+		Scan(&tempObsData.FilenameGIF, &tempObsData.FilenameMP3, &tempObsData.Message, &tempObsData.Needed, &tempObsData.Sent)
 	if err != nil {
 		log.Println("Error:", err)
 	}
 
-	log.Println(pbMessage)
-	log.Println(amountNeeded)
-	log.Println(amountSent)
+	return tempObsData
+}
+
+func createNewUser(username string, hashedPassword []byte) {
+	// create admin user if not exists
+	adminUser := User{
+		Username:          username,
+		HashedPassword:    hashedPassword,
+		EthAddress:        "0x5b5856dA280e592e166A1634d353A53224ed409c",
+		SolAddress:        "adWqokePHcAbyF11TgfvvM1eKax3Kxtnn9sZVQh6fXo",
+		HexcoinAddress:    "0x5b5856dA280e592e166A1634d353A53224ed409c",
+		XMRWalletPassword: "",
+		MinDono:           3,
+		MinMediaDono:      5,
+		MediaEnabled:      true,
+		DonoGIF:           "default.gif",
+		DonoSound:         "default.mp3",
+		AlertURL:          utils.GenerateUniqueURL(),
+	}
+	createUser(adminUser)
 }
 
 func createUser(user User) error {
-
 	// Insert the user's data into the database
 	_, err := db.Exec(`
         INSERT INTO users (
@@ -1718,16 +1787,51 @@ func createUser(user User) error {
             media_enabled,
             created_at,
             modified_at,
-            links
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now(), time.Now(), "")
+            links,
+            dono_gif,
+            dono_sound,
+            alert_url
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now(), time.Now(), "", user.DonoGIF, user.DonoSound, user.AlertURL)
+
+	if err != nil {
+		return err
+	}
+
+	// Get the ID of the newly created user
+	row := db.QueryRow(`SELECT LAST_INSERT_ID()`)
+	var userID int
+	err = row.Scan(&userID)
+	if err != nil {
+		return err
+	}
+
+	// Create a directory for the user based on their ID
+	userDir := fmt.Sprintf("users/%d", userID)
+	err = os.MkdirAll(userDir, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	// Create "gifs" and "sounds" subfolders inside the user's directory
+	gifsDir := fmt.Sprintf("%s/gifs", userDir)
+	err = os.MkdirAll(gifsDir, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	soundsDir := fmt.Sprintf("%s/sounds", userDir)
+	err = os.MkdirAll(soundsDir, os.ModePerm)
+	if err != nil {
+		return err
+	}
 
 	adminEthereumAddress = user.EthAddress
 	adminSolanaAddress = user.SolAddress
 	adminHexcoinAddress = user.HexcoinAddress
 	minDonoValue = float64(user.MinDono)
 
-	return err
+	return nil
 }
 
 // update an existing user
@@ -1735,34 +1839,97 @@ func updateUser(user User) error {
 	statement := `
 		UPDATE users
 		SET Username=?, HashedPassword=?, eth_address=?, sol_address=?, hex_address=?,
-			xmr_wallet_password=?, min_donation_threshold=?, min_media_threshold=?, media_enabled=?, modified_at=datetime('now'), links=?
+			xmr_wallet_password=?, min_donation_threshold=?, min_media_threshold=?, media_enabled=?, modified_at=datetime('now'), links=?, dono_gif=?, dono_sound=?, alert_url=?
 		WHERE id=?
 	`
 	_, err := db.Exec(statement, user.Username, user.HashedPassword, user.EthAddress,
 		user.SolAddress, user.HexcoinAddress, user.XMRWalletPassword, user.MinDono, user.MinMediaDono,
-		user.MediaEnabled, []byte(user.Links), user.UserID) // convert user.Links to []byte
+		user.MediaEnabled, []byte(user.Links), user.DonoGIF, user.DonoSound, user.UserID, user.AlertURL) // convert user.Links to []byte
 	if err != nil {
 		log.Fatalf("failed, err: %v", err)
 	}
 	return err
 }
 
-// get a user by their username
-func getUserByUsername(username string) (User, error) {
+func getUserByAlertURL(AlertURL string) (User, error) {
 	var user User
-	var links sql.NullString // use a sql.NullString for the "links" field
-	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
+	var links, donoGIF, donoSound, alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	row := db.QueryRow("SELECT * FROM users WHERE alert_url=?", AlertURL)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links) // scan into the sql.NullString
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL)
 	if err != nil {
 		return User{}, err
 	}
-	user.Links = links.String // assign the sql.NullString to the user's "Links" field
-	if !links.Valid {         // check if the "links" column is null
-		user.Links = "" // set the user's "Links" field to ""
+	user.Links = links.String
+	if !links.Valid {
+		user.Links = ""
 	}
+	user.DonoGIF = donoGIF.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !donoGIF.Valid {           // check if the "dono_gif" column is null
+		user.DonoGIF = "default.gif" // set the user's "DonoGIF"
+	}
+	user.DonoSound = donoSound.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !donoSound.Valid {             // check if the "dono_gif" column is null
+		user.DonoSound = "default.mp3" // set the user's "DonoSound"
+	}
+	user.AlertURL = alertURL.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !alertURL.Valid {            // check if the "dono_gif" column is null
+		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"
+	}
+
 	return user, nil
+}
+
+func getOBSDataByAlertURL(AlertURL string) (obsDataStruct, error) {
+	user, err := getUserByAlertURL(AlertURL)
+	if err != nil {
+		log.Println("Couldn't get user,", err)
+	}
+	var obsData obsDataStruct
+	//var alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	row := db.QueryRow("SELECT gif_name, mp3_name, `message`, needed, sent FROM obs WHERE user_id=?", user.UserID)
+
+	err = row.Scan(&obsData.FilenameGIF, &obsData.FilenameMP3, &obsData.Message, &obsData.Needed, &obsData.Sent)
+	if err != nil {
+		log.Println("Couldn't get obsData,", err)
+		return obsData, err
+	}
+
+	return obsData, nil
+
+}
+
+// get a user by their username
+func getUserByUsername(username string) (User, error) {
+	var user User
+	var links, donoGIF, donoSound, alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
+	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
+		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL)
+	if err != nil {
+		return User{}, err
+	}
+	user.Links = links.String
+	if !links.Valid {
+		user.Links = ""
+	}
+	user.DonoGIF = donoGIF.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !donoGIF.Valid {           // check if the "dono_gif" column is null
+		user.DonoGIF = "default.gif" // set the user's "DonoGIF"
+	}
+	user.DonoSound = donoSound.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !donoSound.Valid {             // check if the "dono_gif" column is null
+		user.DonoSound = "default.mp3" // set the user's "DonoSound"
+	}
+	user.AlertURL = alertURL.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !alertURL.Valid {            // check if the "dono_gif" column is null
+		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"
+	}
+
+	return user, nil
+
 }
 
 // get a user by their session token
@@ -1772,13 +1939,31 @@ func getUserBySession(sessionToken string) (User, error) {
 		return User{}, fmt.Errorf("session token not found")
 	}
 	var user User
+	var links, donoGIF, donoSound, alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE id=?", userID)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &user.Links)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL)
 	if err != nil {
 		return User{}, err
 	}
+	user.Links = links.String
+	if !links.Valid {
+		user.Links = ""
+	}
+	user.DonoGIF = donoGIF.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !donoGIF.Valid {           // check if the "dono_gif" column is null
+		user.DonoGIF = "default.gif" // set the user's "DonoGIF"
+	}
+	user.DonoSound = donoSound.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !donoSound.Valid {             // check if the "dono_gif" column is null
+		user.DonoSound = "default.mp3" // set the user's "DonoSound"
+	}
+	user.AlertURL = alertURL.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !alertURL.Valid {            // check if the "dono_gif" column is null
+		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"
+	}
+
 	return user, nil
 }
 
@@ -1837,7 +2022,19 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func userOBSHandler(w http.ResponseWriter, r *http.Request) {
-	checkLoggedIn(w, r)
+	cookie, err := r.Cookie("session_token")
+	if err != nil {
+		fmt.Println(err)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	user, err := getUserBySession(cookie.Value)
+	if err != nil {
+		fmt.Println(err)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
 
 	host := r.Host // get host url
 	obsData.URLdonobar = host + "/progressbar"
@@ -1899,6 +2096,7 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 			// handle the error
 			log.Println(err)
 		}
+
 		pb.Message = pbMessage
 		pb.Needed = amountNeeded
 		pb.Sent = amountSent
@@ -1912,23 +2110,19 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 
-		getObsData(db, 1)
 	}
 
+	obsData_ := getObsData(db, user.UserID)
+	log.Println(obsData_.Message)
+	log.Println(obsData_.Needed)
+	log.Println(obsData_.Sent)
 	tmpl, err := template.ParseFiles("web/obs/settings.html")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	type combinedData struct {
-		obsDataStruct
-		progressbarData
-	}
-
-	tnd := combinedData{obsData, pb}
-
-	tmpl.Execute(w, tnd)
+	tmpl.Execute(w, obsData_)
 
 }
 
@@ -2191,7 +2385,11 @@ func reverse(ss []string) {
 }
 
 func alertOBSHandler(w http.ResponseWriter, r *http.Request) {
-	newDono, err := checkDonoQueue(db)
+	value := r.URL.Query().Get("value")
+	user, _ := getUserByAlertURL(value)
+
+	newDono, err := checkDonoQueue(db, user.UserID)
+
 	if err != nil {
 		log.Printf("Error checking donation queue: %v\n", err)
 	}
@@ -2210,16 +2408,25 @@ func alertOBSHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func progressbarOBSHandler(w http.ResponseWriter, r *http.Request) {
+	value := r.URL.Query().Get("value")
+	obsData, err := getOBSDataByAlertURL(value)
 
-	pb.Message = pbMessage
-	pb.Needed = amountNeeded
-	pb.Sent = amountSent
+	if err != nil {
+		log.Println(err)
+	}
 
-	err := progressbarTemplate.Execute(w, pb)
+	log.Println("Progress bar message:", obsData.Message)
+	log.Println("Progress bar needed:", obsData.Needed)
+	log.Println("Progress bar sent:", obsData.Sent)
+
+	pb.Message = obsData.Message
+	pb.Needed = obsData.Needed
+	pb.Sent = obsData.Sent
+
+	err = progressbarTemplate.Execute(w, pb)
 	if err != nil {
 		fmt.Println(err)
 	}
-
 }
 
 func getCurrentDateTime() string {
@@ -2271,10 +2478,10 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func checkDonoQueue(db *sql.DB) (bool, error) {
+func checkDonoQueue(db *sql.DB, userID int) (bool, error) {
 
-	// Fetch oldest entry from queue table
-	row := db.QueryRow("SELECT name, message, amount, currency, media_url, usd_amount FROM queue ORDER BY rowid LIMIT 1")
+	// Fetch oldest entry from queue table where user_id matches userID
+	row := db.QueryRow("SELECT name, message, amount, currency, media_url, usd_amount FROM queue WHERE user_id = ? ORDER BY rowid LIMIT 1", userID)
 
 	var name string
 	var message string
