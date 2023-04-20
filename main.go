@@ -131,6 +131,8 @@ type User struct {
 	DonoGIF              string
 	DonoSound            string
 	AlertURL             string
+	DateEnabled          time.Time
+	WalletUploaded       bool
 }
 
 type CryptoPrice struct {
@@ -363,12 +365,6 @@ func donationsHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
-	go startMoneroWallet()
-
-	time.Sleep(5 * time.Second)
-
-	log.Println("Starting server")
-
 	var err error
 
 	// Open a new database connection
@@ -389,6 +385,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	go startXMRWallets()
+
+	time.Sleep(5 * time.Second)
+
+	log.Println("Starting server")
 
 	// create a RPC client for Solana
 	fmt.Println(reflect.TypeOf(c))
@@ -527,7 +529,7 @@ func main() {
 	setServerVars()
 
 	// go createTestDono("Huge Bob", "XMR", "Hey it's Huge Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
-	//go createTestDono("Big Bob", "XMR", "This Cruel Message is Bob's Test messag! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", 50, 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+	go createTestDono(1, "Big Bob", "XMR", "This Cruel Message is Bob's Test messag! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", 50, 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 	// go createTestDono("Medium Bob", "XMR", "Hey it's medium Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 
 	err = http.ListenAndServe(":8900", nil)
@@ -535,6 +537,52 @@ func main() {
 		panic(err)
 	}
 
+}
+
+func startXMRWallets() [][]interface{} {
+	activeUsers, err := getActiveXMRUsers(db)
+	if err != nil {
+		fmt.Printf("Error getting active XMR users: %v\n", err)
+		return nil
+	}
+	starting_port := 28088
+	var xmrWallets [][]interface{}
+	for _, user := range activeUsers {
+		xmrWallet, userID := startMoneroWallet(starting_port, user.UserID)
+		if xmrWallet != nil {
+			xmrWallets = append(xmrWallets, []interface{}{xmrWallet, userID})
+		}
+		starting_port++
+	}
+	return xmrWallets
+}
+
+func getActiveXMRUsers(db *sql.DB) ([]*User, error) {
+	var users []*User
+
+	// Define the query to select the active XMR users
+	query := `SELECT * FROM users WHERE wallet_uploaded = ?`
+
+	// Execute the query
+	rows, err := db.Query(query, true)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		var user User
+		err = rows.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress, &user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono, &user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &user.Links, &user.DonoGIF, &user.DonoSound, &user.AlertURL, &user.WalletUploaded, &user.DateEnabled)
+		if err != nil {
+			return nil, err
+		}
+
+		oneMonthAhead := user.DateEnabled.AddDate(0, 1, 0)
+		if oneMonthAhead.After(time.Now()) {
+			users = append(users, &user)
+		}
+
+	}
+	return users, nil
 }
 
 func getCryptoPrices() (CryptoPrice, error) {
@@ -624,7 +672,7 @@ func setServerVars() {
 	log.Println("ServerMinMediaDono:", ServerMinMediaDono)
 
 }
-func createTestDono(name string, curr string, message string, amount float64, usdAmount float64, media_url string) {
+func createTestDono(user_id int, name string, curr string, message string, amount float64, usdAmount float64, media_url string) {
 	valid, media_url_ := checkDonoForMediaUSDThreshold(media_url, usdAmount)
 
 	if valid == false {
@@ -634,7 +682,7 @@ func createTestDono(name string, curr string, message string, amount float64, us
 	log.Println("TESTING DONO IN FIVE SECONDS")
 	time.Sleep(5 * time.Second)
 	log.Println("TESTING DONO NOW")
-	err := createNewQueueEntry(db, "TestAddress", name, message, amount, curr, usdAmount, media_url_)
+	err := createNewQueueEntry(db, user_id, "TestAddress", name, message, amount, curr, usdAmount, media_url_)
 	if err != nil {
 		panic(err)
 	}
@@ -837,31 +885,18 @@ func createNewEthDono(name string, message string, mediaURL string, amountNeeded
 	return new_dono
 }
 
-func startMoneroWallet() {
+func startMoneroWallet(port_int, user_id int) (walletrpc.Client, int) {
 	//linux
-	cmd := exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", "28088", "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "monero/wallet", "--disable-rpc-login", "--password", "")
-
-	//windows
-	//cmd := exec.Command("monero/monero-wallet-rpc.exe", "--rpc-bind-port", "28088", "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "monero/wallet", "--disable-rpc-login", "--password", "")
-	// Capture the output of the command
-	output, err := cmd.CombinedOutput()
+	cmd := exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", strconv.Itoa(port_int), "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/"+strconv.Itoa(user_id)+"/monero/wallet", "--disable-rpc-login", "--password", "")
+	_, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("Error running command: %v\n", err)
-		return
+		return nil, -1
 	}
-
-	// Start a wallet client instance
-	clientXMR := walletrpc.New(walletrpc.Config{
-		Address: "http://127.0.0.1:28088/json_rpc",
+	xmrWallet := walletrpc.New(walletrpc.Config{
+		Address: "http://127.0.0.1:" + strconv.Itoa(port_int) + "/json_rpc",
 	})
-
-	// check wallet balance
-	balance, unlocked, err := clientXMR.GetBalance()
-
-	log.Println(walletrpc.XMRToDecimal(balance), unlocked, err)
-
-	// Print the output of the command
-	fmt.Println(string(output))
+	return xmrWallet, user_id
 }
 
 func stopMoneroWallet() {
@@ -888,7 +923,7 @@ func checkDonos() {
 		for _, dono := range fulfilledDonos {
 			fmt.Println(dono)
 
-			err := createNewQueueEntry(db, dono.Address, dono.Name, dono.Message, dono.AmountSent, dono.CurrencyType, dono.USDAmount, dono.MediaURL)
+			err := createNewQueueEntry(db, dono.UserID, dono.Address, dono.Name, dono.Message, dono.AmountSent, dono.CurrencyType, dono.USDAmount, dono.MediaURL)
 			if err != nil {
 				panic(err)
 			}
@@ -966,7 +1001,7 @@ func formatMediaURL(media_url string) string {
 	return embedLink
 }
 
-func createNewQueueEntry(db *sql.DB, address string, name string, message string, amount float64, currency string, dono_usd float64, media_url string) error {
+func createNewQueueEntry(db *sql.DB, user_id int, address string, name string, message string, amount float64, currency string, dono_usd float64, media_url string) error {
 
 	// Round the amount to 6 decimal places if it has more than 6 decimal places
 	if math.Abs(amount-math.Round(amount)) >= 0.000001 {
@@ -976,8 +1011,8 @@ func createNewQueueEntry(db *sql.DB, address string, name string, message string
 	embedLink := formatMediaURL(media_url)
 
 	_, err := db.Exec(`
-		INSERT INTO queue (name, message, amount, currency, usd_amount, media_url) VALUES (?, ?, ?, ?, ?, ?)
-	`, name, message, amount, currency, dono_usd, embedLink)
+		INSERT INTO queue (name, message, amount, currency, usd_amount, media_url, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, name, message, amount, currency, dono_usd, embedLink, user_id)
 	if err != nil {
 		return err
 	}
@@ -1473,7 +1508,6 @@ func displayNewDono(name string, amount float64, currency string) bool {
 
 func runDatabaseMigrations(db *sql.DB) error {
 	tables := []string{"queue", "donos"}
-
 	for _, table := range tables {
 		err := addColumnIfNotExist(db, table, "usd_amount", "FLOAT")
 		if err != nil {
@@ -1486,7 +1520,6 @@ func runDatabaseMigrations(db *sql.DB) error {
 		}
 	}
 	tables = []string{"users"}
-
 	for _, table := range tables {
 		err := addColumnIfNotExist(db, table, "links", "TEXT")
 		if err != nil {
@@ -1512,6 +1545,24 @@ func runDatabaseMigrations(db *sql.DB) error {
 		if err != nil {
 			return err
 		}
+
+		err = addColumnIfNotExist(db, "users", "date_enabled", "DATETIME")
+		if err != nil {
+			return err
+		}
+
+		err = addColumnIfNotExist(db, "users", "wallet_uploaded", "BOOLEAN")
+		if err != nil {
+			return err
+		}
+	}
+
+	tables = []string{"queue"}
+	for _, table := range tables {
+		err := addColumnIfNotExist(db, table, "user_id", "TEXT")
+		if err != nil {
+			return err
+		}
 	}
 
 	err := updateColumnAlertURLIfNull(db, "users", "alert_url")
@@ -1519,6 +1570,36 @@ func runDatabaseMigrations(db *sql.DB) error {
 		return err
 	}
 
+	err = updateColumnWalletUploadedIfNull(db, "users", "wallet_uploaded")
+	if err != nil {
+		return err
+	}
+
+	err = updateColumnDateEnabledIfNull(db, "users", "date_enabled")
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func updateColumnWalletUploadedIfNull(db *sql.DB, tableName, columnName string) error {
+	if checkDatabaseColumnExist(db, tableName, columnName) {
+		_, err := db.Exec(`UPDATE `+tableName+` SET `+columnName+` = ? WHERE `+columnName+` IS NULL`, "0")
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func updateColumnDateEnabledIfNull(db *sql.DB, tableName, columnName string) error {
+	if checkDatabaseColumnExist(db, tableName, columnName) {
+		_, err := db.Exec(`UPDATE `+tableName+` SET `+columnName+` = ? WHERE `+columnName+` IS NULL`, time.Now())
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -1826,6 +1907,12 @@ func createUser(user User) error {
 		return err
 	}
 
+	moneroDir := fmt.Sprintf("%s/monero", userDir)
+	err = os.MkdirAll(moneroDir, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
 	adminEthereumAddress = user.EthAddress
 	adminSolanaAddress = user.SolAddress
 	adminHexcoinAddress = user.HexcoinAddress
@@ -1907,7 +1994,7 @@ func getUserByUsername(username string) (User, error) {
 	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded)
 	if err != nil {
 		return User{}, err
 	}
@@ -2116,6 +2203,11 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println(obsData_.Message)
 	log.Println(obsData_.Needed)
 	log.Println(obsData_.Sent)
+	obsData_.URLdonobar = host + "/progressbar?value=" + user.AlertURL
+	obsData_.URLdisplay = host + "/alert?value=" + user.AlertURL
+	log.Println(obsData.URLdonobar)
+	log.Println(obsData.URLdisplay)
+
 	tmpl, err := template.ParseFiles("web/obs/settings.html")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
