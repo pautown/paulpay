@@ -68,6 +68,7 @@ var addressSliceSolana []AddressSolana
 var checked string = ""
 var killDono = 30.00 * time.Hour // hours it takes for a dono to be unfulfilled before it is no longer checked.
 var indexTemplate *template.Template
+var donationTemplate *template.Template
 var payTemplate *template.Template
 
 var alertTemplate *template.Template
@@ -90,12 +91,11 @@ var lamportFee = 1000000
 // Mainnet
 var c = client.NewClient(rpc.MainnetRPCEndpoint)
 
-// Devnet
 var adminSolanaAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
 var adminEthereumAddress = "adWqokePHcAbyF11TgfvvM1eKax3Kxtnn9sZVQh6fXo"
 var adminHexcoinAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
 
-//var c = client.NewClient(rpc.DevnetRPCEndpoint)
+var runningXMRWallets [][]interface{}
 
 type priceData struct {
 	Monero struct {
@@ -208,6 +208,7 @@ type indexDisplay struct {
 	MinAmnt      float64
 	Links        string
 	Checked      string
+	Username     string
 }
 
 type alertPageData struct {
@@ -421,6 +422,10 @@ func main() {
 		http.ServeFile(w, r, "web/xmr.png")
 	})
 
+	http.HandleFunc("/fcash.png", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/fcash.png")
+	})
+
 	http.HandleFunc("/loader.svg", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/loader.svg")
 	})
@@ -513,6 +518,7 @@ func main() {
 	obsData = getObsData(db, 1)
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
+	donationTemplate, _ = template.ParseFiles("web/donation.html")
 	footerTemplate, _ = template.ParseFiles("web/footer.html")
 	payTemplate, _ = template.ParseFiles("web/pay.html")
 	alertTemplate, _ = template.ParseFiles("web/alert.html")
@@ -554,6 +560,7 @@ func startXMRWallets() [][]interface{} {
 		}
 		starting_port++
 	}
+	runningXMRWallets = xmrWallets
 	return xmrWallets
 }
 
@@ -2019,6 +2026,43 @@ func getUserByUsername(username string) (User, error) {
 
 }
 
+// check a user by their ID
+func checkUserByID(id int) bool {
+	var user User
+	var links, donoGIF, donoSound, alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	row := db.QueryRow("SELECT * FROM users WHERE id=?", id)
+	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
+		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded)
+	if err == sql.ErrNoRows {
+		log.Println("checkUserByID(", id, "): User doesn't exist")
+		return false // user doesn't exist
+	} else if err != nil {
+		log.Println("checkUserByID(", id, ") Error:", err)
+		return false
+	}
+	return true // user exists
+
+}
+
+// check a user by their username and return a bool and the id
+func checkUserByUsername(username string) (bool, int) {
+	var user User
+	var links, donoGIF, donoSound, alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
+	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
+		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded)
+	if err == sql.ErrNoRows {
+		log.Println("checkUserByUsername(", username, "): User doesn't exist")
+		return false, 0 // user doesn't exist
+	} else if err != nil {
+		log.Println("checkUserByUsername(", username, ") Error:", err)
+		return false, 0
+	}
+	return true, user.UserID // user exists, return true and the user's ID
+}
+
 // get a user by their session token
 func getUserBySession(sessionToken string) (User, error) {
 	userID, ok := userSessions[sessionToken]
@@ -2526,47 +2570,66 @@ func getCurrentDateTime() string {
 	return now.Format("2006-01-02 15:04:05")
 }
 
-func indexHandler(w http.ResponseWriter, _ *http.Request) {
-	linksJSON, err := json.Marshal(json_links)
-	if err != nil {
-		fmt.Println(err)
+func indexHandler(w http.ResponseWriter, r *http.Request) {
+
+	// Ignore requests for the favicon
+	if r.URL.Path == "/favicon.ico" {
 		return
 	}
+	// Get the username from the URL path
+	username := r.URL.Path[1:]
+	log.Println("Username:", username)
+	if len(username) > 0 {
 
-	var links []Link
-	err = json.Unmarshal(linksJSON, &links)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+		linksJSON, err := json.Marshal(json_links)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 
-	i := indexDisplay{
-		MaxChar:      MessageMaxChar,
-		MinSolana:    minSolana,
-		MinEthereum:  minEthereum,
-		MinMonero:    minMonero,
-		MinHex:       minHex,
-		MinPolygon:   minPolygon,
-		MinBusd:      minBusd,
-		MinShib:      minShib,
-		MinPnk:       minPnk,
-		MinPaint:     minPaint,
-		SolPrice:     solToUsd,
-		ETHPrice:     ethToUsd,
-		XMRPrice:     xmrToUsd,
-		PolygonPrice: maticToUsd,
-		HexPrice:     hexToUsd,
-		BusdPrice:    busdToUsd,
-		ShibPrice:    shibToUsd,
-		PnkPrice:     pnkToUsd,
-		PaintPrice:   paintToUsd,
-		Checked:      checked,
-		Links:        string(linksJSON),
-	}
+		var links []Link
+		err = json.Unmarshal(linksJSON, &links)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 
-	err = indexTemplate.Execute(w, i)
-	if err != nil {
-		fmt.Println(err)
+		i := indexDisplay{
+			MaxChar:      MessageMaxChar,
+			MinSolana:    minSolana,
+			MinEthereum:  minEthereum,
+			MinMonero:    minMonero,
+			MinHex:       minHex,
+			MinPolygon:   minPolygon,
+			MinBusd:      minBusd,
+			MinShib:      minShib,
+			MinPnk:       minPnk,
+			MinPaint:     minPaint,
+			SolPrice:     solToUsd,
+			ETHPrice:     ethToUsd,
+			XMRPrice:     xmrToUsd,
+			PolygonPrice: maticToUsd,
+			HexPrice:     hexToUsd,
+			BusdPrice:    busdToUsd,
+			ShibPrice:    shibToUsd,
+			PnkPrice:     pnkToUsd,
+			PaintPrice:   paintToUsd,
+			Checked:      checked,
+			Links:        string(linksJSON),
+			Username:     username,
+		}
+
+		err = donationTemplate.Execute(w, i)
+		if err != nil {
+			fmt.Println(err)
+		}
+	} else {
+		// If no username is present in the URL path, serve the indexTemplate
+		err := indexTemplate.Execute(w, nil)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
@@ -2641,8 +2704,10 @@ func returnIPPenalty(ips []string, currentDonoIP string) float64 {
 }
 
 func paymentHandler(w http.ResponseWriter, r *http.Request) {
+	username := r.FormValue("username")
+	validUser, id := checkUserByUsername(username)
 
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodPost || !validUser {
 		// Redirect to the payment page if the request is not a POST request
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
@@ -2715,13 +2780,13 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	USDAmount := getUSDValue(amount, fCrypto)
 	if fCrypto == "XMR" {
-		handleMoneroPayment(w, &s, params, amount, encrypted_ip, showAmount, USDAmount)
+		handleMoneroPayment(w, &s, params, amount, encrypted_ip, showAmount, USDAmount, id)
 	} else if fCrypto == "SOL" {
-		handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media, encrypted_ip, USDAmount)
+		handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media, encrypted_ip, USDAmount, id)
 	} else {
 		s.Currency = fCrypto
 		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount, fCrypto)
-		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL, fCrypto, encrypted_ip, USDAmount)
+		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL, fCrypto, encrypted_ip, USDAmount, id)
 	}
 }
 
@@ -2777,7 +2842,7 @@ func ethToWei(ethStr string) *big.Int {
 	return weiValue
 }
 
-func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, fCrypto string, encrypted_ip string, USDAmount float64) {
+func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, fCrypto string, encrypted_ip string, USDAmount float64, userID int) {
 	address := adminEthereumAddress
 
 	decimals, _ := utils.GetCryptoDecimalsByCode(fCrypto)
@@ -2807,14 +2872,14 @@ func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, me
 	tmp, _ := qrcode.Encode(donationLink, qrcode.Low, 320)
 	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
 
-	s.DonationID = createNewDono(1, adminEthereumAddress, s.Name, s.Message, amount_, fCrypto, encrypted_ip, showAmount_, USDAmount, media_)
+	s.DonationID = createNewDono(userID, adminEthereumAddress, s.Name, s.Message, amount_, fCrypto, encrypted_ip, showAmount_, USDAmount, media_)
 	err := payTemplate.Execute(w, s)
 	if err != nil {
 		fmt.Println(err)
 	}
 }
 
-func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, encrypted_ip string, USDAmount float64) {
+func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, encrypted_ip string, USDAmount float64, userID int) {
 	var wallet_ = createWalletSolana(name_, message_, amount_, showAmount_)
 	// Get Solana address and desired balance from request
 	address := wallet_.KeyPublic
@@ -2841,7 +2906,7 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	tmp, _ := qrcode.Encode("solana:"+address+"?amount="+donoStr, qrcode.Low, 320)
 	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
 
-	s.DonationID = createNewDono(1, address, name_, message_, amount_, "SOL", encrypted_ip, showAmount_, USDAmount, media_)
+	s.DonationID = createNewDono(userID, address, name_, message_, amount_, "SOL", encrypted_ip, showAmount_, USDAmount, media_)
 
 	err := payTemplate.Execute(w, s)
 	if err != nil {
@@ -2849,7 +2914,7 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	}
 }
 
-func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values, amount float64, encrypted_ip string, showAmount bool, USDAmount float64) {
+func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values, amount float64, encrypted_ip string, showAmount bool, USDAmount float64, userID int) {
 	payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
 	req, err := http.NewRequest("POST", rpcURL, payload)
 	if err != nil {
@@ -2880,7 +2945,7 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", resp.Result.IntegratedAddress, s.Amount), qrcode.Low, 320)
 	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
 
-	s.DonationID = createNewDono(1, s.PayID, s.Name, s.Message, amount, "XMR", encrypted_ip, showAmount, USDAmount, s.Media)
+	s.DonationID = createNewDono(userID, s.PayID, s.Name, s.Message, amount, "XMR", encrypted_ip, showAmount, USDAmount, s.Media)
 
 	err = payTemplate.Execute(w, s)
 	if err != nil {

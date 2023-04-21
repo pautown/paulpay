@@ -208,6 +208,17 @@ small, ::placeholder {
   height: 35px;
 }
 
+.flexible-image {
+  transform: scale(0.6);
+}
+
+.centered-image {
+  display: block;
+  margin: auto;
+}
+
+
+
 .ticker {
   display: inline-block;
   white-space: nowrap;
