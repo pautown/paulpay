@@ -95,8 +95,6 @@ var adminSolanaAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
 var adminEthereumAddress = "adWqokePHcAbyF11TgfvvM1eKax3Kxtnn9sZVQh6fXo"
 var adminHexcoinAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
 
-var runningXMRWallets [][]interface{}
-
 type priceData struct {
 	Monero struct {
 		Usd float64 `json:"usd"`
@@ -153,6 +151,9 @@ type UserPageData struct {
 
 var ServerMinMediaDono = 5
 var ServerMediaEnabled = true
+
+var xmrWallets [][][]interface{}
+var globalUsers = map[int]User{}
 
 var db *sql.DB
 var userSessions = make(map[string]int)
@@ -387,10 +388,9 @@ func main() {
 		panic(err)
 	}
 
-	go startXMRWallets()
+	go startWallets()
 
 	time.Sleep(5 * time.Second)
-
 	log.Println("Starting server")
 
 	// create a RPC client for Solana
@@ -545,23 +545,121 @@ func main() {
 
 }
 
-func startXMRWallets() [][]interface{} {
-	activeUsers, err := getActiveXMRUsers(db)
+func startWallets() {
+	users, err := getAllUsers()
 	if err != nil {
-		fmt.Printf("Error getting active XMR users: %v\n", err)
-		return nil
+		log.Fatalf("startWallet() error:", err)
 	}
+
 	starting_port := 28088
-	var xmrWallets [][]interface{}
-	for _, user := range activeUsers {
-		xmrWallet, userID := startMoneroWallet(starting_port, user.UserID)
-		if xmrWallet != nil {
-			xmrWallets = append(xmrWallets, []interface{}{xmrWallet, userID})
+	for _, user := range users {
+		log.Println("Checking user:", user.Username, "User ID:", user.UserID)
+
+		if checkValidSubscription(user.DateEnabled) {
+			globalUsers[user.UserID] = user
+			log.Println("User valid", globalUsers[user.UserID].UserID, "User eth_address:", globalUsers[user.UserID].EthAddress)
+			if user.WalletUploaded {
+				log.Println("Monero wallet uploaded, starting server for XMR")
+				xmrWallet, userID, portID := startMoneroWallet(starting_port, user.UserID)
+				starting_port++
+				if xmrWallet != nil {
+					xmrWallets = append(xmrWallets, [][]interface{}{{xmrWallet, userID, portID}})
+				}
+			} else {
+				log.Println("Monero wallet not uploaded")
+			}
+		} else {
+			log.Println("User not valid")
 		}
-		starting_port++
 	}
-	runningXMRWallets = xmrWallets
-	return xmrWallets
+}
+
+func checkValidSubscription(DateEnabled time.Time) bool {
+	oneMonthAhead := DateEnabled.AddDate(0, 1, 0)
+	if oneMonthAhead.After(time.Now()) {
+		log.Println("User valid")
+		return true
+	}
+	log.Println("User not valid")
+	return false
+}
+
+func getAllUsers() ([]User, error) {
+	var users []User
+	rows, err := db.Query("SELECT * FROM users")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var user User
+		var links, donoGIF, donoSound, alertURL sql.NullString
+
+		err = rows.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
+			&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
+			&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound,
+			&alertURL, &user.DateEnabled, &user.WalletUploaded)
+
+		if err != nil {
+			return nil, err
+		}
+
+		user.Links = links.String
+		if !links.Valid {
+			user.Links = ""
+		}
+
+		user.DonoGIF = donoGIF.String
+		if !donoGIF.Valid {
+			user.DonoGIF = "default.gif"
+		}
+
+		user.DonoSound = donoSound.String
+		if !donoSound.Valid {
+			user.DonoSound = "default.mp3"
+		}
+
+		user.AlertURL = alertURL.String
+		if !alertURL.Valid {
+			user.AlertURL = utils.GenerateUniqueURL()
+		}
+
+		users = append(users, user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}
+
+func getActiveETHUsers(db *sql.DB) ([]*User, error) {
+	var users []*User
+
+	// Define the query to select the active ETH users
+	query := `SELECT * FROM users WHERE eth_address != ''`
+
+	// Execute the query
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		var user User
+		err = rows.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress, &user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono, &user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &user.Links, &user.DonoGIF, &user.DonoSound, &user.AlertURL, &user.WalletUploaded, &user.DateEnabled)
+		if err != nil {
+			return nil, err
+		}
+
+		oneMonthAhead := user.DateEnabled.AddDate(0, 1, 0)
+		if oneMonthAhead.After(time.Now()) {
+			users = append(users, &user)
+		}
+	}
+	return users, nil
 }
 
 func getActiveXMRUsers(db *sql.DB) ([]*User, error) {
@@ -892,18 +990,18 @@ func createNewEthDono(name string, message string, mediaURL string, amountNeeded
 	return new_dono
 }
 
-func startMoneroWallet(port_int, user_id int) (walletrpc.Client, int) {
+func startMoneroWallet(port_int, user_id int) (walletrpc.Client, int, int) {
 	//linux
 	cmd := exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", strconv.Itoa(port_int), "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/"+strconv.Itoa(user_id)+"/monero/wallet", "--disable-rpc-login", "--password", "")
 	_, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("Error running command: %v\n", err)
-		return nil, -1
+		return nil, -1, -1
 	}
 	xmrWallet := walletrpc.New(walletrpc.Config{
 		Address: "http://127.0.0.1:" + strconv.Itoa(port_int) + "/json_rpc",
 	})
-	return xmrWallet, user_id
+	return xmrWallet, user_id, port_int
 }
 
 func stopMoneroWallet() {
@@ -1715,7 +1813,14 @@ func createDatabaseIfNotExists(db *sql.DB) error {
             min_media_threshold FLOAT,
             media_enabled BOOL,
             created_at DATETIME,
-            modified_at DATETIME
+            modified_at DATETIME,
+            links TEXT,
+            dono_gif TEXT,
+            dono_sound TEXT,
+            alert_url TEXT,
+            date_enabled DATETIME,
+            wallet_uploaded BOOL
+
         )
     `)
 
@@ -1746,6 +1851,13 @@ func createDatabaseIfNotExists(db *sql.DB) error {
 		}
 	}
 
+	createAdminUser()
+
+	return nil
+}
+
+func createAdminUser() {
+
 	// create admin user if not exists
 	adminUser := User{
 		Username:          "admin",
@@ -1765,13 +1877,11 @@ func createDatabaseIfNotExists(db *sql.DB) error {
 	adminUser.HashedPassword = adminHashedPassword
 	adminUser.DonoGIF = "default.gif"
 	adminUser.DonoSound = "default.mp3"
+	adminUser.Links = ""
+	adminUser.AlertURL = utils.GenerateUniqueURL()
+	adminUser.WalletUploaded = false
 
-	err = createUser(adminUser)
-	if err != nil {
-		log.Println(err)
-	}
-
-	return nil
+	createNewUser("admin", adminUser.HashedPassword)
 }
 
 func createObsTable(db *sql.DB) error {
@@ -1842,6 +1952,7 @@ func getObsData(db *sql.DB, userId int) obsDataStruct {
 }
 
 func createNewUser(username string, hashedPassword []byte) {
+	log.Println("running createNewUser")
 	// create admin user if not exists
 	adminUser := User{
 		Username:          username,
@@ -1856,11 +1967,16 @@ func createNewUser(username string, hashedPassword []byte) {
 		DonoGIF:           "default.gif",
 		DonoSound:         "default.mp3",
 		AlertURL:          utils.GenerateUniqueURL(),
+		WalletUploaded:    false,
+		Links:             "",
+		DateEnabled:       time.Now(),
 	}
 	createUser(adminUser)
+	log.Println("finished createNewUser")
 }
 
 func createUser(user User) error {
+	log.Println("running CreateUser")
 	// Insert the user's data into the database
 	_, err := db.Exec(`
         INSERT INTO users (
@@ -1878,19 +1994,23 @@ func createUser(user User) error {
             links,
             dono_gif,
             dono_sound,
-            alert_url
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now(), time.Now(), "", user.DonoGIF, user.DonoSound, user.AlertURL)
+            alert_url,
+            date_enabled,
+            wallet_uploaded
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now(), time.Now(), "", user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, 0)
 
 	if err != nil {
+		log.Println(err)
 		return err
 	}
 
 	// Get the ID of the newly created user
-	row := db.QueryRow(`SELECT LAST_INSERT_ID()`)
+	row := db.QueryRow(`SELECT last_insert_rowid()`)
 	var userID int
 	err = row.Scan(&userID)
 	if err != nil {
+		log.Println(err)
 		return err
 	}
 
@@ -1898,33 +2018,33 @@ func createUser(user User) error {
 	userDir := fmt.Sprintf("users/%d", userID)
 	err = os.MkdirAll(userDir, os.ModePerm)
 	if err != nil {
-		return err
+		log.Println(err)
 	}
 
 	// Create "gifs" and "sounds" subfolders inside the user's directory
 	gifsDir := fmt.Sprintf("%s/gifs", userDir)
 	err = os.MkdirAll(gifsDir, os.ModePerm)
 	if err != nil {
-		return err
+		log.Println(err)
 	}
 
 	soundsDir := fmt.Sprintf("%s/sounds", userDir)
 	err = os.MkdirAll(soundsDir, os.ModePerm)
 	if err != nil {
-		return err
+		log.Println(err)
 	}
 
 	moneroDir := fmt.Sprintf("%s/monero", userDir)
 	err = os.MkdirAll(moneroDir, os.ModePerm)
 	if err != nil {
-		return err
+		log.Println(err)
 	}
 
 	adminEthereumAddress = user.EthAddress
 	adminSolanaAddress = user.SolAddress
 	adminHexcoinAddress = user.HexcoinAddress
 	minDonoValue = float64(user.MinDono)
-
+	log.Println("finished createNewUser")
 	return nil
 }
 
@@ -1951,7 +2071,7 @@ func getUserByAlertURL(AlertURL string) (User, error) {
 	row := db.QueryRow("SELECT * FROM users WHERE alert_url=?", AlertURL)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded)
 	if err != nil {
 		return User{}, err
 	}
@@ -2074,7 +2194,7 @@ func getUserBySession(sessionToken string) (User, error) {
 	row := db.QueryRow("SELECT * FROM users WHERE id=?", userID)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded)
 	if err != nil {
 		return User{}, err
 	}
@@ -2673,6 +2793,7 @@ func checkDonoQueue(db *sql.DB, userID int) (bool, error) {
 
 	return true, nil
 }
+
 func getRefreshFromUSDAmount(x float64, s string) int {
 	if s == "" {
 		return 10
@@ -2687,6 +2808,7 @@ func getRefreshFromUSDAmount(x float64, s string) int {
 	}
 	return 10
 }
+
 func returnIPPenalty(ips []string, currentDonoIP string) float64 {
 	// Check if the encrypted IP matches any of the encrypted IPs in the slice of donos
 	sameIPCount := 0
@@ -2725,6 +2847,9 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	fShowAmount := r.FormValue("showAmount")
 	encrypted_ip := encryptIP(ip)
 
+	if fAmount == "" {
+		fAmount = "0"
+	}
 	amount, err := strconv.ParseFloat(fAmount, 64)
 	if err != nil {
 		log.Println(err)
@@ -2842,8 +2967,17 @@ func ethToWei(ethStr string) *big.Int {
 	return weiValue
 }
 
+func getEthAddressByID(userID int) string {
+	if user, ok := globalUsers[userID]; ok {
+		log.Println("Got userID:", userID, "Returned:", user.EthAddress)
+		return user.EthAddress
+	}
+	log.Println("Got userID:", userID, "No user found")
+	return ""
+}
+
 func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, fCrypto string, encrypted_ip string, USDAmount float64, userID int) {
-	address := adminEthereumAddress
+	address := getEthAddressByID(userID)
 
 	decimals, _ := utils.GetCryptoDecimalsByCode(fCrypto)
 	donoStr := fmt.Sprintf("%.*f", decimals, amount_)
