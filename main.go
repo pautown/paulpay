@@ -22,6 +22,7 @@ import (
 	qrcode "github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/bcrypt"
 	"html"
+	"io"
 	"io/ioutil"
 	"log"
 	"math"
@@ -30,6 +31,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"shadowchat/utils"
@@ -39,6 +41,8 @@ import (
 	"text/template"
 	"time"
 	"unicode/utf8"
+
+	"mime/multipart"
 )
 
 const username = "admin"
@@ -152,7 +156,8 @@ type UserPageData struct {
 var ServerMinMediaDono = 5
 var ServerMediaEnabled = true
 
-var xmrWallets [][][]interface{}
+var xmrWallets = [][]int{}
+
 var globalUsers = map[int]User{}
 
 var db *sql.DB
@@ -514,6 +519,7 @@ func main() {
 	http.HandleFunc("/logout", logoutHandler)
 	http.HandleFunc("/changepassword", changePasswordHandler)
 	http.HandleFunc("/changeuser", changeUserHandler)
+	http.HandleFunc("/changeusermonero", changeUserMoneroHandler)
 
 	obsData = getObsData(db, 1)
 
@@ -546,6 +552,7 @@ func main() {
 }
 
 func startWallets() {
+	printUserColumns()
 	users, err := getAllUsers()
 	if err != nil {
 		log.Fatalf("startWallet() error:", err)
@@ -554,33 +561,32 @@ func startWallets() {
 	starting_port := 28088
 	for _, user := range users {
 		log.Println("Checking user:", user.Username, "User ID:", user.UserID)
-
 		if checkValidSubscription(user.DateEnabled) {
 			globalUsers[user.UserID] = user
 			log.Println("User valid", globalUsers[user.UserID].UserID, "User eth_address:", globalUsers[user.UserID].EthAddress)
 			if user.WalletUploaded {
-				log.Println("Monero wallet uploaded, starting server for XMR")
-				xmrWallet, userID, portID := startMoneroWallet(starting_port, user.UserID)
-				starting_port++
-				if xmrWallet != nil {
-					xmrWallets = append(xmrWallets, [][]interface{}{{xmrWallet, userID, portID}})
-				}
+				go func() {
+					xmrWallets = append(xmrWallets, []int{user.UserID, starting_port})
+					startMoneroWallet(starting_port, user.UserID)
+					starting_port++
+				}()
+
 			} else {
 				log.Println("Monero wallet not uploaded")
 			}
 		} else {
-			log.Println("User not valid")
+			log.Println("startWallets() User not valid")
 		}
 	}
 }
 
 func checkValidSubscription(DateEnabled time.Time) bool {
 	oneMonthAhead := DateEnabled.AddDate(0, 1, 0)
-	if oneMonthAhead.After(time.Now()) {
+	if oneMonthAhead.After(time.Now().UTC()) {
 		log.Println("User valid")
 		return true
 	}
-	log.Println("User not valid")
+	log.Println("checkValidSubscription() User not valid")
 	return false
 }
 
@@ -655,7 +661,7 @@ func getActiveETHUsers(db *sql.DB) ([]*User, error) {
 		}
 
 		oneMonthAhead := user.DateEnabled.AddDate(0, 1, 0)
-		if oneMonthAhead.After(time.Now()) {
+		if oneMonthAhead.After(time.Now().UTC()) {
 			users = append(users, &user)
 		}
 	}
@@ -682,7 +688,7 @@ func getActiveXMRUsers(db *sql.DB) ([]*User, error) {
 		}
 
 		oneMonthAhead := user.DateEnabled.AddDate(0, 1, 0)
-		if oneMonthAhead.After(time.Now()) {
+		if oneMonthAhead.After(time.Now().UTC()) {
 			users = append(users, &user)
 		}
 
@@ -990,18 +996,15 @@ func createNewEthDono(name string, message string, mediaURL string, amountNeeded
 	return new_dono
 }
 
-func startMoneroWallet(port_int, user_id int) (walletrpc.Client, int, int) {
-	//linux
-	cmd := exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", strconv.Itoa(port_int), "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/"+strconv.Itoa(user_id)+"/monero/wallet", "--disable-rpc-login", "--password", "")
+func startMoneroWallet(port_int, user_id int) {
+	cmd := exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", strconv.Itoa(port_int), "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/1/monero/wallet", "--disable-rpc-login", "--password", "")
 	_, err := cmd.CombinedOutput()
 	if err != nil {
-		fmt.Printf("Error running command: %v\n", err)
-		return nil, -1, -1
+		log.Println("Error running command:", err)
 	}
-	xmrWallet := walletrpc.New(walletrpc.Config{
+	_ = walletrpc.New(walletrpc.Config{
 		Address: "http://127.0.0.1:" + strconv.Itoa(port_int) + "/json_rpc",
 	})
-	return xmrWallet, user_id, port_int
 }
 
 func stopMoneroWallet() {
@@ -1435,7 +1438,7 @@ func checkUnfulfilledDonos() []Dono {
 	i := 0
 	// Update rows to be update in a way that never throws a database locked error
 	for _, rowID := range rowsToUpdate {
-		_, err = db.Exec(`UPDATE donos SET updated_at = ?, fulfilled = ?, amount_sent = ?, amount_to_send = ? WHERE dono_id = ?`, time.Now(), fulfilledSlice[i], amountSlice[i], amountUSDSlice[i], rowID)
+		_, err = db.Exec(`UPDATE donos SET updated_at = ?, fulfilled = ?, amount_sent = ?, amount_to_send = ? WHERE dono_id = ?`, time.Now().UTC(), fulfilledSlice[i], amountSlice[i], amountUSDSlice[i], rowID)
 		if err != nil {
 			panic(err)
 		}
@@ -1700,7 +1703,7 @@ func updateColumnWalletUploadedIfNull(db *sql.DB, tableName, columnName string) 
 
 func updateColumnDateEnabledIfNull(db *sql.DB, tableName, columnName string) error {
 	if checkDatabaseColumnExist(db, tableName, columnName) {
-		_, err := db.Exec(`UPDATE `+tableName+` SET `+columnName+` = ? WHERE `+columnName+` IS NULL`, time.Now())
+		_, err := db.Exec(`UPDATE `+tableName+` SET `+columnName+` = ? WHERE `+columnName+` IS NULL`, time.Now().UTC())
 		if err != nil {
 			return err
 		}
@@ -1969,7 +1972,7 @@ func createNewUser(username string, hashedPassword []byte) {
 		AlertURL:          utils.GenerateUniqueURL(),
 		WalletUploaded:    false,
 		Links:             "",
-		DateEnabled:       time.Now(),
+		DateEnabled:       time.Now().UTC(),
 	}
 	createUser(adminUser)
 	log.Println("finished createNewUser")
@@ -1998,7 +2001,7 @@ func createUser(user User) error {
             date_enabled,
             wallet_uploaded
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now(), time.Now(), "", user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, 0)
+    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now().UTC(), time.Now(), "", user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, 0)
 
 	if err != nil {
 		log.Println(err)
@@ -2053,12 +2056,12 @@ func updateUser(user User) error {
 	statement := `
 		UPDATE users
 		SET Username=?, HashedPassword=?, eth_address=?, sol_address=?, hex_address=?,
-			xmr_wallet_password=?, min_donation_threshold=?, min_media_threshold=?, media_enabled=?, modified_at=datetime('now'), links=?, dono_gif=?, dono_sound=?, alert_url=?
+			xmr_wallet_password=?, min_donation_threshold=?, min_media_threshold=?, media_enabled=?, modified_at=?, links=?, dono_gif=?, dono_sound=?, alert_url=?, date_enabled=?, wallet_uploaded=?
 		WHERE id=?
 	`
 	_, err := db.Exec(statement, user.Username, user.HashedPassword, user.EthAddress,
 		user.SolAddress, user.HexcoinAddress, user.XMRWalletPassword, user.MinDono, user.MinMediaDono,
-		user.MediaEnabled, []byte(user.Links), user.DonoGIF, user.DonoSound, user.UserID, user.AlertURL) // convert user.Links to []byte
+		user.MediaEnabled, time.Now().UTC(), []byte(user.Links), user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, user.WalletUploaded, user.UserID) // convert user.Links to []byte
 	if err != nil {
 		log.Fatalf("failed, err: %v", err)
 	}
@@ -2165,8 +2168,27 @@ func checkUserByID(id int) bool {
 
 }
 
+func printUserColumns() error {
+	rows, err := db.Query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'users';`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var column string
+	for rows.Next() {
+		err = rows.Scan(&column)
+		if err != nil {
+			return err
+		}
+		fmt.Println(column)
+	}
+	return rows.Err()
+}
+
 // check a user by their username and return a bool and the id
 func checkUserByUsername(username string) (bool, int) {
+	printUserColumns()
 	var user User
 	var links, donoGIF, donoSound, alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
@@ -2499,6 +2521,81 @@ func changePasswordHandler(w http.ResponseWriter, r *http.Request) {
 	tmpl.Execute(w, data)
 }
 
+func changeUserMoneroHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Starting change user handler function")
+	// retrieve user from session
+	sessionToken, err := r.Cookie("session_token")
+	if err != nil {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	user, err := getUserBySession(sessionToken.Value)
+	if err != nil {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	// initialize user page data struct
+	data := UserPageData{}
+
+	// process form submission
+	if r.Method == "POST" {
+		err := r.ParseForm()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		user.WalletUploaded = true
+
+		// Get the uploaded monero wallet file and save it to disk
+		moneroDir := fmt.Sprintf("users/%d/monero", user.UserID)
+		file, header, err := r.FormFile("moneroWallet")
+		if err == nil {
+			defer file.Close()
+			walletPath := filepath.Join(moneroDir, "wallet")
+			err = saveFileToDisk(file, header, walletPath)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				user.WalletUploaded = false
+				return
+			}
+
+		}
+
+		// Get the uploaded monero wallet keys file and save it to disk
+		file, header, err = r.FormFile("moneroWalletKeys")
+		if err == nil {
+			defer file.Close()
+			walletKeyPath := filepath.Join(moneroDir, "wallet.keys")
+			err = saveFileToDisk(file, header, walletKeyPath)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				user.WalletUploaded = false
+				return
+			}
+		}
+
+		// Update the user with the new data
+		err = updateUser(user)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Redirect to the user page
+		http.Redirect(w, r, "/user", http.StatusSeeOther)
+		return
+	}
+
+	// render change password form
+	tmpl, err := template.ParseFiles("web/user.html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	tmpl.Execute(w, data)
+}
+
 func changeUserHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Starting change user handler function")
 	// retrieve user from session
@@ -2518,6 +2615,12 @@ func changeUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	// process form submission
 	if r.Method == "POST" {
+		err := r.ParseForm()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		user.EthAddress = r.FormValue("ethereumAddress")
 		adminEthereumAddress = user.EthAddress
 		user.SolAddress = r.FormValue("solanaAddress")
@@ -2527,17 +2630,16 @@ func changeUserHandler(w http.ResponseWriter, r *http.Request) {
 		minDono, _ := strconv.Atoi(r.FormValue("minUsdAmount"))
 		user.MinDono = minDono
 		minDonoValue = float64(minDono)
-		log.Println("Begin write to user")
-		err = updateUser(user)
 
+		// Update the user with the new data
+		err = updateUser(user)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		log.Println("wrote to user")
-		// redirect to user page
+
+		// Redirect to the user page
 		http.Redirect(w, r, "/user", http.StatusSeeOther)
-		log.Println("redirect to user")
 		return
 	}
 
@@ -2548,6 +2650,21 @@ func changeUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tmpl.Execute(w, data)
+}
+
+func saveFileToDisk(file multipart.File, header *multipart.FileHeader, path string) error {
+	out, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, file)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func renderChangePasswordForm(w http.ResponseWriter, data UserPageData) {
@@ -2683,11 +2800,6 @@ func progressbarOBSHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Println(err)
 	}
-}
-
-func getCurrentDateTime() string {
-	now := time.Now()
-	return now.Format("2006-01-02 15:04:05")
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -2976,6 +3088,15 @@ func getEthAddressByID(userID int) string {
 	return ""
 }
 
+func getPortID(xmrWallets [][]int, userID int) int {
+	for _, innerList := range xmrWallets {
+		if innerList[0] == userID {
+			return innerList[1]
+		}
+	}
+	return -100
+}
+
 func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, fCrypto string, encrypted_ip string, USDAmount float64, userID int) {
 	address := getEthAddressByID(userID)
 
@@ -3050,7 +3171,21 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 
 func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values, amount float64, encrypted_ip string, showAmount bool, USDAmount float64, userID int) {
 	payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
-	req, err := http.NewRequest("POST", rpcURL, payload)
+
+	portID := getPortID(xmrWallets, userID)
+	found := true
+	if portID == -100 {
+		found = false
+	}
+
+	if found {
+		fmt.Println("Port ID for user", userID, "is", portID)
+	} else {
+		fmt.Println("Port ID not found for user", userID)
+	}
+	rpcURL_ := "http://127.0.0.1:" + strconv.Itoa(portID) + "/json_rpc"
+
+	req, err := http.NewRequest("POST", rpcURL_, payload)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Println("ERROR CREATING")

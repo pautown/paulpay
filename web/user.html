@@ -72,21 +72,37 @@ window.onload = function() {
 
   <br><br>
   <h2>Wallets:</h2>
+  
   <form method="POST" action="/changeuser">
-  <label for="ethereumAddress">Ethereum Address:</label>
-  <input type="text" id="ethereumAddress" name="ethereumAddress" placeholder="{{.EthAddress}}" value="{{.EthAddress}}">
-  <label for="solanaAddress">Solana Address:</label>
-  <input type="text" id="solanaAddress" name="solanaAddress" placeholder="{{.SolAddress}}" value="{{.SolAddress}}">
+    <label for="ethereumAddress">Ethereum Address:</label>
+    <input type="text" id="ethereumAddress" name="ethereumAddress" placeholder="{{.EthAddress}}" value="{{.EthAddress}}">
+    <label for="solanaAddress">Solana Address:</label>
+    <input type="text" id="solanaAddress" name="solanaAddress" placeholder="{{.SolAddress}}" value="{{.SolAddress}}">
+
+    <br>
+
+    <submit>Minimum Donation Amount (USD)</submit>
+    <submit><input type="number" id="minUsdAmount" name="minUsdAmount" min="1"  value="{{.MinDono}}"></submit>
+
+    <input type="submit" value="Update User" id="update-profile">
+
+  </form>
+    <hr>
+ <br>
+ <br>
+ <br>
+
+  <form method="POST" action="/changeusermonero"enctype="multipart/form-data">
   <label for="moneroWallet">View-Only Monero Wallet:</label>
   <input type="file" id="moneroWallet" name="moneroWallet">
-
   <label for="moneroWallet">View-Only Monero Wallet Keys:</label>
   <input type="file" id="moneroWalletKeys" name="moneroWalletKeys" accept=".keys">
+  <input type="submit" value="Update User Wallets" id="update-profile">
   <hr>
   <br>
+  <br>
+  <br>
   
- <submit>Minimum Donation Amount (USD)</submit>
-<submit><input type="number" id="minUsdAmount" name="minUsdAmount" min="1"  value="{{.MinDono}}"></submit>
   
   
   
@@ -95,7 +111,7 @@ window.onload = function() {
    
   <button type="button" id="toggle-media-donos" onclick="toggleDonos()">Turn Media Donations  {{ if .MediaEnabled }}OFF{{ else }} ON{{ end }}</button>
    
-    <input type="submit" value="Update User" id="update-profile">
+    <input type="submit" value="Update User Dono Limits" id="update-profile">
   </form>
   
   <hr>
