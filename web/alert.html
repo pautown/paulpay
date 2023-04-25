@@ -116,6 +116,10 @@
     98% {opacity:0;}
   }
 
+  .hidden {
+    display: none;
+  }
+
 </style>
 
 </head>
@@ -125,6 +129,12 @@
         <div id="center1" style="display: flex; justify-content: center; align-items: center;">
           <br>
           <small><img src="{{.Userpath}}/gifs/default.gif"></small>
+          {{if eq .DisplayToggle "display: none;"}}
+          {{else}}
+          <audio class="hidden" controls autoplay>
+            <source src="{{.Userpath}}/sounds/default.mp3" type="audio/mpeg">
+          </audio>
+          {{end}}
           <beginquote>
             <b style="margin-right: 10px">{{.Name}} </b> sent <b style="margin-left: 10px">{{.Amount}}{{.Currency}}</b>
           </beginquote>

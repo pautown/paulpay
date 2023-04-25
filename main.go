@@ -2766,12 +2766,51 @@ func getUserPathByID(id int) string {
 	return fmt.Sprintf("users/%d/", id)
 }
 
+func checkFileExists(filePath string) bool {
+	_, err := os.Stat(filePath)
+	if err == nil {
+		// File exists
+		return true
+	} else {
+		return false
+	}
+
+}
+
+func checkUserGIF(userpath string) bool {
+	up := userpath + "gifs/default.gif"
+	log.Println("checking", up)
+	b := checkFileExists(up)
+	if b {
+		log.Println("user gif exists")
+	} else {
+		log.Println("user gif doesn't exist")
+	}
+	return b
+}
+
+func checkUserSound(userpath string) bool {
+	up := userpath + "sounds/default.mp3"
+	log.Println("checking", up)
+	b := checkFileExists(up)
+	if b {
+		log.Println("user sound exists")
+	} else {
+		log.Println("user sound doesn't exist")
+	}
+	return b
+}
+
 func alertOBSHandler(w http.ResponseWriter, r *http.Request) {
 	value := r.URL.Query().Get("value")
 	user, _ := getUserByAlertURL(value)
 
 	newDono, err := checkDonoQueue(db, user.UserID)
 	a.Userpath = getUserPathByID(user.UserID)
+
+	if !checkUserGIF(a.Userpath) || !checkUserSound(a.Userpath) { // check if user has uploaded custom gif/sounds for alert
+		a.Userpath = "media/"
+	}
 
 	if err != nil {
 		log.Printf("Error checking donation queue: %v\n", err)
