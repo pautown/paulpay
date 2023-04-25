@@ -2818,6 +2818,7 @@ func alertOBSHandler(w http.ResponseWriter, r *http.Request) {
 
 	if newDono {
 		fmt.Println("Showing NEW DONO!")
+		a.DisplayToggle = ""
 	} else {
 		a.MediaURL = ""
 		a.DisplayToggle = "display: none;"
