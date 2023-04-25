@@ -226,6 +226,7 @@ type alertPageData struct {
 	USDAmount     float64
 	Refresh       int
 	DisplayToggle string
+	Userpath      string
 }
 
 type progressbarData struct {
@@ -2336,7 +2337,7 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			if err = os.WriteFile(userDir+"/gifs/"+fileNameGIF, fileBytesGIF, 0644); err != nil {
+			if err = os.WriteFile(userDir+"/gifs/default.gif", fileBytesGIF, 0644); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -2352,7 +2353,7 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			if err = os.WriteFile(userDir+"/sounds/"+fileNameMP3, fileBytesMP3, 0644); err != nil {
+			if err = os.WriteFile(userDir+"/sounds/default.mp3", fileBytesMP3, 0644); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -2761,11 +2762,16 @@ func reverse(ss []string) {
 	}
 }
 
+func getUserPathByID(id int) string {
+	return fmt.Sprintf("users/%d/", id)
+}
+
 func alertOBSHandler(w http.ResponseWriter, r *http.Request) {
 	value := r.URL.Query().Get("value")
 	user, _ := getUserByAlertURL(value)
 
 	newDono, err := checkDonoQueue(db, user.UserID)
+	a.Userpath = getUserPathByID(user.UserID)
 
 	if err != nil {
 		log.Printf("Error checking donation queue: %v\n", err)
