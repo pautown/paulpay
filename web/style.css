@@ -6,6 +6,17 @@ body {
     margin: 0 auto;
     padding-right: 20px;
     font-family: Arial, serif;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; /* Added to make footer stick to bottom */
+}
+
+.content {
+    flex: 1; /* Added to make content div take up remaining space */
+}
+
+footer {
+    margin-top: auto; /* Added to push footer to the bottom */
 }
 
 button, input, textarea {
@@ -248,6 +259,14 @@ small, ::placeholder {
   }
 }
 
+.icon {
+    background-image: url('fcash.png'); 
+    display: block;
+    width: 32px;
+    height: 32px;
+}
+
+
 
 label {
     -moz-user-select: none;
@@ -317,4 +336,22 @@ a {
   width: 60px;
   margin-left: 5px;
   margin-right: 5px;
+}
+
+.footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: #262b3b;
+  color: white;
+  padding: 10px;
+  text-align: center;
+  font-size: 14px;
+}
+
+hr {
+    border: 1px solid white; /* Add a border for a visible line */
+    height: 0; /* Set height to 0 to remove unnecessary space */
+    margin: 1em 0;
 }

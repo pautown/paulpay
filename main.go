@@ -371,7 +371,6 @@ func donationsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-
 	var err error
 
 	// Open a new database connection
@@ -429,6 +428,10 @@ func main() {
 
 	http.HandleFunc("/fcash.png", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/fcash.png")
+	})
+
+	http.HandleFunc("/indexfcash.png", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/indexfcash.png")
 	})
 
 	http.HandleFunc("/loader.svg", func(w http.ResponseWriter, r *http.Request) {
@@ -565,6 +568,7 @@ func startWallets() {
 			globalUsers[user.UserID] = user
 			log.Println("User valid", globalUsers[user.UserID].UserID, "User eth_address:", globalUsers[user.UserID].EthAddress)
 			if user.WalletUploaded {
+				log.Println("Monero wallet uploaded")
 				go func() {
 					xmrWallets = append(xmrWallets, []int{user.UserID, starting_port})
 					startMoneroWallet(starting_port, user.UserID)
@@ -798,7 +802,7 @@ func createTestDono(user_id int, name string, curr string, message string, amoun
 		panic(err)
 	}
 
-	addDonoToDonoBar(amount, curr)
+	addDonoToDonoBar(amount, curr, user_id)
 }
 
 // extractVideoID extracts the video ID from a YouTube URL
@@ -1075,8 +1079,12 @@ func getUSDValue(as float64, c string) float64 {
 	return usdVal
 }
 
-func addDonoToDonoBar(as float64, c string) float64 {
+func addDonoToDonoBar(as float64, c string, userID int) float64 {
 	usdVal := getUSDValue(as, c)
+	obsData, err := getOBSDataByUserID(userID)
+	pb.Sent = obsData.Sent
+	pb.Needed = obsData.Needed
+	pb.Message = obsData.Message
 	pb.Sent += usdVal
 
 	sent, err := strconv.ParseFloat(fmt.Sprintf("%.2f", pb.Sent), 64)
@@ -1088,7 +1096,7 @@ func addDonoToDonoBar(as float64, c string) float64 {
 
 	amountSent = pb.Sent
 
-	err = updateObsData(db, 1, 1, obsData.FilenameGIF, obsData.FilenameMP3, "alice", pb)
+	err = updateObsData(db, userID, obsData.FilenameGIF, obsData.FilenameMP3, "alice", pb)
 
 	if err != nil {
 		log.Println("Error: ", err)
@@ -1347,7 +1355,7 @@ func checkUnfulfilledDonos() []Dono {
 				if utils.IsEqual(tA, dono.AmountToSend) && tN == dono.CurrencyType {
 					fmt.Println(dono.CurrencyType, "dono completed:", tmpAmountSent)
 					dono.AmountSent = tA
-					dono.AmountToSend = addDonoToDonoBar(dono.AmountSent, dono.CurrencyType) // change Amount To Send to USD value of sent
+					dono.AmountToSend = addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
 					dono.Fulfilled = true
 					// add true to fulfilledSlice
 					fulfilledDonos = append(fulfilledDonos, dono)
@@ -1414,7 +1422,7 @@ func checkUnfulfilledDonos() []Dono {
 				wallet, _ := ReadAddress(dono.Address)
 				SendSolana(wallet.KeyPublic, wallet.KeyPrivate, adminSolanaAddress, dono.AmountSent, dono.CurrencyType)
 			}
-			dono.AmountToSend = addDonoToDonoBar(dono.AmountSent, dono.CurrencyType) // change Amount To Send to USD value of sent
+			dono.AmountToSend = addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
 
 			dono.Fulfilled = true
 			// add true to fulfilledSlice
@@ -1836,55 +1844,29 @@ func createDatabaseIfNotExists(db *sql.DB) error {
 		log.Fatal(err)
 	}
 
-	emptyTable, err := checkObsData(db)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if emptyTable {
-		pbData := progressbarData{
-			Message: "test message",
-			Needed:  100.0,
-			Sent:    50.0,
-			Refresh: 5,
-		}
-		err = insertObsData(db, 1, "test.gif", "test.mp3", "test_voice", pbData)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
 	createAdminUser()
+	createNewUser("paul", "hunter")
 
 	return nil
 }
 
-func createAdminUser() {
-
-	// create admin user if not exists
-	adminUser := User{
-		Username:          "admin",
-		EthAddress:        "0x5b5856dA280e592e166A1634d353A53224ed409c",
-		SolAddress:        "adWqokePHcAbyF11TgfvvM1eKax3Kxtnn9sZVQh6fXo",
-		HexcoinAddress:    "0x5b5856dA280e592e166A1634d353A53224ed409c",
-		XMRWalletPassword: "",
-		MinDono:           3,
-		MinMediaDono:      5,
-		MediaEnabled:      true,
+func createNewOBS(db *sql.DB, userID int, message string, needed, sent float64, refresh int, gifFile, soundFile, ttsVoice string) {
+	pbData := progressbarData{
+		Message: message,
+		Needed:  needed,
+		Sent:    sent,
+		Refresh: refresh,
 	}
-
-	adminHashedPassword, err := bcrypt.GenerateFromPassword([]byte("hunter123"), bcrypt.DefaultCost)
+	err := insertObsData(db, userID, gifFile, soundFile, ttsVoice, pbData)
 	if err != nil {
 		log.Fatal(err)
 	}
-	adminUser.HashedPassword = adminHashedPassword
-	adminUser.DonoGIF = "default.gif"
-	adminUser.DonoSound = "default.mp3"
-	adminUser.Links = ""
-	adminUser.AlertURL = utils.GenerateUniqueURL()
-	adminUser.WalletUploaded = false
 
-	createNewUser("admin", adminUser.HashedPassword)
+}
+
+func createAdminUser() {
+
+	createNewUser("admin", "hunter123")
 }
 
 func createObsTable(db *sql.DB) error {
@@ -1927,7 +1909,7 @@ func checkObsData(db *sql.DB) (bool, error) {
 	return count == 0, nil
 }
 
-func updateObsData(db *sql.DB, obsId int, userId int, gifName string, mp3Name string, ttsVoice string, pbData progressbarData) error {
+func updateObsData(db *sql.DB, userID int, gifName string, mp3Name string, ttsVoice string, pbData progressbarData) error {
 
 	updateObsData := `
         UPDATE obs
@@ -1939,7 +1921,7 @@ func updateObsData(db *sql.DB, obsId int, userId int, gifName string, mp3Name st
             needed = ?,
             sent = ?
         WHERE id = ?;`
-	_, err := db.Exec(updateObsData, userId, gifName, mp3Name, ttsVoice, pbData.Message, pbData.Needed, pbData.Sent, obsId)
+	_, err := db.Exec(updateObsData, userID, gifName, mp3Name, ttsVoice, pbData.Message, pbData.Needed, pbData.Sent, userID)
 	return err
 }
 
@@ -1954,10 +1936,14 @@ func getObsData(db *sql.DB, userId int) obsDataStruct {
 	return tempObsData
 }
 
-func createNewUser(username string, hashedPassword []byte) {
+func createNewUser(username, password string) {
 	log.Println("running createNewUser")
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Println(err)
+	}
 	// create admin user if not exists
-	adminUser := User{
+	user := User{
 		Username:          username,
 		HashedPassword:    hashedPassword,
 		EthAddress:        "0x5b5856dA280e592e166A1634d353A53224ed409c",
@@ -1974,11 +1960,18 @@ func createNewUser(username string, hashedPassword []byte) {
 		Links:             "",
 		DateEnabled:       time.Now().UTC(),
 	}
-	createUser(adminUser)
+	userID := createUser(user)
+	if userID != 0 {
+		createNewOBS(db, userID, "default message", 100.00, 50.00, 5, user.DonoGIF, user.DonoSound, "test_voice")
+		log.Println("createUser() succeeded, so OBS row was created.")
+	} else {
+		log.Println("createUser() didn't succeed, so OBS row wasn't created.")
+	}
+
 	log.Println("finished createNewUser")
 }
 
-func createUser(user User) error {
+func createUser(user User) int {
 	log.Println("running CreateUser")
 	// Insert the user's data into the database
 	_, err := db.Exec(`
@@ -2005,7 +1998,7 @@ func createUser(user User) error {
 
 	if err != nil {
 		log.Println(err)
-		return err
+		return 0
 	}
 
 	// Get the ID of the newly created user
@@ -2014,7 +2007,7 @@ func createUser(user User) error {
 	err = row.Scan(&userID)
 	if err != nil {
 		log.Println(err)
-		return err
+		return 0
 	}
 
 	// Create a directory for the user based on their ID
@@ -2048,7 +2041,7 @@ func createUser(user User) error {
 	adminHexcoinAddress = user.HexcoinAddress
 	minDonoValue = float64(user.MinDono)
 	log.Println("finished createNewUser")
-	return nil
+	return userID
 }
 
 // update an existing user
@@ -2108,6 +2101,21 @@ func getOBSDataByAlertURL(AlertURL string) (obsDataStruct, error) {
 	row := db.QueryRow("SELECT gif_name, mp3_name, `message`, needed, sent FROM obs WHERE user_id=?", user.UserID)
 
 	err = row.Scan(&obsData.FilenameGIF, &obsData.FilenameMP3, &obsData.Message, &obsData.Needed, &obsData.Sent)
+	if err != nil {
+		log.Println("Couldn't get obsData,", err)
+		return obsData, err
+	}
+
+	return obsData, nil
+
+}
+
+func getOBSDataByUserID(userID int) (obsDataStruct, error) {
+	var obsData obsDataStruct
+	//var alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	row := db.QueryRow("SELECT gif_name, mp3_name, `message`, needed, sent FROM obs WHERE user_id=?", userID)
+
+	err := row.Scan(&obsData.FilenameGIF, &obsData.FilenameMP3, &obsData.Message, &obsData.Needed, &obsData.Sent)
 	if err != nil {
 		log.Println("Couldn't get obsData,", err)
 		return obsData, err
@@ -2310,47 +2318,43 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	host := r.Host // get host url
-	obsData.URLdonobar = host + "/progressbar"
-	obsData.URLdisplay = host + "/alert"
+	obsData.URLdonobar = host + "/progressbar?value=" + user.AlertURL
+	obsData.URLdisplay = host + "/alert?value=" + user.AlertURL
 
 	if r.Method == http.MethodPost {
 		r.ParseMultipartForm(10 << 20) // max file size of 10 MB
+		userDir := fmt.Sprintf("users/%d/", user.UserID)
 
 		// Get the files from the request
 		fileGIF, handlerGIF, err := r.FormFile("dono_animation")
 		if err == nil {
 			defer fileGIF.Close()
-
-			// Save the file to the server
 			fileNameGIF := handlerGIF.Filename
 			fileBytesGIF, err := ioutil.ReadAll(fileGIF)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			if err = os.WriteFile("web/obs/media/"+fileNameGIF, fileBytesGIF, 0644); err != nil {
+			if err = os.WriteFile(userDir+"/gifs/"+fileNameGIF, fileBytesGIF, 0644); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-
 			obsData.FilenameGIF = fileNameGIF
 		}
 
 		fileMP3, handlerMP3, err := r.FormFile("dono_sound")
 		if err == nil {
 			defer fileMP3.Close()
-
 			fileNameMP3 := handlerMP3.Filename
 			fileBytesMP3, err := ioutil.ReadAll(fileMP3)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			if err = os.WriteFile("web/obs/media/"+fileNameMP3, fileBytesMP3, 0644); err != nil {
+			if err = os.WriteFile(userDir+"/sounds/"+fileNameMP3, fileBytesMP3, 0644); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-
 			obsData.FilenameMP3 = fileNameMP3
 		}
 
@@ -2374,7 +2378,7 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 		pb.Needed = amountNeeded
 		pb.Sent = amountSent
 
-		err = updateObsData(db, 1, 1, obsData.FilenameGIF, obsData.FilenameMP3, "alice", pb)
+		err = updateObsData(db, user.UserID, obsData.FilenameGIF, obsData.FilenameMP3, "alice", pb)
 
 		if err != nil {
 			log.Println("Error: ", err)
@@ -2786,6 +2790,12 @@ func progressbarOBSHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Println(err)
+		err_ := indexTemplate.Execute(w, nil)
+		return
+		if err_ != nil {
+			http.Error(w, err_.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	log.Println("Progress bar message:", obsData.Message)
@@ -3081,7 +3091,7 @@ func ethToWei(ethStr string) *big.Int {
 
 func getEthAddressByID(userID int) string {
 	if user, ok := globalUsers[userID]; ok {
-		log.Println("Got userID:", userID, "Returned:", user.EthAddress)
+		log.Println("Got userID:", user.UserID, "Returned:", user.EthAddress)
 		return user.EthAddress
 	}
 	log.Println("Got userID:", userID, "No user found")
@@ -3099,6 +3109,7 @@ func getPortID(xmrWallets [][]int, userID int) int {
 
 func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, fCrypto string, encrypted_ip string, USDAmount float64, userID int) {
 	address := getEthAddressByID(userID)
+	log.Println("handleEthereumPayment() address:", address)
 
 	decimals, _ := utils.GetCryptoDecimalsByCode(fCrypto)
 	donoStr := fmt.Sprintf("%.*f", decimals, amount_)
@@ -3127,7 +3138,7 @@ func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, me
 	tmp, _ := qrcode.Encode(donationLink, qrcode.Low, 320)
 	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
 
-	s.DonationID = createNewDono(userID, adminEthereumAddress, s.Name, s.Message, amount_, fCrypto, encrypted_ip, showAmount_, USDAmount, media_)
+	s.DonationID = createNewDono(userID, address, s.Name, s.Message, amount_, fCrypto, encrypted_ip, showAmount_, USDAmount, media_)
 	err := payTemplate.Execute(w, s)
 	if err != nil {
 		fmt.Println(err)

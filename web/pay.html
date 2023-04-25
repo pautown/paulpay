@@ -4,81 +4,54 @@
 
   <script src="https://cdn.jsdelivr.net/npm/web3@1.3.6/dist/web3.min.js"></script>
   <script src="bignumber.js"></script>
-   <title>PayPaul Payment</title>
-
+   <title>ferret.cash</title>
         {{$ethtoken := false}}
         {{$erc20token := true}}
-
         {{if eq .Currency "SOL"}}
             {{$ethtoken = false}}
             {{$erc20token = false}}
-            <link href=sol.svg rel=icon>
         {{else if eq .Currency "XMR"}}
             {{$ethtoken = false}}
             {{$erc20token = false}}
-            <link href=xmr.svg rel=icon>
         {{else if eq .Currency "ETH"}}
             {{$ethtoken = true}}
             {{$erc20token = false}}
-            <link href=eth.svg rel=icon>
-        {{else if eq .Currency "BUSD"}}
-            <link href=busd.svg rel=icon>
-        {{else if eq .Currency "HEX"}}
-            <link href=hex.svg rel=icon>
-        {{else if eq .Currency "MATIC"}}
-            <link href=matic.svg rel=icon>
-        {{else if eq .Currency "PAINT"}}
-            <link href=paint.svg rel=icon>
-        {{else if eq .Currency "PNK"}}
-            <link href=pnk.svg rel=icon>
-        {{else if eq .Currency "SHIB"}}
-            <link href=shiba_inu.svg rel=icon>
-        {{else if eq .Currency "TUSD"}}
-            <link href=tether.svg rel=icon>
-        {{else if eq .Currency "USDC"}}
-            <link href=usdc.svg rel=icon>
-        {{else if eq .Currency "WBTC"}}
-            <link href=wbtc.svg rel=icon>
         {{end}}
+     <link href=fcash.png rel=icon>
     <link href=style.css rel=stylesheet>
+
+   
 
 </head>
 <body>
-    <h2>Send exactly <b>{{.Amount}}</b> {{.Currency}} to confirm superchat:</h2>
-
-    <small>
-    <p id="donation-status">
-        <img src="loader.svg" class="loading-wheel" alt="Loading wheel"> Checking For Donation...
-    </p>
+    <h3>Send exactly <b>{{.Amount}}</b> {{.Currency}}:</h3>
+<small>
+    <p id="donation-status"><img src="loader.svg" class="loading-wheel" alt="Loading wheel"> Checking For Donation... </p>
 </small>
-<h2> <p style="color: green;" id="donation-completed">
-    </p>
-</h2>
+<p style="color: green;" id="donation-completed"></p>
 
-<label>Name:</label><br>
+<label>Name:</label>
 <blockquote>
     {{.Name}}
 </blockquote>
-<label>Message:</label><br>
+<label>Message:</label>
 <blockquote>
     {{.Message}}
 </blockquote>
 
 {{if ne .Media ""}}
-    <label>Media:</label><br>
+    <label>Media:</label>
     <blockquote>
         {{.Media}}
     </blockquote>
 {{end}}
 
-<label>Payment Address</label><br>
+<label>Payment Address:</label>
 <blockquote style="user-select: all">
     {{.Address}}
 </blockquote>
-<p id="donation-metamask">
-    
-</p>
-<label>Or scan:</label><br>
+<p id="donation-metamask"></p>
+<label>Or scan:</label>
 <blockquote>
     <img src="data:image/png;base64,{{.QRB64}}"/>
 </blockquote>
@@ -86,7 +59,7 @@
 <small>Stay on this screen until transaction is seen.</small><br>
 <footer>
     <small><small>
-      <p>PayPaul &copy; 2023. Developed by <a href="http://www.paul.town/" target="_blank">Paul Town</a> with <a href="https://github.com/pautown/paulpay" target="_blank">PayPaul GitHub Source Code</a></p>
+      <p>Ferret Cash &copy; 2023. Developed by <a href="http://www.paul.town/" target="_blank">Paul Town</a> with <a href="https://github.com/pautown/paulpay" target="_blank">PayPaul Source Code</a></p>
     </small></small>
   </footer>
 </body>
@@ -125,7 +98,7 @@
     
    function addETHMetamaskButton() {
     document.querySelector("#donation-metamask").innerHTML = `<button id="submit" type="button" data-original-text="Pay ETH with Metamask" style="display: flex; align-items: center;">
-    <span id="currencyText">Pay ETH with Metamask</span>
+    <span id="currencyText">Send with Metamask</span>
       </button>`;
 
       document.querySelector("#submit").addEventListener("click", function() {

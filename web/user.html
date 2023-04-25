@@ -71,24 +71,27 @@ window.onload = function() {
   </div>
 
   <br><br>
-  <h2>Wallets:</h2>
+  <h2>User Info:</h2>
   
   <form method="POST" action="/changeuser">
     <label for="ethereumAddress">Ethereum Address:</label>
     <input type="text" id="ethereumAddress" name="ethereumAddress" placeholder="{{.EthAddress}}" value="{{.EthAddress}}">
+    <br>
     <label for="solanaAddress">Solana Address:</label>
     <input type="text" id="solanaAddress" name="solanaAddress" placeholder="{{.SolAddress}}" value="{{.SolAddress}}">
 
     <br>
+    <br>
 
     <submit>Minimum Donation Amount (USD)</submit>
     <submit><input type="number" id="minUsdAmount" name="minUsdAmount" min="1"  value="{{.MinDono}}"></submit>
+    <br>
+    <br>
 
-    <input type="submit" value="Update User" id="update-profile">
+    <input type="submit" value="Update User Info" id="update-profile">
 
   </form>
     <hr>
- <br>
  <br>
  <br>
 
@@ -97,14 +100,11 @@ window.onload = function() {
   <input type="file" id="moneroWallet" name="moneroWallet">
   <label for="moneroWallet">View-Only Monero Wallet Keys:</label>
   <input type="file" id="moneroWalletKeys" name="moneroWalletKeys" accept=".keys">
-  <input type="submit" value="Update User Wallets" id="update-profile">
+  <br>
+    <br>
+  <input type="submit" value="Upload Monero Wallets" id="update-profile">
   <hr>
-  <br>
-  <br>
-  <br>
-  
-  
-  
+  <br> 
   
   <p id="media-status">Media donations are currently {{ if .MediaEnabled }}enabled{{ else }}<b>disabled</b>{{ end }}</p>
 
