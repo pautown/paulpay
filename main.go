@@ -2320,9 +2320,10 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 	host := r.Host // get host url
 	obsData.URLdonobar = host + "/progressbar?value=" + user.AlertURL
 	obsData.URLdisplay = host + "/alert?value=" + user.AlertURL
+	obsData_ := getObsData(db, user.UserID)
 
 	if r.Method == http.MethodPost {
-		r.ParseMultipartForm(10 << 20) // max file size of 10 MB
+		r.ParseMultipartForm(5 << 10) // max file size of 10 MB
 		userDir := fmt.Sprintf("users/%d/", user.UserID)
 
 		// Get the files from the request
@@ -2339,7 +2340,7 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			obsData.FilenameGIF = fileNameGIF
+			obsData_.FilenameGIF = fileNameGIF
 		}
 
 		fileMP3, handlerMP3, err := r.FormFile("dono_sound")
@@ -2355,7 +2356,7 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			obsData.FilenameMP3 = fileNameMP3
+			obsData_.FilenameMP3 = fileNameMP3
 		}
 
 		pbMessage = r.FormValue("message")
@@ -2378,7 +2379,7 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 		pb.Needed = amountNeeded
 		pb.Sent = amountSent
 
-		err = updateObsData(db, user.UserID, obsData.FilenameGIF, obsData.FilenameMP3, "alice", pb)
+		err = updateObsData(db, user.UserID, obsData_.FilenameGIF, obsData_.FilenameMP3, "alice", pb)
 
 		if err != nil {
 			log.Println("Error: ", err)
@@ -2389,7 +2390,6 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 
 	}
 
-	obsData_ := getObsData(db, user.UserID)
 	log.Println(obsData_.Message)
 	log.Println(obsData_.Needed)
 	log.Println(obsData_.Sent)
@@ -2813,7 +2813,6 @@ func progressbarOBSHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-
 	// Ignore requests for the favicon
 	if r.URL.Path == "/favicon.ico" {
 		return
@@ -3194,6 +3193,7 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	} else {
 		fmt.Println("Port ID not found for user", userID)
 	}
+
 	rpcURL_ := "http://127.0.0.1:" + strconv.Itoa(portID) + "/json_rpc"
 
 	req, err := http.NewRequest("POST", rpcURL_, payload)
