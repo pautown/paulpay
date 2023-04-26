@@ -2,9 +2,7 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"crypto/ed25519"
-	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -14,11 +12,6 @@ import (
 	"github.com/gabstv/go-monero/walletrpc"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/portto/solana-go-sdk/client"
-	"github.com/portto/solana-go-sdk/common"
-	"github.com/portto/solana-go-sdk/program/system"
-	"github.com/portto/solana-go-sdk/rpc"
-	"github.com/portto/solana-go-sdk/types"
 	qrcode "github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/bcrypt"
 	"html"
@@ -32,7 +25,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"shadowchat/utils"
 	"sort"
@@ -91,9 +83,6 @@ var baseCheckingRate = 25
 var minSolana, minMonero, minEthereum, minPaint, minHex, minPolygon, minBusd, minShib, minUsdc, minTusd, minWbtc, minPnk float64 // Global variables to hold minimum values required to equal the global value.
 var minDonoValue float64 = 5.0                                                                                                   // The global value to equal in USD terms
 var lamportFee = 1000000
-
-// Mainnet
-var c = client.NewClient(rpc.MainnetRPCEndpoint)
 
 var adminSolanaAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
 var adminEthereumAddress = "adWqokePHcAbyF11TgfvvM1eKax3Kxtnn9sZVQh6fXo"
@@ -398,17 +387,6 @@ func main() {
 	time.Sleep(5 * time.Second)
 	log.Println("Starting server")
 
-	// create a RPC client for Solana
-	fmt.Println(reflect.TypeOf(c))
-
-	// get the current running Solana version
-	response, err := c.GetVersion(context.TODO())
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("version", response.SolanaCore)
-
 	http.HandleFunc("/style.css", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/style.css")
 	})
@@ -545,7 +523,7 @@ func main() {
 	setServerVars()
 
 	// go createTestDono("Huge Bob", "XMR", "Hey it's Huge Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
-	go createTestDono(1, "Big Bob", "XMR", "This Cruel Message is Bob's Test messag! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", 50, 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+	go createTestDono(2, "Big Bob", "XMR", "This Cruel Message is Bob's Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", 50, 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 	// go createTestDono("Medium Bob", "XMR", "Hey it's medium Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 
 	err = http.ListenAndServe(":8900", nil)
@@ -583,6 +561,13 @@ func startWallets() {
 			log.Println("startWallets() User not valid")
 		}
 	}
+
+	fmt.Println("startWallet() starting monitoring of solana addresses.")
+	var solAddrs []string
+	for _, user := range users {
+		solAddrs = append(solAddrs, user.SolAddress)
+	}
+	go utils.StartMonitoringSolana(solAddrs)
 }
 
 func checkValidSubscription(DateEnabled time.Time) bool {
@@ -1397,7 +1382,7 @@ func checkUnfulfilledDonos() []Dono {
 
 		expoAdder := returnIPPenalty(ips, dono.EncryptedIP) + time.Since(dono.CreatedAt).Seconds()/60/60/19
 		secondsNeededToCheck := math.Pow(float64(baseCheckingRate)-0.02, expoAdder)
-		log.Println("Dono ID:", dono.ID, "Name:", dono.Name)
+		log.Println("Dono ID:", dono.ID, "Name:", dono.Name, "Dono to UserID:", dono.UserID)
 		log.Println("Message:", dono.Message)
 		log.Println("Media URL:", dono.MediaURL)
 		log.Println(dono.CurrencyType, "Needed:", dono.AmountToSend, "Recieved:", dono.AmountSent)
@@ -1412,29 +1397,30 @@ func checkUnfulfilledDonos() []Dono {
 
 		if dono.CurrencyType == "XMR" {
 			dono.AmountSent, _ = getXMRBalance(dono.Address)
+			if dono.AmountSent >= dono.AmountToSend-float64(lamportFee)/1e9 && dono.AmountToSend != 0 {
+				dono.AmountToSend = addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
+				dono.Fulfilled = true
+				fulfilledDonos = append(fulfilledDonos, dono)
+				rowsToUpdate = append(rowsToUpdate, dono.ID)
+				fulfilledSlice = append(fulfilledSlice, true)
+				amountSlice = append(amountSlice, dono.AmountSent)
+				amountUSDSlice = append(amountUSDSlice, dono.AmountToSend)
+				continue
+			}
 		} else if dono.CurrencyType == "SOL" {
-			dono.AmountSent, _ = getSOLBalance(dono.Address)
+			if utils.CheckTransactionSolana(dono.AmountToSend, dono.Address, 100) {
+				dono.AmountToSend = addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
+				dono.Fulfilled = true
+				fulfilledDonos = append(fulfilledDonos, dono)
+				rowsToUpdate = append(rowsToUpdate, dono.ID)
+				fulfilledSlice = append(fulfilledSlice, true)
+				amountSlice = append(amountSlice, dono.AmountSent)
+				amountUSDSlice = append(amountUSDSlice, dono.AmountToSend)
+				continue
+			}
 		}
 
 		log.Println("New Amount Recieved:", dono.AmountSent, "\n")
-
-		if dono.AmountSent >= dono.AmountToSend-float64(lamportFee)/1e9 && dono.AmountToSend != 0 {
-			if dono.CurrencyType == "SOL" {
-				wallet, _ := ReadAddress(dono.Address)
-				SendSolana(wallet.KeyPublic, wallet.KeyPrivate, adminSolanaAddress, dono.AmountSent, dono.CurrencyType)
-			}
-			dono.AmountToSend = addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
-
-			dono.Fulfilled = true
-			// add true to fulfilledSlice
-			fulfilledDonos = append(fulfilledDonos, dono)
-			rowsToUpdate = append(rowsToUpdate, dono.ID)
-			fulfilledSlice = append(fulfilledSlice, true)
-			amountSlice = append(amountSlice, dono.AmountSent)
-			amountUSDSlice = append(amountUSDSlice, dono.AmountToSend)
-			log.Println("Dono FULFILLED and sent to home sol address and won't be checked again. \n")
-			continue
-		}
 
 		// add to slices
 		fulfilledSlice = append(fulfilledSlice, false)
@@ -1457,16 +1443,6 @@ func checkUnfulfilledDonos() []Dono {
 	return fulfilledDonos
 }
 
-func getSOLBalance(address string) (float64, error) {
-	balance, err := c.GetBalance(
-		context.TODO(), // request context
-		address,        // wallet to fetch balance for
-	)
-	if err != nil {
-		return 0, err
-	}
-	return float64(balance) / 1e9, nil
-}
 func getXMRBalance(checkID string) (float64, error) {
 	url := "http://localhost:28088/json_rpc"
 
@@ -2458,16 +2434,6 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func generateSessionToken(user User) string {
-	// generate a random session token
-	b := make([]byte, 32)
-	rand.Read(b)
-	sessionToken := base64.URLEncoding.EncodeToString(b)
-	// save the session token in a map
-	userSessions[sessionToken] = user.UserID
-	return sessionToken
-}
-
 func changePasswordHandler(w http.ResponseWriter, r *http.Request) {
 	// retrieve user from session
 	sessionToken, err := r.Cookie("session_token")
@@ -2720,27 +2686,6 @@ func validateSession(r *http.Request) (int, error) {
 	return userID, nil
 }
 
-func createWalletSolana(dName string, dString string, dAmount float64, dAnon bool) AddressSolana {
-	wallet := types.NewAccount()
-
-	address := AddressSolana{}
-	address.KeyPublic = wallet.PublicKey.ToBase58()
-	address.KeyPrivate = wallet.PrivateKey
-	address.DonoName = dName
-	address.DonoAmount = dAmount
-	address.DonoString = dString
-	address.DonoAnon = dAnon
-	addToAddressSliceSolana(address)
-	CreateAddress(address)
-
-	return address
-}
-
-func addToAddressSliceSolana(a AddressSolana) {
-	addressSliceSolana = append(addressSliceSolana, a)
-	fmt.Println(len(addressSliceSolana))
-}
-
 func condenseSpaces(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
@@ -2753,13 +2698,6 @@ func truncateStrings(s string, n int) string {
 		n--
 	}
 	return s[:n]
-}
-
-func reverse(ss []string) {
-	last := len(ss) - 1
-	for i := 0; i < len(ss)/2; i++ {
-		ss[i], ss[last-i] = ss[last-i], ss[i]
-	}
 }
 
 func getUserPathByID(id int) string {
@@ -3074,12 +3012,20 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	if fCrypto == "XMR" {
 		handleMoneroPayment(w, &s, params, amount, encrypted_ip, showAmount, USDAmount, id)
 	} else if fCrypto == "SOL" {
-		handleSolanaPayment(w, &s, params, name, message, amount, showAmount, media, encrypted_ip, USDAmount, id)
+		new_dono := createNewSolDono(s.Name, s.Message, s.Media, utils.FuzzSolDono(amount))
+		handleSolanaPayment(w, &s, params, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, media, encrypted_ip, USDAmount, id)
 	} else {
 		s.Currency = fCrypto
 		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount, fCrypto)
 		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL, fCrypto, encrypted_ip, USDAmount, id)
 	}
+}
+
+func createNewSolDono(name string, message string, mediaURL string, amountNeeded float64) utils.SuperChat {
+	new_dono := utils.CreatePendingSolDono(name, message, mediaURL, amountNeeded)
+	pending_donos = utils.AppendPendingDono(pending_donos, new_dono)
+
+	return new_dono
 }
 
 func checkDonationStatusHandler(w http.ResponseWriter, r *http.Request) {
@@ -3143,6 +3089,15 @@ func getEthAddressByID(userID int) string {
 	return ""
 }
 
+func getSolAddressByID(userID int) string {
+	if user, ok := globalUsers[userID]; ok {
+		log.Println("Got userID:", user.UserID, "Returned:", user.SolAddress)
+		return user.SolAddress
+	}
+	log.Println("Got userID:", userID, "No user found")
+	return ""
+}
+
 func getPortID(xmrWallets [][]int, userID int) int {
 	for _, innerList := range xmrWallets {
 		if innerList[0] == userID {
@@ -3191,23 +3146,21 @@ func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, me
 }
 
 func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, encrypted_ip string, USDAmount float64, userID int) {
-	var wallet_ = createWalletSolana(name_, message_, amount_, showAmount_)
 	// Get Solana address and desired balance from request
-	address := wallet_.KeyPublic
-	donoStr := fmt.Sprintf("%.4f", wallet_.DonoAmount)
+	address := getSolAddressByID(userID)
+	donoStr := fmt.Sprintf("%.*f", 9, amount_)
 
 	s.Amount = donoStr
 
-	if wallet_.DonoName == "" {
+	if name_ == "" {
 		s.Name = "Anonymous"
-		wallet_.DonoName = s.Name
 	} else {
-		s.Name = html.EscapeString(truncateStrings(condenseSpaces(wallet_.DonoName), NameMaxChar))
+		s.Name = html.EscapeString(truncateStrings(condenseSpaces(name_), NameMaxChar))
 	}
 
 	s.Media = html.EscapeString(media_)
-	s.PayID = wallet_.KeyPublic
-	s.Address = wallet_.KeyPublic
+	s.PayID = address
+	s.Address = address
 	s.Currency = "SOL"
 
 	params.Add("id", s.Address)
@@ -3277,51 +3230,4 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	if err != nil {
 		fmt.Println(err)
 	}
-}
-
-func SendSolana(senderPublicKey string, senderPrivateKey ed25519.PrivateKey, recipientAddress string, amount float64, currencyType string) {
-	if currencyType == "SOL" {
-		if amount > 0 {
-			var feePayer, _ = types.AccountFromBytes(senderPrivateKey) // fill your private key here (u8 array)
-
-			resp, err := c.GetLatestBlockhash(context.Background())
-			if err != nil {
-				log.Fatalf("failed to get recent blockhash, err: %v", err)
-			}
-
-			toPubkey := common.PublicKeyFromString(recipientAddress)
-			log.Println(toPubkey)
-			if err != nil {
-				log.Fatalf("failed to parse recipient public key, err: %v", err)
-			}
-
-			log.Println("Public Key Payer:", feePayer.PublicKey)
-			amountLamports := uint64(math.Round(amount * math.Pow10(9)))
-			tx, err := types.NewTransaction(types.NewTransactionParam{
-				Message: types.NewMessage(types.NewMessageParam{
-					FeePayer:        feePayer.PublicKey,
-					RecentBlockhash: resp.Blockhash,
-					Instructions: []types.Instruction{
-						system.Transfer(system.TransferParam{
-							From:   feePayer.PublicKey,
-							To:     toPubkey,
-							Amount: amountLamports - uint64(lamportFee),
-						}),
-					},
-				}),
-				Signers: []types.Account{feePayer},
-			})
-			if err != nil {
-				log.Fatalf("failed to build raw tx, err: %v", err)
-			}
-			sig, err := c.SendTransaction(context.Background(), tx)
-			if err != nil {
-				log.Fatalf("failed to send tx, err: %v", err)
-			}
-			fmt.Println(sig)
-		}
-	} else {
-		log.Println("ERROR, tried to send", currencyType, "through SendSolana(). Not sending since XMR but continuing as everything else is fine.")
-	}
-
 }
