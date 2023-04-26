@@ -62,7 +62,7 @@ var pnkToUsd = 0.00
 var addressSliceSolana []AddressSolana
 
 var checked string = ""
-var killDono = 30.00 * time.Hour // hours it takes for a dono to be unfulfilled before it is no longer checked.
+var killDono = 3.00 * time.Hour // hours it takes for a dono to be unfulfilled before it is no longer checked.
 var indexTemplate *template.Template
 var donationTemplate *template.Template
 var payTemplate *template.Template
