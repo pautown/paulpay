@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/gabstv/go-monero/walletrpc"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
@@ -21,6 +22,7 @@ import (
 	"log"
 	"math"
 	"math/big"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -34,8 +36,6 @@ import (
 	"text/template"
 	"time"
 	"unicode/utf8"
-
-	"mime/multipart"
 )
 
 const username = "admin"
@@ -277,8 +277,8 @@ var tableTemplate = template.Must(template.New("table").Parse(`
 		<td>{{.UpdatedAt.Format "15:04:05 01-02-2006"}}</td>
 		<td>{{.Name}}</td>
 		<td>{{.Message}}</td>
-		<td>${{.AmountToSend}}</td>
-		<td>{{.AmountSent}}</td>
+		<td>${{.AmountSent}}</td>
+		<td>{{.USDAmount}}</td>
 		<td>{{.CurrencyType}}</td>
 	</tr>
 	{{end}}
@@ -305,12 +305,11 @@ func checkLoggedIn(w http.ResponseWriter, r *http.Request) {
 
 // Handler function for the "/donations" endpoint
 func donationsHandler(w http.ResponseWriter, r *http.Request) {
-
 	checkLoggedIn(w, r)
 	// Fetch the latest data from your database or other data source
 
 	// Retrieve data from the donos table
-	rows, err := db.Query("SELECT * FROM donos WHERE fulfilled = 1 AND amount_sent != 0 ORDER BY created_at DESC")
+	rows, err := db.Query("SELECT * FROM donos WHERE fulfilled = 1 AND amount_sent != '0.0' ORDER BY created_at DESC")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -543,18 +542,17 @@ func startWallets() {
 	}
 
 	starting_port := 28088
+
 	for _, user := range users {
 		log.Println("Checking user:", user.Username, "User ID:", user.UserID)
 		if checkValidSubscription(user.DateEnabled) {
 			globalUsers[user.UserID] = user
-			log.Println("User valid", globalUsers[user.UserID].UserID, "User eth_address:", globalUsers[user.UserID].EthAddress)
+			log.Println("User valid", user.UserID, "User eth_address:", globalUsers[user.UserID].EthAddress)
 			if user.WalletUploaded {
 				log.Println("Monero wallet uploaded")
-				go func() {
-					xmrWallets = append(xmrWallets, []int{user.UserID, starting_port})
-					startMoneroWallet(starting_port, user.UserID)
-					starting_port++
-				}()
+				xmrWallets = append(xmrWallets, []int{user.UserID, starting_port})
+				go startMoneroWallet(starting_port, user.UserID)
+				starting_port++
 
 			} else {
 				log.Println("Monero wallet not uploaded")
@@ -1469,7 +1467,8 @@ func checkUnfulfilledDonos() []Dono {
 			}
 		} else if dono.CurrencyType == "SOL" {
 			if utils.CheckTransactionSolana(dono.AmountToSend, dono.Address, 100) {
-				addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
+				dono.AmountSent = dono.AmountToSend
+				addDonoToDonoBar(dono.AmountToSend, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
 				dono.Fulfilled = true
 				fulfilledDonos = append(fulfilledDonos, dono)
 				updateDonoInMap(dono)
@@ -3191,8 +3190,8 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 
 func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values, amount float64, encrypted_ip string, showAmount bool, USDAmount float64, userID int) {
 	payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
-
 	portID := getPortID(xmrWallets, userID)
+
 	found := true
 	if portID == -100 {
 		found = false
