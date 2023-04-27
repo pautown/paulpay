@@ -4,8 +4,6 @@ import (
   "context"
   "encoding/json"
   "fmt"
-  "math/rand"
-  "strconv"
   //"github.com/davecgh/go-spew/spew"
   //bin "github.com/gagliardetto/binary"
   "bytes"
@@ -219,35 +217,6 @@ func CreatePendingSolDono(name string, message string, mediaURL string, amountNe
     CryptoCode:   "SOL",
   }
   return pendingDono
-}
-
-func partiallyRandomizeNumber(input float64, dec int) float64 {
-  // Convert the input number to string
-  strInput := strconv.FormatFloat(input, 'f', dec, 64) // 'f' format with 9 decimal places
-
-  intPart, decPart := strInput[:len(strInput)-dec], strInput[len(strInput)-dec:]
-  decPartRunes := []rune(decPart)
-
-  for i := 0; i < len(decPartRunes); i++ {
-    if decPartRunes[i] == '0' {
-      decPartRunes[i] = rune(rand.Intn(10) + '0')
-    }
-  }
-
-  // Convert the partially randomized decimal part back to string
-  partiallyRandomizedDecPart := string(decPartRunes)
-
-  // Combine the integer part and partially randomized decimal part to form the final result
-  resultStr := intPart + partiallyRandomizedDecPart
-
-  // Convert the result back to float64
-  result, _ := strconv.ParseFloat(resultStr, 64)
-
-  return result
-}
-
-func FuzzSolDono(amt float64) float64 {
-  return partiallyRandomizeNumber(amt, 9)
 }
 
 func containsTransaction(sig string) bool {

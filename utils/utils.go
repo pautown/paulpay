@@ -297,7 +297,7 @@ func CreatePendingDono(name string, message string, mediaURL string, amountNeede
 // TODO: Add more intelligent fuzzing so that if there is a small chance of an overlapping dono (exact same fuzzing and dono) then the dono is fuzzed again
 // this will almost never happen but it's better than leaving it up to chance
 func FuzzDono(ethAmount float64, cryptoCode string) float64 {
-	if cryptoCode == "HEX" {
+	if cryptoCode == "HEX" || cryptoCode == "SOL" {
 		// generate random value between 0 and 1 millionth
 		rand.Seed(time.Now().UnixNano())
 		randVal := rand.Float64() / 1000.0

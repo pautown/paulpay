@@ -98,7 +98,7 @@
             replaceText(selectedCrypto.name, selectedCrypto.name.toLowerCase(), selectedCrypto.code);
             imgSrc = `${selectedCrypto.svg}`;
             amountInput.setAttribute("placeholder", `${selectedCrypto.min} Minimum`);
-            amountInput.setAttribute("min", `${selectedCrypto.min} Minimum`);
+            amountInput.setAttribute("min", selectedCrypto.min);
           }
 
           document.getElementById("crypto").value = selectedValue;
@@ -119,7 +119,7 @@
 
           // Update the text content of the header label
           var amountLabel = document.getElementById("paypaul-header");
-          amountLabel.textContent = `Ferret {{.Username}} ${newText}.`;
+          amountLabel.textContent = `ferret {{.Username}} ${newTextLowercase}.`;
         }
  
     </script>
@@ -128,7 +128,7 @@
 <body>
   <form action="/pay" method="POST">
     <h2>
-    <div id="paypaul-header">Ferret {{.Username}} Monero.</div>
+    <div id="paypaul-header">ferret {{.Username}} monero.</div>
     </h2>
     <hr>
       <div class="ticker-wrap">

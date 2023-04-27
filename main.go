@@ -9,7 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
+	//	"github.com/davecgh/go-spew/spew"
 	"github.com/gabstv/go-monero/walletrpc"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
@@ -3015,7 +3015,7 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 		handleMoneroPayment(w, &s, params, amount, encrypted_ip, showAmount, USDAmount, id)
 	} else if fCrypto == "SOL" {
 		fmt.Println("Amount", amount)
-		new_dono := createNewSolDono(s.Name, s.Message, s.Media, utils.FuzzSolDono(amount))
+		new_dono := createNewSolDono(s.Name, s.Message, s.Media, utils.FuzzDono(amount, "SOL"))
 		fmt.Println("Amount needed:", new_dono.AmountNeeded)
 		handleSolanaPayment(w, &s, params, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, media, encrypted_ip, USDAmount, id)
 	} else {
