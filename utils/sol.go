@@ -110,8 +110,8 @@ func removeDuplicates(addrs []string) []string {
   return uniqueAddrs
 }
 
-func CheckTransactionSolana(amt float64, addr string, max_depth int) bool {
-  decAmountReceived := decimal.NewFromFloat(amt)
+func CheckTransactionSolana(amt string, addr string, max_depth int) bool {
+  decAmountReceived, _ := decimal.NewFromString(amt)
   decMultiplier := decimal.NewFromFloat(1000000000)
   result := decAmountReceived.Mul(decMultiplier)
   amountSent := result.IntPart()
@@ -221,11 +221,11 @@ func CreatePendingSolDono(name string, message string, mediaURL string, amountNe
   return pendingDono
 }
 
-func partiallyRandomizeNumber(input float64) float64 {
+func partiallyRandomizeNumber(input float64, dec int) float64 {
   // Convert the input number to string
-  strInput := strconv.FormatFloat(input, 'f', 9, 64) // 'f' format with 9 decimal places
+  strInput := strconv.FormatFloat(input, 'f', dec, 64) // 'f' format with 9 decimal places
 
-  intPart, decPart := strInput[:len(strInput)-9], strInput[len(strInput)-9:]
+  intPart, decPart := strInput[:len(strInput)-dec], strInput[len(strInput)-dec:]
   decPartRunes := []rune(decPart)
 
   for i := 0; i < len(decPartRunes); i++ {
@@ -247,7 +247,7 @@ func partiallyRandomizeNumber(input float64) float64 {
 }
 
 func FuzzSolDono(amt float64) float64 {
-  return partiallyRandomizeNumber(amt)
+  return partiallyRandomizeNumber(amt, 9)
 }
 
 func containsTransaction(sig string) bool {

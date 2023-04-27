@@ -12,6 +12,7 @@ import (
 	"github.com/gabstv/go-monero/walletrpc"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/shopspring/decimal"
 	qrcode "github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/bcrypt"
 	"html"
@@ -153,6 +154,7 @@ var db *sql.DB
 var userSessions = make(map[string]int)
 var amountNeeded = 1000.00
 var amountSent = 200.00
+var donosMap = make(map[int]Dono) // initialize an empty map
 
 type getBalanceResponse struct {
 	Jsonrpc string `json:"jsonrpc"`
@@ -319,8 +321,8 @@ func donationsHandler(w http.ResponseWriter, r *http.Request) {
 	var donos []Dono
 	for rows.Next() {
 		var dono Dono
-		var name, message, address, currencyType, encryptedIP, mediaURL sql.NullString
-		var amountToSend, amountSent, usdAmount sql.NullFloat64
+		var name, message, address, currencyType, encryptedIP, amountToSend, amountSent, mediaURL sql.NullString
+		var usdAmount sql.NullFloat64
 		var userID sql.NullInt64
 		var anonDono, fulfilled sql.NullBool
 		err := rows.Scan(&dono.ID, &userID, &address, &name, &message, &amountToSend, &amountSent, &currencyType, &anonDono, &fulfilled, &encryptedIP, &dono.CreatedAt, &dono.UpdatedAt, &usdAmount, &mediaURL)
@@ -333,8 +335,8 @@ func donationsHandler(w http.ResponseWriter, r *http.Request) {
 		dono.Address = address.String
 		dono.Name = name.String
 		dono.Message = message.String
-		dono.AmountToSend = usdAmount.Float64
-		dono.AmountSent = amountSent.Float64
+		dono.AmountToSend = amountToSend.String
+		dono.AmountSent = amountSent.String
 		dono.CurrencyType = currencyType.String
 		dono.AnonDono = anonDono.Bool
 		dono.Fulfilled = fulfilled.Bool
@@ -523,7 +525,7 @@ func main() {
 	setServerVars()
 
 	// go createTestDono("Huge Bob", "XMR", "Hey it's Huge Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
-	go createTestDono(2, "Big Bob", "XMR", "This Cruel Message is Bob's Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", 50, 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+	go createTestDono(2, "Big Bob", "XMR", "This Cruel Message is Bob's Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", "50", 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 	// go createTestDono("Medium Bob", "XMR", "Hey it's medium Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 
 	err = http.ListenAndServe(":8900", nil)
@@ -773,7 +775,7 @@ func setServerVars() {
 	log.Println("ServerMinMediaDono:", ServerMinMediaDono)
 
 }
-func createTestDono(user_id int, name string, curr string, message string, amount float64, usdAmount float64, media_url string) {
+func createTestDono(user_id int, name string, curr string, message string, amount string, usdAmount float64, media_url string) {
 	valid, media_url_ := checkDonoForMediaUSDThreshold(media_url, usdAmount)
 
 	if valid == false {
@@ -833,8 +835,8 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 	var donos []Dono
 	for rows.Next() {
 		var dono Dono
-		var name, message, address, currencyType, encryptedIP, mediaURL sql.NullString
-		var amountToSend, amountSent, usdAmount sql.NullFloat64
+		var name, amountToSend, amountSent, message, address, currencyType, encryptedIP, mediaURL sql.NullString
+		var usdAmount sql.NullFloat64
 		var userID sql.NullInt64
 		var anonDono, fulfilled sql.NullBool
 		err := rows.Scan(&dono.ID, &userID, &address, &name, &message, &amountToSend, &amountSent, &currencyType, &anonDono, &fulfilled, &encryptedIP, &dono.CreatedAt, &dono.UpdatedAt, &usdAmount, &mediaURL)
@@ -847,8 +849,8 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 		dono.Address = address.String
 		dono.Name = name.String
 		dono.Message = message.String
-		dono.AmountToSend = usdAmount.Float64
-		dono.AmountSent = amountSent.Float64
+		dono.AmountToSend = amountToSend.String
+		dono.AmountSent = amountSent.String
 		dono.CurrencyType = currencyType.String
 		dono.AnonDono = anonDono.Bool
 		dono.Fulfilled = fulfilled.Bool
@@ -1065,8 +1067,9 @@ func getUSDValue(as float64, c string) float64 {
 	return usdVal
 }
 
-func addDonoToDonoBar(as float64, c string, userID int) float64 {
-	usdVal := getUSDValue(as, c)
+func addDonoToDonoBar(as, c string, userID int) {
+	f, err := strconv.ParseFloat(as, 64)
+	usdVal := getUSDValue(f, c)
 	obsData, err := getOBSDataByUserID(userID)
 	pb.Sent = obsData.Sent
 	pb.Needed = obsData.Needed
@@ -1086,9 +1089,7 @@ func addDonoToDonoBar(as float64, c string, userID int) float64 {
 
 	if err != nil {
 		log.Println("Error: ", err)
-		return 0.00
 	}
-	return usdVal
 }
 
 func formatMediaURL(media_url string) string {
@@ -1103,16 +1104,19 @@ func formatMediaURL(media_url string) string {
 	return embedLink
 }
 
-func createNewQueueEntry(db *sql.DB, user_id int, address string, name string, message string, amount float64, currency string, dono_usd float64, media_url string) error {
-
+func createNewQueueEntry(db *sql.DB, user_id int, address string, name string, message string, amount string, currency string, dono_usd float64, media_url string) error {
+	f, err := strconv.ParseFloat(amount, 64)
+	if err != nil {
+		panic(err)
+	}
 	// Round the amount to 6 decimal places if it has more than 6 decimal places
-	if math.Abs(amount-math.Round(amount)) >= 0.000001 {
-		amount = math.Round(amount*1e6) / 1e6
+	if math.Abs(f-math.Round(f)) >= 0.000001 {
+		f = math.Round(f*1e6) / 1e6
 	}
 
 	embedLink := formatMediaURL(media_url)
 
-	_, err := db.Exec(`
+	_, err = db.Exec(`
 		INSERT INTO queue (name, message, amount, currency, usd_amount, media_url, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)
 	`, name, message, amount, currency, dono_usd, embedLink, user_id)
 	if err != nil {
@@ -1157,7 +1161,7 @@ func checkDonoForMediaUSDThreshold(media_url string, dono_usd float64) (bool, st
 	return valid, media_url
 }
 
-func createNewDono(user_id int, dono_address string, dono_name string, dono_message string, amount_to_send float64, currencyType string, encrypted_ip string, anon_dono bool, dono_usd float64, media_url string) int64 {
+func createNewDono(user_id int, dono_address string, dono_name string, dono_message string, amount_to_send string, currencyType string, encrypted_ip string, anon_dono bool, dono_usd float64, media_url string) int64 {
 	// Open a new database connection
 	db, err := sql.Open("sqlite3", "users.db")
 	if err != nil {
@@ -1174,25 +1178,32 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
 		media_url_ = ""
 	}
 
+	// Parse the amount_to_send string as a Decimal
+	amountToSendDec, err := decimal.NewFromString(amount_to_send)
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
+
 	// Execute the SQL INSERT statement
 	result, err := db.Exec(`
-		INSERT INTO donos (
-			user_id,
-			dono_address,
-			dono_name,
-			dono_message,
-			amount_to_send,
-			amount_sent,
-			currency_type,
-			anon_dono,
-			fulfilled,
-			encrypted_ip,
-			created_at,
-			updated_at,
-			usd_amount,
-			media_url
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, user_id, dono_address, dono_name, dono_message, amount_to_send, 0.0, currencyType, anon_dono, false, encrypted_ip, createdAt, createdAt, dono_usd, media_url_)
+        INSERT INTO donos (
+            user_id,
+            dono_address,
+            dono_name,
+            dono_message,
+            amount_to_send,
+            amount_sent,
+            currency_type,
+            anon_dono,
+            fulfilled,
+            encrypted_ip,
+            created_at,
+            updated_at,
+            usd_amount,
+            media_url
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, user_id, dono_address, dono_name, dono_message, amountToSendDec.String(), "0.0", currencyType, anon_dono, false, encrypted_ip, createdAt, createdAt, dono_usd, media_url_)
 	if err != nil {
 		log.Println(err)
 		panic(err)
@@ -1214,8 +1225,8 @@ type Dono struct {
 	Address      string
 	Name         string
 	Message      string
-	AmountToSend float64
-	AmountSent   float64
+	AmountToSend string
+	AmountSent   string
 	CurrencyType string
 	AnonDono     bool
 	Fulfilled    bool
@@ -1269,8 +1280,7 @@ func getUnfulfilledDonoIPs() ([]string, error) {
 	return ips, nil
 }
 
-func checkUnfulfilledDonos() []Dono {
-	ips, _ := getUnfulfilledDonoIPs() // get ips
+func updatePendingDonos() {
 
 	// Open a new database connection
 	db, err := sql.Open("sqlite3", "users.db")
@@ -1285,22 +1295,14 @@ func checkUnfulfilledDonos() []Dono {
 		panic(err)
 	}
 	defer rows.Close()
+	for rows.Next() {
+		var dono Dono
+		var tmpAmountToSend sql.NullString
+		var tmpAmountSent sql.NullString
+		var tmpUSDAmount sql.NullFloat64
+		var tmpMediaURL sql.NullString
 
-	var fulfilledSlice []bool
-	var amountSlice []float64
-	var amountUSDSlice []float64
-	var fulfilledDonos []Dono
-	var rowsToUpdate []int // slice to store row ids to be updated
-	var dono Dono
-	var tmpUSDAmount, tmpAmountToSend, tmpAmountSent sql.NullFloat64
-	var tmpMediaURL sql.NullString
-
-	eth_transactions, _ := utils.GetEth(adminEthereumAddress)
-	log.Println("Eth address checked:", adminEthereumAddress)
-
-	for rows.Next() { // Loop through the unfulfilled donos and check their status
 		err := rows.Scan(&dono.ID, &dono.UserID, &dono.Address, &dono.Name, &dono.Message, &tmpAmountToSend, &tmpAmountSent, &dono.CurrencyType, &dono.AnonDono, &dono.Fulfilled, &dono.EncryptedIP, &dono.CreatedAt, &dono.UpdatedAt, &tmpUSDAmount, &tmpMediaURL)
-
 		if err != nil {
 			panic(err)
 		}
@@ -1308,142 +1310,227 @@ func checkUnfulfilledDonos() []Dono {
 		if tmpUSDAmount.Valid {
 			dono.USDAmount = tmpUSDAmount.Float64
 		} else {
-			// Handle NULL value
-			dono.USDAmount = 0.0 // or any default value you want to assign
+			dono.USDAmount = 0.0
 		}
 
 		if tmpAmountToSend.Valid {
-			dono.AmountToSend = tmpAmountToSend.Float64
+			dono.AmountToSend = tmpAmountToSend.String
 		} else {
-			// Handle NULL value
-			dono.AmountToSend = 0.0 // or any default value you want to assign
+			dono.AmountToSend = "0.0"
 		}
 
 		if tmpAmountSent.Valid {
-			dono.AmountSent = tmpAmountSent.Float64
+			dono.AmountSent = tmpAmountSent.String
 		} else {
-			// Handle NULL value
-			dono.AmountSent = 0.0 // or any default value you want to assign
+			dono.AmountSent = "0.0"
 		}
 
 		if tmpMediaURL.Valid {
 			dono.MediaURL = tmpMediaURL.String
 		} else {
-			// Handle NULL value
-			dono.MediaURL = "" // or any default value you want to assign
+			dono.MediaURL = ""
 		}
 
+		addToDonosMap(dono)
+	}
+}
+
+func addToDonosMap(dono Dono) {
+	_, ok := donosMap[dono.ID]
+	if !ok {
+		donosMap[dono.ID] = dono
+	}
+}
+
+func updateDonoInMap(updatedDono Dono) {
+	if _, ok := donosMap[updatedDono.ID]; ok {
+		// The dono exists in the map, update it
+		donosMap[updatedDono.ID] = updatedDono
+	} else {
+		// The dono does not exist in the map, handle the error or do nothing
+	}
+}
+
+func printDonoInfo(dono Dono, secondsElapsedSinceLastCheck, secondsNeededToCheck float64) {
+	log.Println("Dono ID:", dono.ID, "Address:", dono.Address, "Name:", dono.Name, "To User:", dono.UserID)
+	log.Println("Message:", dono.Message)
+	fmt.Println(dono.CurrencyType, "Needed:", dono.AmountToSend, "Recieved:", dono.AmountSent)
+
+	log.Println("Time since check:", fmt.Sprintf("%.2f", secondsElapsedSinceLastCheck), "Needed:", fmt.Sprintf("%.2f", secondsNeededToCheck))
+
+}
+
+func printTransferInfo(t utils.Transfer) {
+	fmt.Printf("Block Number: %v\nUnique ID: %v\nHash: %v\nFrom: %v\nTo: %v\nValue: %v\nERC721 Token ID: %v\nERC1155 Metadata: %v\nToken ID: %v\nAsset: %v\nCategory: %v\n",
+		t.BlockNum,
+		t.UniqueId,
+		t.Hash,
+		t.From,
+		t.To,
+		t.Value,
+		t.Erc721TokenId,
+		t.Erc1155Metadata,
+		t.TokenId,
+		t.Asset,
+		t.Category)
+}
+
+func checkUnfulfilledDonos() []Dono {
+	ips, _ := getUnfulfilledDonoIPs() // get ips
+
+	updatePendingDonos()
+
+	var fulfilledDonos []Dono
+	var eth_transactions []utils.Transfer
+	eth_addresses := returnETHAddresses()
+	for _, eth_address := range eth_addresses {
+		log.Println("Getting ETH txs for:", eth_address)
+	}
+
+	for _, eth_address := range eth_addresses {
+		log.Println("Getting ETH txs for:", eth_address)
+		transactions, _ := utils.GetEth(eth_address)
+		eth_transactions = append(eth_transactions, transactions...)
+		time.Sleep(2 * time.Second)
+	}
+
+	/*for _, tx := range eth_transactions {
+		valueStr := fmt.Sprintf("%.18f", tx.Value)
+		log.Println("tx:", tx.Asset, "value:", valueStr)
+	}*/
+
+	for _, dono := range donosMap {
 		if dono.CurrencyType != "XMR" && dono.CurrencyType != "SOL" {
 			// Check if amount matches a completed dono amount
 			for _, transaction := range eth_transactions {
-				tA := utils.GetTransactionAmount(transaction)
 				tN := utils.GetTransactionToken(transaction)
-				if utils.IsEqual(tA, dono.AmountToSend) && tN == dono.CurrencyType {
-					fmt.Println(dono.CurrencyType, "dono completed:", tmpAmountSent)
-					dono.AmountSent = tA
-					dono.AmountToSend = addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
-					dono.Fulfilled = true
-					// add true to fulfilledSlice
-					fulfilledDonos = append(fulfilledDonos, dono)
-					rowsToUpdate = append(rowsToUpdate, dono.ID)
-					fulfilledSlice = append(fulfilledSlice, true)
-					amountSlice = append(amountSlice, dono.AmountSent)
-					amountUSDSlice = append(amountUSDSlice, dono.AmountToSend)
-
-					continue
+				if tN == dono.CurrencyType {
+					valueStr := fmt.Sprintf("%.18f", transaction.Value)
+					valueToCheck, _ := utils.ConvertStringTo18DecimalPlaces(dono.AmountToSend)
+					log.Println("TX checked:", tN)
+					log.Println("Needed:", valueToCheck)
+					log.Println("Got   :", valueStr)
+					if valueStr == valueToCheck {
+						log.Println("Matching TX!")
+						dono.AmountSent = valueStr
+						addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
+						dono.Fulfilled = true
+						dono.UpdatedAt = time.Now().UTC()
+						fulfilledDonos = append(fulfilledDonos, dono)
+						updateDonoInMap(dono)
+						break
+					}
 				}
 
 			}
-			//fmt.Println("Amount sent", completedDono.AmountNeeded)
-			fmt.Println(dono.CurrencyType, "dono not completed:", tmpAmountSent)
+			valueToCheck, _ := utils.ConvertStringTo18DecimalPlaces(dono.AmountToSend)
+			dono.UpdatedAt = time.Now().UTC()
+			fmt.Println(valueToCheck, dono.CurrencyType, "Dono incomplete.")
+			updateDonoInMap(dono)
 			continue
 		}
 
 		// Check if the dono has exceeded the killDono time
 		timeElapsedFromDonoCreation := time.Since(dono.CreatedAt)
-		if timeElapsedFromDonoCreation > killDono || dono.Address == " " || dono.AmountToSend == 0.00 {
+		if timeElapsedFromDonoCreation > killDono || dono.Address == " " || dono.AmountToSend == "0.0" {
 			dono.Fulfilled = true
-			rowsToUpdate = append(rowsToUpdate, dono.ID)
-			// add true to fulfilledSlice
-			fulfilledSlice = append(fulfilledSlice, true)
-
-			amountSlice = append(amountSlice, dono.AmountSent)
-			amountUSDSlice = append(amountUSDSlice, dono.AmountToSend)
 			if dono.Address == " " {
 				log.Println("No dono address, killed (marked as fulfilled) and won't be checked again. \n")
 			} else {
 				log.Println("Dono too old, killed (marked as fulfilled) and won't be checked again. \n")
 			}
+			updateDonoInMap(dono)
 			continue
 		}
 
 		// Check if the dono needs to be skipped based on exponential backoff
 		secondsElapsedSinceLastCheck := time.Since(dono.UpdatedAt).Seconds()
+		dono.UpdatedAt = time.Now().UTC()
 
 		expoAdder := returnIPPenalty(ips, dono.EncryptedIP) + time.Since(dono.CreatedAt).Seconds()/60/60/19
 		secondsNeededToCheck := math.Pow(float64(baseCheckingRate)-0.02, expoAdder)
-		log.Println("Dono ID:", dono.ID, "Name:", dono.Name, "Dono to UserID:", dono.UserID)
-		log.Println("Message:", dono.Message)
-		log.Println("Media URL:", dono.MediaURL)
-		log.Println(dono.CurrencyType, "Needed:", dono.AmountToSend, "Recieved:", dono.AmountSent)
-		log.Println("Address:", dono.Address)
-		log.Println("Time since check:", fmt.Sprintf("%.2f", secondsElapsedSinceLastCheck), "Needed:", fmt.Sprintf("%.2f", secondsNeededToCheck))
+		printDonoInfo(dono, secondsElapsedSinceLastCheck, secondsNeededToCheck)
 
 		if secondsElapsedSinceLastCheck < secondsNeededToCheck {
 			log.Println("Not enough time has passed, skipping. \n")
 			continue // If not enough time has passed then ignore
 		}
+
 		log.Println("Enough time has passed, checking.")
 
 		if dono.CurrencyType == "XMR" {
 			dono.AmountSent, _ = getXMRBalance(dono.Address)
-			if dono.AmountSent >= dono.AmountToSend-float64(lamportFee)/1e9 && dono.AmountToSend != 0 {
-				dono.AmountToSend = addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
+			if dono.AmountSent == dono.AmountToSend {
+				addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID)
 				dono.Fulfilled = true
 				fulfilledDonos = append(fulfilledDonos, dono)
-				rowsToUpdate = append(rowsToUpdate, dono.ID)
-				fulfilledSlice = append(fulfilledSlice, true)
-				amountSlice = append(amountSlice, dono.AmountSent)
-				amountUSDSlice = append(amountUSDSlice, dono.AmountToSend)
+				updateDonoInMap(dono)
 				continue
 			}
 		} else if dono.CurrencyType == "SOL" {
 			if utils.CheckTransactionSolana(dono.AmountToSend, dono.Address, 100) {
-				dono.AmountToSend = addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
+				addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
 				dono.Fulfilled = true
 				fulfilledDonos = append(fulfilledDonos, dono)
-				rowsToUpdate = append(rowsToUpdate, dono.ID)
-				fulfilledSlice = append(fulfilledSlice, true)
-				amountSlice = append(amountSlice, dono.AmountSent)
-				amountUSDSlice = append(amountUSDSlice, dono.AmountToSend)
+				updateDonoInMap(dono)
 				continue
 			}
 		}
 
 		log.Println("New Amount Recieved:", dono.AmountSent, "\n")
-
-		// add to slices
-		fulfilledSlice = append(fulfilledSlice, false)
-		rowsToUpdate = append(rowsToUpdate, dono.ID)
-		amountSlice = append(amountSlice, dono.AmountSent)
-		amountUSDSlice = append(amountUSDSlice, dono.AmountToSend)
-
 	}
-
-	i := 0
-	// Update rows to be update in a way that never throws a database locked error
-	for _, rowID := range rowsToUpdate {
-		_, err = db.Exec(`UPDATE donos SET updated_at = ?, fulfilled = ?, amount_sent = ?, amount_to_send = ? WHERE dono_id = ?`, time.Now().UTC(), fulfilledSlice[i], amountSlice[i], amountUSDSlice[i], rowID)
-		if err != nil {
-			panic(err)
-		}
-		i += 1
-	}
-
+	updateDonosInDB()
+	removeFulfilledDonos(fulfilledDonos)
 	return fulfilledDonos
 }
 
-func getXMRBalance(checkID string) (float64, error) {
+func removeFulfilledDonos(donos []Dono) {
+	for _, dono := range donos {
+		if _, ok := donosMap[dono.ID]; ok {
+			delete(donosMap, dono.ID)
+		}
+	}
+}
+
+func returnETHAddresses() []string {
+	// Use a map to keep track of which addresses have already been added
+	addressMap := make(map[string]bool)
+	addresses := []string{}
+
+	for _, dono := range donosMap {
+		if dono.CurrencyType != "XMR" && dono.CurrencyType != "SOL" {
+			// Check if the address has already been added, and if not, add it to the slice and map
+			if _, ok := addressMap[dono.Address]; !ok {
+				addressMap[dono.Address] = true
+				addresses = append(addresses, dono.Address)
+			}
+		}
+	}
+
+	return addresses
+}
+
+func updateDonosInDB() {
+	// Open a new database connection
+	db, err := sql.Open("sqlite3", "users.db")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	// Loop through the donosMap and update the database with any changes
+	for _, dono := range donosMap {
+		if dono.Fulfilled {
+			log.Println("DONO COMPLETED! Dono: ", dono.AmountSent, dono.CurrencyType)
+		}
+		_, err = db.Exec("UPDATE donos SET user_id=?, dono_address=?, dono_name=?, dono_message=?, amount_to_send=?, amount_sent=?, currency_type=?, anon_dono=?, fulfilled=?, encrypted_ip=?, created_at=?, updated_at=?, usd_amount=?, media_url=? WHERE dono_id=?", dono.UserID, dono.Address, dono.Name, dono.Message, dono.AmountToSend, dono.AmountSent, dono.CurrencyType, dono.AnonDono, dono.Fulfilled, dono.EncryptedIP, dono.CreatedAt, dono.UpdatedAt, dono.USDAmount, dono.MediaURL, dono.ID)
+		if err != nil {
+			log.Printf("Error updating Dono with ID %d in the database: %v\n", dono.ID, err)
+		}
+	}
+}
+
+func getXMRBalance(checkID string) (string, error) {
 	url := "http://localhost:28088/json_rpc"
 
 	payload := struct {
@@ -1466,12 +1553,12 @@ func getXMRBalance(checkID string) (float64, error) {
 
 	reqBody, err := json.Marshal(payload)
 	if err != nil {
-		return 0, err
+		return "0.0", err
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
 	if err != nil {
-		return 0, err
+		return "0.0", err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -1479,124 +1566,35 @@ func getXMRBalance(checkID string) (float64, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, err
+		return "0.0", err
 	}
 	defer resp.Body.Close()
 
 	var result map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	if err != nil {
-		return 0, err
+		return "0.0", err
 	}
 
 	fmt.Println(result)
 
 	resultMap, ok := result["result"].(map[string]interface{})
 	if !ok {
-		return 0, fmt.Errorf("result key not found in response")
+		return "0.0", fmt.Errorf("result key not found in response")
 	}
 
 	payments, ok := resultMap["payments"].([]interface{})
 	if !ok {
-		return 0, fmt.Errorf("payments key not found in result map")
+		return "0.0", fmt.Errorf("payments key not found in result map")
 	}
 
 	if len(payments) == 0 {
-		return 0, fmt.Errorf("no payments found for payment ID %s", checkID)
+		return "0.0", fmt.Errorf("no payments found for payment ID %s", checkID)
 	}
 
 	amount := payments[0].(map[string]interface{})["amount"].(float64)
 
-	return (amount / math.Pow(10, 12)), nil
-}
-
-func processQueue(db *sql.DB) error {
-
-	// Retrieve oldest entry from queue table
-	row := db.QueryRow(`
-		SELECT id, name, amount, currency FROM queue
-		ORDER BY created_at ASC LIMIT 1
-	`)
-
-	var id int
-	var name string
-	var amount float64
-	var currency string
-	err := row.Scan(&id, &name, &amount, &currency)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil
-		}
-		return err
-	}
-
-	// Check if we can display a new dono
-	if displayNewDono(name, amount, currency) {
-		_, err = db.Exec(`
-			DELETE FROM queue WHERE id = ?
-		`, id)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// CreateAddress inserts a new address into the database.
-func CreateAddress(addr AddressSolana) error {
-	// Convert the private key to a byte slice.
-	privateKeyBytes := []byte(addr.KeyPrivate)
-
-	// Insert the address into the database.
-	_, err := db.Exec("INSERT INTO addresses (key_public, key_private) VALUES (?, ?)",
-		addr.KeyPublic, privateKeyBytes)
-	return err
-}
-
-// ReadAddress reads an address from the database by public key.
-func ReadAddress(publicKey string) (*AddressSolana, error) {
-	// Query the database for the address.
-	row := db.QueryRow("SELECT key_public, key_private FROM addresses WHERE key_public = ?", publicKey)
-
-	var keyPublic string
-	var privateKeyBytes []byte
-	err := row.Scan(&keyPublic, &privateKeyBytes)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert the private key byte slice to an ed25519.PrivateKey.
-	privateKey := ed25519.PrivateKey(privateKeyBytes)
-
-	// Create a new AddressSolana object.
-	addr := AddressSolana{
-		KeyPublic:  keyPublic,
-		KeyPrivate: privateKey,
-	}
-
-	return &addr, nil
-}
-
-// UpdateAddress updates an existing address in the database.
-func UpdateAddress(addr AddressSolana) error {
-	// Convert the private key to a byte slice.
-	privateKeyBytes := []byte(addr.KeyPrivate)
-
-	// Update the address in the database.
-	_, err := db.Exec("UPDATE addresses SET key_private = ? WHERE key_public = ?",
-		privateKeyBytes, addr.KeyPublic)
-	return err
-}
-
-// DeleteAddress deletes an address from the database by public key.
-func DeleteAddress(publicKey string) error {
-	_, err := db.Exec("DELETE FROM addresses WHERE key_public = ?", publicKey)
-	return err
-}
-
-func displayNewDono(name string, amount float64, currency string) bool {
-	return false
+	return utils.FloatToString(amount / math.Pow(10, 12)), nil
 }
 
 func runDatabaseMigrations(db *sql.DB) error {
@@ -1751,8 +1749,8 @@ func createDatabaseIfNotExists(db *sql.DB) error {
             dono_address TEXT,
             dono_name TEXT,
             dono_message TEXT,
-            amount_to_send FLOAT,            
-            amount_sent FLOAT,
+            amount_to_send TEXT,            
+            amount_sent TEXT,
             currency_type TEXT,
             anon_dono BOOL,
             fulfilled BOOL,
@@ -2023,6 +2021,7 @@ func createUser(user User) int {
 
 // update an existing user
 func updateUser(user User) error {
+	globalUsers[user.UserID] = user
 	statement := `
 		UPDATE users
 		SET Username=?, HashedPassword=?, eth_address=?, sol_address=?, hex_address=?,
@@ -2717,7 +2716,7 @@ func checkFileExists(filePath string) bool {
 
 func checkUserGIF(userpath string) bool {
 	up := userpath + "gifs/default.gif"
-	log.Println("checking", up)
+	//log.Println("checking", up)
 	b := checkFileExists(up)
 	if b {
 		log.Println("user gif exists")
@@ -2729,7 +2728,7 @@ func checkUserGIF(userpath string) bool {
 
 func checkUserSound(userpath string) bool {
 	up := userpath + "sounds/default.mp3"
-	log.Println("checking", up)
+	//log.Println("checking", up)
 	b := checkFileExists(up)
 	if b {
 		log.Println("user sound exists")
@@ -2782,9 +2781,9 @@ func progressbarOBSHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Println("Progress bar message:", obsData.Message)
+	/*log.Println("Progress bar message:", obsData.Message)
 	log.Println("Progress bar needed:", obsData.Needed)
-	log.Println("Progress bar sent:", obsData.Sent)
+	log.Println("Progress bar sent:", obsData.Sent)*/
 
 	pb.Message = obsData.Message
 	pb.Needed = obsData.Needed
@@ -2883,7 +2882,7 @@ func checkDonoQueue(db *sql.DB, userID int) (bool, error) {
 	// update the form in memory
 	a.Name = name
 	a.Message = message
-	a.Amount = amount
+	a.Amount, _ = strconv.ParseFloat(utils.PruneStringDecimals(fmt.Sprintf("%f", amount), 4), 64)
 	a.Currency = currency
 	a.MediaURL = media_url
 	a.USDAmount = usd_amount
@@ -2959,6 +2958,8 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println(err)
 	}
+	fmt.Println("fAmount", fAmount)
+	fmt.Println("Amount", amount)
 
 	if fCrypto == "XMR" && amount < minMonero {
 		amount = minMonero
@@ -3010,13 +3011,20 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	USDAmount := getUSDValue(amount, fCrypto)
 	if fCrypto == "XMR" {
+
+		fmt.Println("Amount", amount)
 		handleMoneroPayment(w, &s, params, amount, encrypted_ip, showAmount, USDAmount, id)
 	} else if fCrypto == "SOL" {
+		fmt.Println("Amount", amount)
 		new_dono := createNewSolDono(s.Name, s.Message, s.Media, utils.FuzzSolDono(amount))
+		fmt.Println("Amount needed:", new_dono.AmountNeeded)
 		handleSolanaPayment(w, &s, params, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, media, encrypted_ip, USDAmount, id)
 	} else {
+		fmt.Println("Amount", amount)
 		s.Currency = fCrypto
 		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount, fCrypto)
+		fmt.Printf("Amount needed: %.18f\n", new_dono.AmountNeeded)
+
 		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL, fCrypto, encrypted_ip, USDAmount, id)
 	}
 }
@@ -3113,8 +3121,10 @@ func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, me
 
 	decimals, _ := utils.GetCryptoDecimalsByCode(fCrypto)
 	donoStr := fmt.Sprintf("%.*f", decimals, amount_)
+	log.Println("handleEthereumPayment() donoStr:", address)
 
 	s.Amount = donoStr
+	log.Println("handleEthereumPayment() donoStr:", s.Amount)
 
 	if fCrypto != "ETH" {
 		s.ContractAddress, _ = utils.GetCryptoContractByCode(fCrypto)
@@ -3137,8 +3147,9 @@ func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, me
 
 	tmp, _ := qrcode.Encode(donationLink, qrcode.Low, 320)
 	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
-
-	s.DonationID = createNewDono(userID, address, s.Name, s.Message, amount_, fCrypto, encrypted_ip, showAmount_, USDAmount, media_)
+	fmt.Println("createNewDono() amount_", amount_)
+	fmt.Println("createNewDono() s.Amount", s.Amount)
+	s.DonationID = createNewDono(userID, address, s.Name, s.Message, s.Amount, fCrypto, encrypted_ip, showAmount_, USDAmount, media_)
 	err := payTemplate.Execute(w, s)
 	if err != nil {
 		fmt.Println(err)
@@ -3170,7 +3181,7 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	tmp, _ := qrcode.Encode("solana:"+address+"?amount="+donoStr, qrcode.Low, 320)
 	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
 
-	s.DonationID = createNewDono(userID, address, name_, message_, amount_, "SOL", encrypted_ip, showAmount_, USDAmount, media_)
+	s.DonationID = createNewDono(userID, address, name_, message_, s.Amount, "SOL", encrypted_ip, showAmount_, USDAmount, media_)
 
 	err := payTemplate.Execute(w, s)
 	if err != nil {
@@ -3224,7 +3235,7 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", resp.Result.IntegratedAddress, s.Amount), qrcode.Low, 320)
 	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
 
-	s.DonationID = createNewDono(userID, s.PayID, s.Name, s.Message, amount, "XMR", encrypted_ip, showAmount, USDAmount, s.Media)
+	s.DonationID = createNewDono(userID, s.PayID, s.Name, s.Message, s.Amount, "XMR", encrypted_ip, showAmount, USDAmount, s.Media)
 
 	err = payTemplate.Execute(w, s)
 	if err != nil {
