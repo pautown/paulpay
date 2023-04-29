@@ -4,7 +4,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/web3@1.3.6/dist/web3.min.js"></script>
   <script src="bignumber.js"></script>
-   <title>ferret.cash</title>
+   <title>ferret.cash - pending ferret</title>
         {{$ethtoken := false}}
         {{$erc20token := true}}
         {{if eq .Currency "SOL"}}
@@ -24,7 +24,9 @@
 
 </head>
 <body>
-    <h3>Send exactly <b>{{.Amount}}</b> {{.Currency}}:</h3>
+    <br>
+    <h3>Send exactly <b><a href="javascript:void(0)" onclick="copyAmount()"><b>{{.Amount}}</b></a></b> {{.Currency}}:</h3>
+    <input type="hidden" id="hidden-amount-input" value="{{.Amount}}">
 <small>
     <p id="donation-status"><img src="loader.svg" class="loading-wheel" alt="Loading wheel"> Checking For Donation... </p>
 </small>
@@ -48,13 +50,16 @@
 
 <label>Payment Address:</label>
 <blockquote style="user-select: all">
-    {{.Address}}
+    <a href="javascript:void(0)" onclick="copyAddress()" style="color: white;">{{.Address}}</a>
 </blockquote>
+
+    <input type="hidden" id="hidden-address-input" value="{{.Address}}">
 <p id="donation-metamask"></p>
 <label>Or scan:</label>
-<blockquote>
+<blockquote style="text-align: center;">
     <img src="data:image/png;base64,{{.QRB64}}"/>
 </blockquote>
+
        
 <small>Stay on this screen until transaction is seen.</small><br>
 <footer>
@@ -88,7 +93,7 @@
         else if (erc20token === true){
             addERC20MetamaskButton();
         }
-        
+
       // Stop the interval when the status is complete
       if (status_indicator.hasClass("complete")) {
         clearInterval(interval_id);
@@ -233,6 +238,50 @@
       return parseInt(parts.join(''));
     }
 
+    function copyAmount() {
+    // Get the hidden input field by ID
+    const hiddenAmountInput = document.getElementById('hidden-amount-input');
+
+    // Create a temporary textarea element
+    const tempTextArea = document.createElement('textarea');
+    tempTextArea.value = hiddenAmountInput.value;
+
+    // Add the textarea to the DOM (off-screen)
+    tempTextArea.style.position = 'absolute';
+    tempTextArea.style.left = '-9999px';
+    document.body.appendChild(tempTextArea);
+
+    // Select the text in the textarea and copy it
+    tempTextArea.select();
+    tempTextArea.setSelectionRange(0, 99999); // For mobile devices
+    document.execCommand('copy');
+
+    // Remove the temporary textarea element from the DOM
+    document.body.removeChild(tempTextArea);
+  }
+
+  function copyAddress() {
+    // Get the hidden input field by ID
+    const hiddenInput = document.getElementById('hidden-address-input');
+
+    // Create a temporary textarea element
+    const tempTextArea = document.createElement('textarea');
+    tempTextArea.value = hiddenInput.value;
+
+    // Add the textarea to the DOM (off-screen)
+    tempTextArea.style.position = 'absolute';
+    tempTextArea.style.left = '-9999px';
+    document.body.appendChild(tempTextArea);
+
+    // Select the text in the textarea and copy it
+    tempTextArea.select();
+    tempTextArea.setSelectionRange(0, 99999); // For mobile devices
+    document.execCommand('copy');
+
+    // Remove the temporary textarea element from the DOM
+    document.body.removeChild(tempTextArea);
+  }
+
 
     function updateDonationStatus(donation_id, status_indicator) {
       console.log("Checking donation status...");
@@ -244,7 +293,7 @@
             console.log("Donation received");
             document.querySelector("#donation-status").textContent = "";
             document.querySelector("#donation-completed").textContent = "Donation received!";
-            document.title = "Donation Received, Thank You!";
+            document.title = "Ferret Complete!";
             blinkTab();
             clearInterval(interval_id); // interval_id is now accessible in this function
           } else {

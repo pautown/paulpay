@@ -57,7 +57,6 @@
 		<table>
 			<thead>
 				<tr>
-
 					<th onclick="sortTable(0)">Donation Time</th>
 					<th onclick="sortTable(1)">Donation Name</th>
 					<th onclick="sortTable(2)">Donation Message</th>
@@ -69,7 +68,6 @@
 			<tbody id="donations-table-body">
 				{{range .}}
 				<tr>
-
 					<td>{{.UpdatedAt.Format "15:04:05 01-02-2006"}}</td>
 					<td>{{.Name}}</td>
 					<td>{{.Message}} {{.MediaURL}}</td>

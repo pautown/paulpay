@@ -46,19 +46,8 @@ var USDMinimum float64 = 5
 var MediaMin float64 = 0.025 // Currently unused
 var MessageMaxChar int = 250
 var NameMaxChar int = 25
-var rpcURL string = "http://127.0.0.1:28088/json_rpc"
-var solToUsd = 0.00
-var ethToUsd = 0.00
-var xmrToUsd = 0.00
-var paintToUsd = 0.00
-var hexToUsd = 0.00
-var maticToUsd = 0.00
-var busdToUsd = 0.00
-var shibToUsd = 0.00
-var usdcToUsd = 0.00
-var tusdToUsd = 0.00
-var wbtcToUsd = 0.00
-var pnkToUsd = 0.00
+
+var host_url string = "https://pay.paul.town/"
 
 var addressSliceSolana []AddressSolana
 
@@ -82,12 +71,7 @@ var incorrectPasswordTemplate *template.Template
 var baseCheckingRate = 25
 
 var minSolana, minMonero, minEthereum, minPaint, minHex, minPolygon, minBusd, minShib, minUsdc, minTusd, minWbtc, minPnk float64 // Global variables to hold minimum values required to equal the global value.
-var minDonoValue float64 = 5.0                                                                                                   // The global value to equal in USD terms
-var lamportFee = 1000000
-
-var adminSolanaAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
-var adminEthereumAddress = "adWqokePHcAbyF11TgfvvM1eKax3Kxtnn9sZVQh6fXo"
-var adminHexcoinAddress = "9mP1PQXaXWQA44Fgt9PKtPKVvzXUFvrLD2WDLKcj9FVa"
+var minDonoValue float64 = 5.0
 
 type priceData struct {
 	Monero struct {
@@ -123,6 +107,18 @@ type User struct {
 	DonoGIF              string
 	DonoSound            string
 	AlertURL             string
+	MinSol               float64
+	MinEth               float64
+	MinXmr               float64
+	MinPaint             float64
+	MinHex               float64
+	MinMatic             float64
+	MinBusd              float64
+	MinShib              float64
+	MinUsdc              float64
+	MinTusd              float64
+	MinWbtc              float64
+	MinPnk               float64
 	DateEnabled          time.Time
 	WalletUploaded       bool
 }
@@ -137,6 +133,8 @@ type CryptoPrice struct {
 	BinanceUSD float64 `json:"binance-usd"`
 	ShibaInu   float64 `json:"shiba-inu"`
 	Kleros     float64 `json:"pnk"`
+	WBTC       float64 `json:"wbtc"`
+	TUSD       float64 `json: "tusd"`
 }
 
 type UserPageData struct {
@@ -276,11 +274,12 @@ var tableTemplate = template.Must(template.New("table").Parse(`
 	<tr>
 		<td>{{.UpdatedAt.Format "15:04:05 01-02-2006"}}</td>
 		<td>{{.Name}}</td>
-		<td>{{.Message}}</td>
+		<td>{{.Message}} {{.MediaURL}}</td>
+		<td>${{.USDAmount}}</td>
 		<td>${{.AmountSent}}</td>
-		<td>{{.USDAmount}}</td>
 		<td>{{.CurrencyType}}</td>
 	</tr>
+
 	{{end}}
 `))
 
@@ -362,6 +361,7 @@ func donationsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+
 	var err error
 
 	// Open a new database connection
@@ -388,6 +388,30 @@ func main() {
 	time.Sleep(5 * time.Second)
 	log.Println("Starting server")
 
+	setupRoutes()
+
+	time.Sleep(2 * time.Second)
+	// Schedule a function to run fetchExchangeRates every three minutes
+	go fetchExchangeRates()
+	go checkDonos()
+
+	a.Refresh = 10
+	pb.Refresh = 1
+	obsData = getObsData(db, 1)
+
+	setServerVars()
+
+	go createTestDono(2, "Big Bob", "XMR", "This Cruel Message is Bob's Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", "50", 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+	// go createTestDono("Medium Bob", "XMR", "Hey it's medium Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+
+	err = http.ListenAndServe(":8900", nil)
+	if err != nil {
+		panic(err)
+	}
+
+}
+
+func setupRoutes() {
 	http.HandleFunc("/style.css", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/style.css")
 	})
@@ -430,15 +454,6 @@ func main() {
 		http.ServeFile(w, r, "web/busd.svg")
 	})
 
-	// TODO
-	/*Adjust fuzzing to accurately reflect decimals of contract as per
-		  // Get the decimals of the token
-	    const decimals = await contract.methods.decimals().call();
-
-	    console.log(decimals)
-
-	*/
-
 	http.HandleFunc("/hex.svg", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/hex.svg")
 	})
@@ -474,18 +489,6 @@ func main() {
 	http.Handle("/media/", http.StripPrefix("/media/", http.FileServer(http.Dir("web/obs/media/"))))
 	http.Handle("/users/", http.StripPrefix("/users/", http.FileServer(http.Dir("users/"))))
 
-	time.Sleep(2 * time.Second)
-
-	// Schedule a function to run fetchExchangeRates every three minutes
-	go fetchExchangeRates()
-	go checkDonos()
-
-	a.Refresh = 10
-	pb.Refresh = 1
-
-	obsData.URLdonobar = "/progressbar"
-	obsData.URLdisplay = "/alert"
-
 	http.HandleFunc("/donations", donationsHandler)
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/pay", paymentHandler)
@@ -504,8 +507,6 @@ func main() {
 	http.HandleFunc("/changeuser", changeUserHandler)
 	http.HandleFunc("/changeusermonero", changeUserMoneroHandler)
 
-	obsData = getObsData(db, 1)
-
 	indexTemplate, _ = template.ParseFiles("web/index.html")
 	donationTemplate, _ = template.ParseFiles("web/donation.html")
 	footerTemplate, _ = template.ParseFiles("web/footer.html")
@@ -520,18 +521,6 @@ func main() {
 	userTemplate, _ = template.ParseFiles("web/user.html")
 	logoutTemplate, _ = template.ParseFiles("web/logout.html")
 	incorrectPasswordTemplate, _ = template.ParseFiles("web/password_change_failed.html")
-
-	setServerVars()
-
-	// go createTestDono("Huge Bob", "XMR", "Hey it's Huge Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
-	go createTestDono(2, "Big Bob", "XMR", "This Cruel Message is Bob's Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", "50", 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
-	// go createTestDono("Medium Bob", "XMR", "Hey it's medium Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
-
-	err = http.ListenAndServe(":8900", nil)
-	if err != nil {
-		panic(err)
-	}
-
 }
 
 func startWallets() {
@@ -759,19 +748,8 @@ func setServerVars() {
 	if err != nil {
 		panic(err)
 	}
-
 	json_links, _ = getUserLinks(user)
-
-	minDonoValue = float64(user.MinDono)
-	adminSolanaAddress = user.SolAddress
-
-	ServerMediaEnabled = user.MediaEnabled
-	ServerMinMediaDono = user.MinMediaDono
 	setMinDonos()
-	log.Println("adminSolanaAddress:", adminSolanaAddress)
-	log.Println("ServerMediaEnabled:", ServerMediaEnabled)
-	log.Println("ServerMinMediaDono:", ServerMinMediaDono)
-
 }
 func createTestDono(user_id int, name string, curr string, message string, amount string, usdAmount float64, media_url string) {
 	valid, media_url_ := checkDonoForMediaUSDThreshold(media_url, usdAmount)
@@ -886,97 +864,43 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 	tpl.Execute(w, donos)
 }
 
+func setUserMinDonos(user User) User {
+	log.Println("begin setUserMinDonos() for", user.UserID)
+	var err error
+	user.MinSol, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.Solana)), 64)
+	user.MinEth, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.Ethereum)), 64)
+	user.MinXmr, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.Monero)), 64)
+	user.MinPaint, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.Paint)), 64)
+	user.MinHex, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.Hexcoin)), 64)
+	user.MinMatic, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.Polygon)), 64)
+	user.MinBusd, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.BinanceUSD)), 64)
+	user.MinShib, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.ShibaInu)), 64)
+	user.MinUsdc, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono))), 64)
+	user.MinTusd, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono))), 64)
+	user.MinWbtc, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.WBTC)), 64)
+	user.MinPnk, err = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.Kleros)), 64)
+	log.Println("setUserMinDonos() user.MinSol = ", user.MinSol)
+	if err != nil {
+		log.Println("setUserMinDonos() err:", err)
+	}
+
+	return user
+}
+
 func setMinDonos() {
-
-	// Calculate all minimum donations
-	minMonero := minDonoValue / xmrToUsd
-	minSolana := minDonoValue / solToUsd
-	minEthereum := minDonoValue / ethToUsd
-	minHex := minDonoValue / hexToUsd
-	minPolygon := minDonoValue / maticToUsd
-	minBusd := minDonoValue / busdToUsd
-	minShib := minDonoValue / shibToUsd
-	minUsdc := minDonoValue / usdcToUsd
-	minTusd := minDonoValue / tusdToUsd
-	minWbtc := minDonoValue / wbtcToUsd
-	minPnk := minDonoValue / pnkToUsd
-	minPaint := minDonoValue / paintToUsd
-
-	// Format all minimums with 5 decimal places
-	minMonero, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minMonero), 64)
-	minSolana, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minSolana), 64)
-	minEthereum, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minEthereum), 64)
-	minHex, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minHex), 64)
-	minPolygon, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minPolygon), 64)
-	minBusd, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minBusd), 64)
-	minShib, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minShib), 64)
-	minUsdc, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minUsdc), 64)
-	minTusd, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minTusd), 64)
-	minWbtc, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minWbtc), 64)
-	minPnk, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minPnk), 64)
-	minPaint, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", minPaint), 64)
-
-	// Output all minimums in a single line
-	log.Printf("Minimums: Monero=%.5f, Solana=%.5f, Ethereum=%.5f, HEX=%.5f, Polygon=%.5f, BUSD=%.5f, SHIB=%.5f, PNK=%.5f, PAINT=%.5f",
-		minMonero, minSolana, minEthereum, minHex, minPolygon, minBusd, minShib, minPnk, minPaint)
-
+	for i := range globalUsers {
+		globalUsers[i] = setUserMinDonos(globalUsers[i])
+	}
 }
 
 func fetchExchangeRates() {
 	for {
 		// Fetch the exchange rate data from the API
 		prices, _ = getCryptoPrices()
-
-		// Update the exchange rate values
-		xmrToUsd = prices.Monero
-		solToUsd = prices.Solana
-		ethToUsd = prices.Ethereum
-		paintToUsd = prices.Paint
-		hexToUsd = prices.Hexcoin
-		maticToUsd = prices.Polygon
-		busdToUsd = prices.BinanceUSD
-		shibToUsd = prices.ShibaInu
-		pnkToUsd = prices.Kleros
-
-		fmt.Println("Updated exchange rates:", " 1 XMR:", "$"+fmt.Sprintf("%.2f", xmrToUsd), "1 SOL:", "$"+fmt.Sprintf("%.2f", solToUsd), "1 ETH:", "$"+fmt.Sprintf("%.2f", ethToUsd), "1 PAINT:", "$"+fmt.Sprintf("%.2f", paintToUsd), "1 HEX:", "$"+fmt.Sprintf("%.2f", hexToUsd), "1 MATIC:", "$"+fmt.Sprintf("%.2f", maticToUsd), "1 BUSD:", "$"+fmt.Sprintf("%.2f", busdToUsd), "1 SHIB:", "$"+fmt.Sprintf("%.2f", shibToUsd), "1 USDC:", "$"+fmt.Sprintf("%.2f", usdcToUsd), "1 TUSD:", "$"+fmt.Sprintf("%.2f", tusdToUsd), "1 WBTC:", "$"+fmt.Sprintf("%.2f", wbtcToUsd), "1 PNK:", "$"+fmt.Sprintf("%.2f", pnkToUsd))
-
-		// Calculate how much is needed to equal the min usd donation.
-		minMonero = minDonoValue / prices.Monero
-		minSolana = minDonoValue / prices.Solana
-		minEthereum = minDonoValue / prices.Ethereum
-		minPaint = minDonoValue / prices.Paint
-		minHex = minDonoValue / prices.Hexcoin
-		minPolygon = minDonoValue / prices.Polygon
-		minBusd = minDonoValue / prices.BinanceUSD
-		minShib = minDonoValue / prices.ShibaInu
-		minPnk = minDonoValue / prices.Kleros
-
-		minMonero, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minMonero), 64)
-		minSolana, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minSolana), 64)
-		minEthereum, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minEthereum), 64)
-		// Round the minimum donation values to 4 decimal places
-		minPaint, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minPaint), 64)
-		minHex, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minHex), 64)
-		minPolygon, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minPolygon), 64)
-		minBusd, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minBusd), 64)
-		minShib, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minShib), 64)
-		minUsdc, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minUsdc), 64)
-		minTusd, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minTusd), 64)
-		minWbtc, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minWbtc), 64)
-		minPnk, _ = strconv.ParseFloat(fmt.Sprintf("%.4f", minPnk), 64)
-
-		// Save the minimum Monero and Solana variables
-		// Print the minimum donation values for all cryptos
-		fmt.Println("Minimum Dono:", "$"+fmt.Sprintf("%.2f", minDonoValue), "- XMR:", minMonero, "SOL:", minSolana, "ETH:", minEthereum, "PAINT:", minPaint, "HEX:", minHex, "MATIC:", minPolygon, "BUSD:", minBusd, "SHIB:", minShib, "USDC:", minUsdc, "TUSD:", minTusd, "WBTC:", minWbtc, "PNK:", minPnk)
-
-		// Wait three minutes before fetching again
-		if xmrToUsd == 0 || solToUsd == 0 || ethToUsd == 0 || paintToUsd == 0 || hexToUsd == 0 || maticToUsd == 0 || busdToUsd == 0 || shibToUsd == 0 || usdcToUsd == 0 || tusdToUsd == 0 || wbtcToUsd == 0 || pnkToUsd == 0 {
-			time.Sleep(180 * time.Second)
-		} else {
-			time.Sleep(30 * time.Second)
-		}
-
+		setMinDonos()
+		time.Sleep(80 * time.Second)
 	}
+
 }
 
 func createNewEthDono(name string, message string, mediaURL string, amountNeeded float64, cryptoCode string) utils.SuperChat {
@@ -987,7 +911,7 @@ func createNewEthDono(name string, message string, mediaURL string, amountNeeded
 }
 
 func startMoneroWallet(port_int, user_id int) {
-	cmd := exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", strconv.Itoa(port_int), "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/1/monero/wallet", "--disable-rpc-login", "--password", "")
+	cmd := exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", strconv.Itoa(port_int), "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/"+strconv.Itoa(user_id)+"/monero/wallet", "--disable-rpc-login", "--password", "")
 	_, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Println("Error running command:", err)
@@ -1034,30 +958,23 @@ func checkDonos() {
 func getUSDValue(as float64, c string) float64 {
 	usdVal := 0.00
 
-	if c == "XMR" {
-		usdVal = as * xmrToUsd
-	} else if c == "SOL" {
-		usdVal = as * solToUsd
-	} else if c == "ETH" {
-		usdVal = as * ethToUsd
-	} else if c == "PAINT" {
-		usdVal = as * paintToUsd
-	} else if c == "HEX" {
-		usdVal = as * hexToUsd
-	} else if c == "MATIC" {
-		usdVal = as * maticToUsd
-	} else if c == "BUSD" {
-		usdVal = as * busdToUsd
-	} else if c == "SHIB" {
-		usdVal = as * shibToUsd
-	} else if c == "USDC" {
-		usdVal = as * usdcToUsd
-	} else if c == "TUSD" {
-		usdVal = as * tusdToUsd
-	} else if c == "WBTC" {
-		usdVal = as * wbtcToUsd
-	} else if c == "PNK" {
-		usdVal = as * pnkToUsd
+	priceMap := map[string]float64{
+		"XMR":   prices.Monero,
+		"SOL":   prices.Solana,
+		"ETH":   prices.Ethereum,
+		"PAINT": prices.Paint,
+		"HEX":   prices.Hexcoin,
+		"MATIC": prices.Polygon,
+		"BUSD":  prices.BinanceUSD,
+		"SHIB":  prices.ShibaInu,
+		"PNK":   prices.Kleros,
+	}
+
+	if price, ok := priceMap[c]; ok {
+		usdVal = as * price
+	} else {
+		usdVal = 1.00
+		return usdVal
 	}
 	usdValStr := fmt.Sprintf("%.2f", usdVal)      // format usdVal as a string with 2 decimal points
 	usdVal, _ = strconv.ParseFloat(usdValStr, 64) // convert the string back to a float
@@ -1392,11 +1309,6 @@ func checkUnfulfilledDonos() []Dono {
 		time.Sleep(2 * time.Second)
 	}
 
-	/*for _, tx := range eth_transactions {
-		valueStr := fmt.Sprintf("%.18f", tx.Value)
-		log.Println("tx:", tx.Asset, "value:", valueStr)
-	}*/
-
 	for _, dono := range donosMap {
 		if dono.CurrencyType != "XMR" && dono.CurrencyType != "SOL" {
 			// Check if amount matches a completed dono amount
@@ -1468,15 +1380,13 @@ func checkUnfulfilledDonos() []Dono {
 		} else if dono.CurrencyType == "SOL" {
 			if utils.CheckTransactionSolana(dono.AmountToSend, dono.Address, 100) {
 				dono.AmountSent = dono.AmountToSend
-				addDonoToDonoBar(dono.AmountToSend, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
+				addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
 				dono.Fulfilled = true
 				fulfilledDonos = append(fulfilledDonos, dono)
 				updateDonoInMap(dono)
 				continue
 			}
 		}
-
-		log.Println("New Amount Recieved:", dono.AmountSent, "\n")
 	}
 	updateDonosInDB()
 	removeFulfilledDonos(fulfilledDonos)
@@ -1519,7 +1429,7 @@ func updateDonosInDB() {
 
 	// Loop through the donosMap and update the database with any changes
 	for _, dono := range donosMap {
-		if dono.Fulfilled {
+		if dono.Fulfilled && dono.AmountSent != "0.0" {
 			log.Println("DONO COMPLETED! Dono: ", dono.AmountSent, dono.CurrencyType)
 		}
 		_, err = db.Exec("UPDATE donos SET user_id=?, dono_address=?, dono_name=?, dono_message=?, amount_to_send=?, amount_sent=?, currency_type=?, anon_dono=?, fulfilled=?, encrypted_ip=?, created_at=?, updated_at=?, usd_amount=?, media_url=? WHERE dono_id=?", dono.UserID, dono.Address, dono.Name, dono.Message, dono.AmountToSend, dono.AmountSent, dono.CurrencyType, dono.AnonDono, dono.Fulfilled, dono.EncryptedIP, dono.CreatedAt, dono.UpdatedAt, dono.USDAmount, dono.MediaURL, dono.ID)
@@ -2010,9 +1920,6 @@ func createUser(user User) int {
 		log.Println(err)
 	}
 
-	adminEthereumAddress = user.EthAddress
-	adminSolanaAddress = user.SolAddress
-	adminHexcoinAddress = user.HexcoinAddress
 	minDonoValue = float64(user.MinDono)
 	log.Println("finished createNewUser")
 	return userID
@@ -2100,6 +2007,17 @@ func getOBSDataByUserID(userID int) (obsDataStruct, error) {
 
 }
 
+func getUserByUsernameCached(username string) (User, bool) {
+
+	for _, user := range globalUsers {
+		if user.Username == username {
+			return user, true
+		}
+	}
+	return globalUsers[0], false
+
+}
+
 // get a user by their username
 func getUserByUsername(username string) (User, error) {
 	var user User
@@ -2127,6 +2045,7 @@ func getUserByUsername(username string) (User, error) {
 	if !alertURL.Valid {            // check if the "dono_gif" column is null
 		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"
 	}
+	user = setUserMinDonos(user)
 
 	return user, nil
 
@@ -2292,9 +2211,8 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	host := r.Host // get host url
-	obsData.URLdonobar = host + "/progressbar?value=" + user.AlertURL
-	obsData.URLdisplay = host + "/alert?value=" + user.AlertURL
+	obsData.URLdonobar = host_url + "progressbar?value=" + user.AlertURL
+	obsData.URLdisplay = host_url + "alert?value=" + user.AlertURL
 	obsData_ := getObsData(db, user.UserID)
 
 	if r.Method == http.MethodPost {
@@ -2368,8 +2286,8 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println(obsData_.Message)
 	log.Println(obsData_.Needed)
 	log.Println(obsData_.Sent)
-	obsData_.URLdonobar = host + "/progressbar?value=" + user.AlertURL
-	obsData_.URLdisplay = host + "/alert?value=" + user.AlertURL
+	obsData_.URLdonobar = host_url + "progressbar?value=" + user.AlertURL
+	obsData_.URLdisplay = host_url + "alert?value=" + user.AlertURL
 	log.Println(obsData.URLdonobar)
 	log.Println(obsData.URLdisplay)
 
@@ -2400,18 +2318,16 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "POST" {
-		user.Username = r.FormValue("username")
 		user.EthAddress = r.FormValue("ethaddress")
 		user.SolAddress = r.FormValue("soladdress")
 		user.HexcoinAddress = r.FormValue("hexcoinaddress")
 		user.XMRWalletPassword = r.FormValue("xmrwalletpassword")
-		minDono, _ := strconv.Atoi(r.FormValue("mindono"))
-		user.MinDono = minDono
-		minMediaDono, _ := strconv.Atoi(r.FormValue("minmediadono"))
-		user.MinMediaDono = minMediaDono
+		user.MinDono, _ = strconv.Atoi(r.FormValue("mindono"))
+		user.MinMediaDono, _ = strconv.Atoi(r.FormValue("minmediadono"))
 		mediaEnabled := r.FormValue("mediaenabled") == "on"
 		user.MediaEnabled = mediaEnabled
 
+		user = setUserMinDonos(user)
 		err := updateUser(user)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2427,7 +2343,7 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	setMinDonos()
+
 	tmpl.Execute(w, user)
 
 }
@@ -2591,16 +2507,15 @@ func changeUserHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		user.EthAddress = r.FormValue("ethereumAddress")
-		adminEthereumAddress = user.EthAddress
 		user.SolAddress = r.FormValue("solanaAddress")
-		adminSolanaAddress = user.SolAddress
 		user.HexcoinAddress = r.FormValue("hexcoinAddress")
-		adminHexcoinAddress = user.HexcoinAddress
 		minDono, _ := strconv.Atoi(r.FormValue("minUsdAmount"))
 		user.MinDono = minDono
 		minDonoValue = float64(minDono)
 
 		// Update the user with the new data
+
+		user = setUserMinDonos(user)
 		err = updateUser(user)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2801,8 +2716,11 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Get the username from the URL path
 	username := r.URL.Path[1:]
-	log.Println("Username:", username)
-	if len(username) > 0 {
+	user_, valid := getUserByUsernameCached(username)
+	// Calculate all minimum donations
+	user := globalUsers[user_.UserID]
+	log.Println("user ID in indexHandler =", user.UserID)
+	if valid && username != "admin" {
 
 		linksJSON, err := json.Marshal(json_links)
 		if err != nil {
@@ -2819,28 +2737,31 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 		i := indexDisplay{
 			MaxChar:      MessageMaxChar,
-			MinSolana:    minSolana,
-			MinEthereum:  minEthereum,
-			MinMonero:    minMonero,
-			MinHex:       minHex,
-			MinPolygon:   minPolygon,
-			MinBusd:      minBusd,
-			MinShib:      minShib,
-			MinPnk:       minPnk,
-			MinPaint:     minPaint,
-			SolPrice:     solToUsd,
-			ETHPrice:     ethToUsd,
-			XMRPrice:     xmrToUsd,
-			PolygonPrice: maticToUsd,
-			HexPrice:     hexToUsd,
-			BusdPrice:    busdToUsd,
-			ShibPrice:    shibToUsd,
-			PnkPrice:     pnkToUsd,
-			PaintPrice:   paintToUsd,
+			MinSolana:    user.MinSol,
+			MinEthereum:  user.MinEth,
+			MinMonero:    user.MinXmr,
+			MinHex:       user.MinHex,
+			MinPolygon:   user.MinMatic,
+			MinBusd:      user.MinBusd,
+			MinShib:      user.MinShib,
+			MinPnk:       user.MinPnk,
+			MinPaint:     user.MinPaint,
+			SolPrice:     prices.Solana,
+			ETHPrice:     prices.Ethereum,
+			XMRPrice:     prices.Monero,
+			PolygonPrice: prices.Polygon,
+			HexPrice:     prices.Hexcoin,
+			BusdPrice:    prices.BinanceUSD,
+			ShibPrice:    prices.ShibaInu,
+			PnkPrice:     prices.Kleros,
+			PaintPrice:   prices.Paint,
 			Checked:      checked,
 			Links:        string(linksJSON),
 			Username:     username,
 		}
+
+		fmt.Println("user.MinSol =", user.MinSol)
+		fmt.Println("indexDisplay.MinSol =", i.MinSolana)
 
 		err = donationTemplate.Execute(w, i)
 		if err != nil {
@@ -2938,6 +2859,9 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user_, _ := getUserByUsernameCached(username)
+	user := globalUsers[user_.UserID]
+
 	// Get the user's IP address
 	ip := r.RemoteAddr
 
@@ -2960,24 +2884,20 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("fAmount", fAmount)
 	fmt.Println("Amount", amount)
 
-	if fCrypto == "XMR" && amount < minMonero {
-		amount = minMonero
-	} else if fCrypto == "SOL" && amount < minSolana {
-		amount = minSolana
-	} else if fCrypto == "ETH" && amount < minEthereum {
-		amount = minEthereum
-	} else if fCrypto == "PAINT" && amount < minPaint {
-		amount = minPaint
-	} else if fCrypto == "HEX" && amount < minHex {
-		amount = minHex
-	} else if fCrypto == "MATIC" && amount < minPolygon {
-		amount = minPolygon
-	} else if fCrypto == "BUSD" && amount < minBusd {
-		amount = minBusd
-	} else if fCrypto == "SHIB" && amount < minShib {
-		amount = minShib
-	} else if fCrypto == "PNK" && amount < minPnk {
-		amount = minPnk
+	minValues := map[string]float64{
+		"XMR":   user.MinXmr,
+		"SOL":   user.MinSol,
+		"ETH":   user.MinEth,
+		"PAINT": user.MinPaint,
+		"HEX":   user.MinHex,
+		"MATIC": user.MinMatic,
+		"BUSD":  user.MinBusd,
+		"SHIB":  user.MinShib,
+		"PNK":   user.MinPnk,
+	}
+
+	if minValue, ok := minValues[fCrypto]; ok && amount < minValue {
+		amount = minValue
 	}
 
 	name := fName
