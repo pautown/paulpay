@@ -44,10 +44,11 @@
     <br><br>
 
     <label for="obs-url">OBS Donation Display URL:</label>
-    <input type="text" id="obs-url" name="obs_url" value="{{.URLdisplay}}" disabled>
+
+    <input type="text" id="obs-url" onclick="copyURLDisplay()" name="obs_url" value="{{.URLdisplay}}" readonly>
     <br><br>
     <label for="dono-goal-url">OBS Dono Bar URL:</label>
-    <input type="text" id="dono-goal-url" name="dono_goal_url" value="{{.URLdonobar}}" disabled>
+  <input type="text" id="dono-goal-url" onclick="copyURLDonobar()" name="dono_goal_url" value="{{.URLdonobar}}" readonly>
     <br><br>
 
     <input type="submit" value="Save">
@@ -55,4 +56,19 @@
 
   </form>
 </body>
+
+<script>
+function copyURLDisplay() {
+  var obsUrlDisplay = document.getElementById("obs-url");
+  obsUrlDisplay.select();
+  document.execCommand("copy");
+}
+
+function copyURLDonobar() {
+  var donoGoalUrl = document.getElementById("dono-goal-url");
+  donoGoalUrl.select();
+  document.execCommand("copy");
+}
+
+</script>
 </html>

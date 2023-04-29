@@ -2253,7 +2253,9 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		pbMessage = r.FormValue("message")
+
 		amountNeededStr := r.FormValue("needed")
+
 		amountSentStr := r.FormValue("sent")
 
 		amountNeeded, err = strconv.ParseFloat(amountNeededStr, 64)
@@ -2267,6 +2269,10 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 			// handle the error
 			log.Println(err)
 		}
+
+		obsData_.Message = pbMessage
+		obsData_.Needed = amountNeeded
+		obsData_.Sent = amountSent
 
 		pb.Message = pbMessage
 		pb.Needed = amountNeeded
