@@ -121,6 +121,8 @@
           var amountLabel = document.getElementById("paypaul-header");
           amountLabel.textContent = `ferret {{.Username}} ${newTextLowercase}.`;
         }
+
+
  
     </script>
 </head>
@@ -149,7 +151,22 @@
     <label for="name">Name:</label><br>
     <input id="name" maxlength="25" name="name" placeholder="Anonymous" type="text"><br>
     <label id="amountLabel" for="amount">Monero (XMR) Amount:</label><br>
-    <input id="amount" min="{{.MinMonero}}" name="amount" placeholder="{{.MinMonero}} Minimum" step="0.0001" type="number">
+    <input id="amount" min="{{.MinMonero}}" name="amount" placeholder="{{.MinMonero}} Minimum" step="0.00001" type="number" onblur="validateAmount()">
+
+    <script>
+    function validateAmount() {
+        const amountInput = document.getElementById("amount");
+        const amountValue = parseFloat(amountInput.value);
+        const minAmount = parseFloat(amountInput.min);
+        const stepAmount = parseFloat(amountInput.step);
+        
+        if (isNaN(amountValue) || amountValue < minAmount) {
+            amountInput.value = minAmount.toFixed(5);
+        } else {
+            amountInput.value = (Math.round(amountValue / stepAmount) * stepAmount).toFixed(5);
+        }
+    }
+    </script>
     <label for="message">Message:</label><br>
     <textarea id="message" maxlength="{{.MaxChar}}" name="message" placeholder="{{.MaxChar}} Character Max" rows="6"></textarea><br>
     <label for="media">Media Link:</label><br>
