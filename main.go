@@ -182,6 +182,7 @@ type superChat struct {
 
 type indexDisplay struct {
 	MaxChar      int
+	MinDono      int
 	MinSolana    float64
 	MinMonero    float64
 	MinEthereum  float64
@@ -2743,6 +2744,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 		i := indexDisplay{
 			MaxChar:      MessageMaxChar,
+			MinDono:      user.MinDono,
 			MinSolana:    user.MinSol,
 			MinEthereum:  user.MinEth,
 			MinMonero:    user.MinXmr,

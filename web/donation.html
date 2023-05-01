@@ -12,57 +12,70 @@
           "name": "Monero",
           "code": "XMR",
           "svg": "xmr.svg",
-          "min": "{{.MinMonero}}"
+          "min": "{{.MinMonero}}",
+          "price": "{{.XMRPrice}}"
         },
         "solana": {
           "name": "Solana",
           "code": "SOL",
           "svg": "sol.svg",
-          "min": "{{.MinSolana}}"
+          "min": "{{.MinSolana}}",
+          "price": "{{.SolPrice}}"
         },
         "ethereum": {
           "name": "Ethereum",
           "code": "ETH",
           "svg": "eth.svg",
-          "min": "{{.MinEthereum}}"
+          "min": "{{.MinEthereum}}",
+          "price": "{{.ETHPrice}}"
         },
         "paint": {
           "name": "Paint",
           "code": "PAINT",
           "svg": "paint.svg",
-          "min": "{{.MinPaint}}"
+          "min": "{{.MinPaint}}",
+          "price": "{{.PaintPrice}}"
         },
         "hex": {
           "name": "Hexcoin",
           "code": "HEX",
           "svg": "hex.svg",
-          "min": "{{.MinHex}}"
+          "min": "{{.MinHex}}",
+          "price": "{{.HexPrice}}"
         },
         "matic": {
           "name": "Polygon",
           "code": "MATIC",
           "svg": "matic.svg",
-          "min": "{{.MinPolygon}}"
+          "min": "{{.MinPolygon}}",
+          "price": "{{.PolygonPrice}}"
         },
         "busd": {
           "name": "Binance USD",
           "code": "BUSD",
           "svg": "busd.svg",
-          "min": "{{.MinBusd}}"
+          "min": "{{.MinBusd}}",
+          "price": "{{.BusdPrice}}"
         },
         "shiba_inu": {
           "name": "Shiba Inu",
           "code": "SHIB",
           "svg": "shiba_inu.svg",
-          "min": "{{.MinShib}}"
+          "min": "{{.MinShib}}",
+          "price": "{{.ShibPrice}}"
         },
         "pnk": {
           "name": "Kleros",
           "code": "PNK",
           "svg": "pnk.svg",
-          "min": "{{.MinPnk}}"
+          "min": "{{.MinPnk}}",
+          "price": "{{.PnkPrice}}"
         }
       };
+      var crypto_selected
+      var crypto_selected = "XMR";
+      var selectedValue = crypto_selected;
+
 
         window.onload = function() {
           var linksData = JSON.parse('{{.Links}}');
@@ -80,14 +93,75 @@
             })(link);
             linksDiv.appendChild(button);
           }
+
+          const doubleButton = document.getElementById("doubleButton");
+          doubleButton.textContent = `$${parseFloat({{.MinDono}}) * 3}`;
+
+          const quadButton = document.getElementById("quadButton");
+          quadButton.textContent = `$${parseFloat({{.MinDono}}) * 9}`;
+          
+          const eightButton = document.getElementById("eightButton");
+          eightButton.textContent = `$${parseFloat({{.MinDono}}) * 27}`;
+
         };
 
         var buttonText = "Switch Cryptocurrency";
         var crypto = "XMR"
+
+        function validateUSDAmount() {
+          const amountUSDInput = document.getElementById("amountUSD");
+          const amountValue = parseFloat(amountUSDInput.value);
+
+          const cryptoKeys = Object.keys(cryptoMap);
+          const selectedCrypto = cryptoMap[cryptoKeys.find(key => cryptoMap[key].code === selectedValue)];
+          
+          const usdValueOfCrypto = parseFloat(selectedCrypto.min)/parseFloat({{.MinDono}});
+          const minAmount = parseFloat(selectedCrypto.min);
+          console.log(minAmount);
+
+          const amountInput = document.getElementById("amount");
+          amountInput.value = parseFloat(usdValueOfCrypto) * parseFloat(amountValue);
+
+          validateAmount();
+        }
+
+        function multiplyDonation(factor) {
+          const amountUSDInput = document.getElementById("amountUSD");
+          amountUSDInput.value = (factor * parseFloat({{.MinDono}})).toString() + ".00";
+          const cryptoKeys = Object.keys(cryptoMap);
+          const selectedCrypto = cryptoMap[cryptoKeys.find(key => cryptoMap[key].code === selectedValue)];
+          const usdValueOfCrypto = parseFloat(selectedCrypto.min)/parseFloat({{.MinDono}});
+          const amountInput = document.getElementById("amount");
+          amountInput.value = (factor * parseFloat(selectedCrypto.min)).toFixed(5);
+        }
+
+
+        function validateAmount() {
+            const amountInput = document.getElementById("amount");
+            const amountValue = parseFloat(amountInput.value);
+            const minAmount = parseFloat(amountInput.min);
+            const stepAmount = 0.00001;
+            
+            if (isNaN(amountValue))
+            {
+
+            }else if (amountValue < minAmount) {
+                amountInput.value = minAmount.toFixed(5);
+            } else {
+                amountInput.value = (Math.round(amountValue / stepAmount) * stepAmount).toFixed(5);
+            }
+
+            const cryptoKeys = Object.keys(cryptoMap);
+              const selectedCrypto = cryptoMap[cryptoKeys.find(key => cryptoMap[key].code === selectedValue)];
+              
+
+            const amountUSDInput = document.getElementById("amountUSD");
+            amountUSDInput.value = (amountInput.value*parseFloat(selectedCrypto.price)).toFixed(2);
+        }
       
         function toggleText() {
           var select = document.getElementById("toggleSelect");
-          var selectedValue = select.options[select.selectedIndex].value;
+          selectedValue = select.options[select.selectedIndex].value;
 
           var selectedCrypto = Object.values(cryptoMap).find(function(crypto) {
             return crypto.code === selectedValue;
@@ -151,22 +225,20 @@
     <label for="name">Name:</label><br>
     <input id="name" maxlength="25" name="name" placeholder="Anonymous" type="text"><br>
     <label id="amountLabel" for="amount">Monero (XMR) Amount:</label><br>
-    <input id="amount" min="{{.MinMonero}}" name="amount" placeholder="{{.MinMonero}} Minimum" step="0.00001" type="number" onblur="validateAmount()">
+    
+    <div style="display: flex; align-items: center;">
+      <input id="amount" min="{{.MinMonero}}" name="amount" placeholder="{{.MinMonero}} Minimum" step="0.00001" type="number" onblur="validateAmount()" onchange="validateAmount()">
+      <small> = $</small>    
+      <input id="amountUSD" min=8 name="amountUSD" placeholder="{{.MinDono}}.00 Minimum" step="0.01" type="number" onblur="validateUSDAmount()" onkeyup="validateUSDAmount()" onchange="validateUSDAmount()">
+    </div>
 
-    <script>
-    function validateAmount() {
-        const amountInput = document.getElementById("amount");
-        const amountValue = parseFloat(amountInput.value);
-        const minAmount = parseFloat(amountInput.min);
-        const stepAmount = parseFloat(amountInput.step);
-        
-        if (isNaN(amountValue) || amountValue < minAmount) {
-            amountInput.value = minAmount.toFixed(5);
-        } else {
-            amountInput.value = (Math.round(amountValue / stepAmount) * stepAmount).toFixed(5);
-        }
-    }
-    </script>
+    <div style="display: flex; align-items: center;">  
+      <button type="button" class="donate-button" onclick="multiplyDonation(1)">${{.MinDono}}</button>
+      <button type="button" id="doubleButton" class="donate-button" onclick="multiplyDonation(3)"></button>
+      <button type="button" id="quadButton" class="donate-button" onclick="multiplyDonation(9)"></button>
+      <button type="button" id="eightButton" class="donate-button" onclick="multiplyDonation(27)"></button>
+    </div>
+
     <label for="message">Message:</label><br>
     <textarea id="message" maxlength="{{.MaxChar}}" name="message" placeholder="{{.MaxChar}} Character Max" rows="6"></textarea><br>
     <label for="media">Media Link:</label><br>
@@ -175,6 +247,7 @@
     <input type="hidden" id="crypto" name="crypto" value="XMR">
     <input type="hidden" id="username" name="username" value="{{.Username}}">
     <input id="showAmount" name="showAmount" type="hidden" value="true" >
+
     
     <div style="display: flex; align-items: center;">
       <button id="submit" type="submit" data-original-text="Pay in Monero(XMR)" style="display: flex; align-items: center;">
@@ -193,10 +266,15 @@
         <option value="SHIB">Switch to Shiba Inu</option>
         <option value="PNK">Switch to Kleros</option>
       </select>
-    </div>
-    <br>
-    <small></small><div id="links"></div></small>     
+    </div>       
   </form>
+   
+
+
+  <br><hr>
+<small></small><div id="links"></div></small>  
+ 
+    
   
   <footer>
         <small><small>
