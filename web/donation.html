@@ -196,8 +196,6 @@
           amountLabel.textContent = `ferret {{.Username}} ${newTextLowercase}.`;
         }
 
-
- 
     </script>
 </head>
 
@@ -223,7 +221,7 @@
     <br>
     
     <label for="name">Name:</label><br>
-    <input id="name" maxlength="25" name="name" placeholder="Anonymous" type="text"><br>
+    <input id="name" maxlength="25" name="name" placeholder="Anonymous" type="text"><br><br>
     <label id="amountLabel" for="amount">Monero (XMR) Amount:</label><br>
     
     <div style="display: flex; align-items: center;">
@@ -237,10 +235,10 @@
       <button type="button" id="doubleButton" class="donate-button" onclick="multiplyDonation(3)"></button>
       <button type="button" id="quadButton" class="donate-button" onclick="multiplyDonation(9)"></button>
       <button type="button" id="eightButton" class="donate-button" onclick="multiplyDonation(27)"></button>
-    </div>
+    </div><br>
 
     <label for="message">Message:</label><br>
-    <textarea id="message" maxlength="{{.MaxChar}}" name="message" placeholder="{{.MaxChar}} Character Max" rows="6"></textarea><br>
+    <textarea id="message" maxlength="{{.MaxChar}}" name="message" placeholder="{{.MaxChar}} Character Max" rows="6"></textarea><br><br>
     <label for="media">Media Link:</label><br>
   
     <input id="media" name="media" type="text" placeholder="YouTube Link (Optional)"><br><br>
