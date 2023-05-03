@@ -61,14 +61,21 @@ window.onload = function() {
   <hr>
   <h3>User settings for <i>{{ .Username }}</i></h3>
 
-  <div style="display: flex; align-items: center; margin-right: 10px;">
-      <form method="GET" action="/viewdonos">
-        <button style="margin: 0 10px 0 0;">View Donations</button>
-      </form>
-      <form method="GET" action="/userobs">
-        <button>OBS Settings</button>
-      </form>
-  </div>
+<div style="display: flex; align-items: center;">
+  <form method="GET" action="/viewdonos">
+    <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">View Donations</button>
+  </form>
+  <form method="GET" action="/userobs">
+    <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">OBS Settings</button>
+  </form>
+  {{ if eq .Username "admin" }}
+  <form method="GET" action="/usermanager">
+    <button style="padding: 0 10px; display: inline-block;">Admin Dash</button>
+  </form>
+  {{ end }}
+</div>
+
+
 
   <br><br>
   <h2>User Info:</h2>

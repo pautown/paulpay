@@ -277,7 +277,7 @@ var tableTemplate = template.Must(template.New("table").Parse(`
 		<td>{{.Name}}</td>
 		<td>{{.Message}} {{.MediaURL}}</td>
 		<td>${{.USDAmount}}</td>
-		<td>${{.AmountSent}}</td>
+		<td>{{.AmountSent}}</td>
 		<td>{{.CurrencyType}}</td>
 	</tr>
 
@@ -292,9 +292,8 @@ func checkLoggedIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := getUserBySession(cookie.Value)
-	if err != nil {
-		fmt.Println(err)
+	user, valid := getUserBySessionCached(cookie.Value)
+	if !valid {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
@@ -487,6 +486,9 @@ func setupRoutes() {
 		http.ServeFile(w, r, "web/wbtc.svg")
 	})
 
+	http.HandleFunc("/usermanager", allUsersHandler)
+	http.HandleFunc("/refresh", refreshHandler)
+
 	http.Handle("/media/", http.StripPrefix("/media/", http.FileServer(http.Dir("web/obs/media/"))))
 	http.Handle("/users/", http.StripPrefix("/users/", http.FileServer(http.Dir("users/"))))
 
@@ -568,6 +570,86 @@ func checkValidSubscription(DateEnabled time.Time) bool {
 	}
 	log.Println("checkValidSubscription() User not valid")
 	return false
+}
+
+func allUsersHandler(w http.ResponseWriter, r *http.Request) {
+
+	cookie, err := r.Cookie("session_token")
+	if err != nil {
+		fmt.Println(err)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	user, valid := getUserBySessionCached(cookie.Value)
+	if !valid {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	if user.Username == "admin" {
+		// Retrieve all users from the database
+		users, err := getAllUsers()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Define the data to be passed to the HTML template
+		data := struct {
+			Title string
+			Users []User
+		}{
+			Title: "Users Dashboard",
+			Users: users,
+		}
+
+		// Parse the HTML template and execute it with the data
+		tmpl, err := template.ParseFiles("web/view_users.html")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		err = tmpl.Execute(w, data)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+}
+
+func refreshHandler(w http.ResponseWriter, r *http.Request) {
+	// Get the user ID from the form data
+	userID, err := strconv.Atoi(r.FormValue("user_id"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Update the user's enabled date in the database
+	err = updateEnabledDate(userID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	allUsersHandler(w, r)
+}
+
+func updateEnabledDate(userID int) error {
+	// Get the current time
+	now := time.Now()
+
+	// Update the user's enabled date in the database
+	_, err := db.Exec("UPDATE users SET date_enabled=? WHERE id=?", now, userID)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func getAllUsers() ([]User, error) {
@@ -791,9 +873,8 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := getUserBySession(cookie.Value)
-	if err != nil {
-		fmt.Println(err)
+	user, valid := getUserBySessionCached(cookie.Value)
+	if !valid {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
@@ -2008,6 +2089,21 @@ func getOBSDataByUserID(userID int) (obsDataStruct, error) {
 
 }
 
+// get a user by their session token
+func getUserBySessionCached(sessionToken string) (User, bool) {
+	userID, ok := userSessions[sessionToken]
+	if !ok {
+		log.Println("session token not found")
+		return globalUsers[0], false
+	}
+	for _, user := range globalUsers {
+		if user.UserID == userID {
+			return user, true
+		}
+	}
+	return globalUsers[0], false
+}
+
 func getUserByUsernameCached(username string) (User, bool) {
 
 	for _, user := range globalUsers {
@@ -2205,9 +2301,8 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := getUserBySession(cookie.Value)
-	if err != nil {
-		fmt.Println(err)
+	user, valid := getUserBySessionCached(cookie.Value)
+	if !valid {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
@@ -2317,9 +2412,8 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := getUserBySession(cookie.Value)
-	if err != nil {
-		fmt.Println(err)
+	user, valid := getUserBySessionCached(cookie.Value)
+	if !valid {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
@@ -2362,8 +2456,8 @@ func changePasswordHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	user, err := getUserBySession(sessionToken.Value)
-	if err != nil {
+	user, valid := getUserBySessionCached(sessionToken.Value)
+	if !valid {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
@@ -2421,8 +2515,8 @@ func changeUserMoneroHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	user, err := getUserBySession(sessionToken.Value)
-	if err != nil {
+	user, valid := getUserBySessionCached(sessionToken.Value)
+	if !valid {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
@@ -2496,8 +2590,8 @@ func changeUserHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	user, err := getUserBySession(sessionToken.Value)
-	if err != nil {
+	user, valid := getUserBySessionCached(sessionToken.Value)
+	if !valid {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}

@@ -34,6 +34,36 @@ button, input, textarea {
     width: 100%
 }
 
+/* Add a hover effect to the buttons */
+  button:hover {
+    background-color: #30364b;
+  }
+
+  /* Add a pressed effect to the buttons */
+  button:active {
+    background-color: #12151c;
+  }
+
+  /* Add a hover effect to the buttons */
+  select:hover {
+    background-color: #30364b;
+  }
+
+  /* Add a pressed effect to the buttons */
+  select:active {
+    background-color: #1c202b;
+  }
+
+  /* Add a hover effect to the buttons */
+  button, input:hover {
+    background-color: #30364b;
+  }
+
+  /* Add a pressed effect to the buttons */
+  button, input:active {
+    background-color: #1c202b;
+  }
+
 .tooltip {
   display: inline-block;
   position: relative;
@@ -127,6 +157,10 @@ label.radio-label {
   color: white;
 }
 
+#toggleSelect:hover {
+  background-color: #30364b;
+}
+
 
 
 #message {
@@ -139,6 +173,15 @@ label.radio-label {
     align-items: right;
     border-radius: 0.125rem;
 }
+
+#submit:hover {
+    background: #1a5eff;
+}
+
+#submit:active {
+    background: #003dcc;
+}
+
 
 
 .link-row {

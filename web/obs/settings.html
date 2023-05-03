@@ -12,11 +12,16 @@
 
    <div style="display: flex; align-items: center; margin-right: 10px;">
       <form method="GET" action="/viewdonos">
-        <button style="margin: 0 10px 0 0;">View Donations</button>
+        <button style="padding: 0 10px 0;">View Donations</button>
       </form>
       <form method="GET" action="/user">
-        <button>User Settings</button>
+        <button style="padding: 0 10px 0;">User Settings</button>
       </form>
+      {{ if eq .Username "admin" }}
+      <form method="GET" action="/usermanager">
+        <button style="padding: 0 10px 0;">Admin Dash</button>
+      </form>
+      {{ end }}
   </div>
 
   <br><br>

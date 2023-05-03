@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <br>
+    <link href=style.css rel=stylesheet>
+    <link href=fcash.png rel=icon>
+    <title>{{.Title}}</title>
+    <style>
+
+        th, td {
+            padding: 10px;
+            text-align: left;
+            vertical-align: top;
+            border-bottom: 1px solid #ddd;
+        }
+
+
+
+        tr:nth-child(even) {
+            background-color: #1E2128;
+        }
+
+        tr:hover {
+            background-color: #0D0E11;
+        }
+    </style>
+</head>
+<body>
+    <h1>{{.Title}}</h1>
+    <div style="display: flex; align-items: center; margin-right: 10px;">
+        <form method="GET" action="/viewdonos">
+            <button style="padding: 0 10px 0;">View Donations</button>
+        </form>
+        <form method="GET" action="/user">
+            <button style="padding: 0 10px 0;">User Settings</button>
+        </form>
+        <form method="GET" action="/userobs">
+            <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">OBS Settings</button>
+        </form>
+    </div>
+
+    
+    <table>
+        <thead>
+            <tr>
+                <th>User ID</th>
+                <th>Username</th>
+                <th>Enabled Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Users}}
+            <tr>
+                <td>{{.UserID}}</td>
+                <td>{{.Username}}</td>
+                <td>{{.DateEnabled.Format "2006-01-02"}}</td>
+                <td><form method="POST" action="/refresh"><input type="hidden" name="user_id" value="{{.UserID}}"><input type="submit" value="Refresh"></form></td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</body>
+</html>
