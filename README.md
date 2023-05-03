@@ -4,7 +4,7 @@
 - Provides notifications and a progress bar usable in OBS as well as admin pages for settings like minimum donos.
 - Settings pages /user /userobs (default login is user:admin password:hunter123)
 
-To see a working instance of PayPaul, see [pay.paul.town](https://pay.paul.town).
+To see a working instance of PayPaul, see [ferret.cash](https://ferret.cash).
 
 # Installation
 

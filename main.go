@@ -47,13 +47,14 @@ var MediaMin float64 = 0.025 // Currently unused
 var MessageMaxChar int = 250
 var NameMaxChar int = 25
 
-var host_url string = "https://pay.paul.town/"
+var host_url string = "https://ferret.cash/"
 
 var addressSliceSolana []AddressSolana
 
 var checked string = ""
 var killDono = 3.00 * time.Hour // hours it takes for a dono to be unfulfilled before it is no longer checked.
 var indexTemplate *template.Template
+var registerTemplate *template.Template
 var donationTemplate *template.Template
 var payTemplate *template.Template
 
@@ -227,6 +228,7 @@ type progressbarData struct {
 }
 
 type obsDataStruct struct {
+	Username    string
 	FilenameGIF string
 	FilenameMP3 string
 	URLdisplay  string
@@ -508,9 +510,12 @@ func setupRoutes() {
 	http.HandleFunc("/logout", logoutHandler)
 	http.HandleFunc("/changepassword", changePasswordHandler)
 	http.HandleFunc("/changeuser", changeUserHandler)
+
+	http.HandleFunc("/register", registerUserHandler)
 	http.HandleFunc("/changeusermonero", changeUserMoneroHandler)
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
+	registerTemplate, _ = template.ParseFiles("web/new_account.html")
 	donationTemplate, _ = template.ParseFiles("web/donation.html")
 	footerTemplate, _ = template.ParseFiles("web/footer.html")
 	payTemplate, _ = template.ParseFiles("web/pay.html")
@@ -878,7 +883,7 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	user = user
+
 	cookie = cookie
 
 	// Retrieve data from the donos table
@@ -943,7 +948,12 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	tpl.Execute(w, donos)
+
+	data := ViewDonosData{
+		Username: user.Username,
+		Donos:    donos,
+	}
+	tpl.Execute(w, data)
 }
 
 func setUserMinDonos(user User) User {
@@ -1019,6 +1029,7 @@ func stopMoneroWallet() {
 
 func checkDonos() {
 	for {
+		log.Println("Checking donos via checkDonos()")
 		fulfilledDonos := checkUnfulfilledDonos()
 		if len(fulfilledDonos) > 0 {
 			fmt.Println("Fulfilled Donos:")
@@ -1216,6 +1227,11 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
 	return id
 }
 
+type ViewDonosData struct {
+	Username string
+	Donos    []Dono
+}
+
 type Dono struct {
 	ID           int
 	UserID       int
@@ -1392,6 +1408,21 @@ func checkUnfulfilledDonos() []Dono {
 	}
 
 	for _, dono := range donosMap {
+		// Check if the dono has exceeded the killDono time
+		if !dono.Fulfilled {
+			timeElapsedFromDonoCreation := time.Since(dono.CreatedAt)
+			if timeElapsedFromDonoCreation > killDono || dono.Address == " " || dono.AmountToSend == "0.0" {
+				dono.Fulfilled = true
+				if dono.Address == " " {
+					log.Println("No dono address, killed (marked as fulfilled) and won't be checked again. \n")
+				} else {
+					log.Println("Dono too old, killed (marked as fulfilled) and won't be checked again. \n")
+				}
+				updateDonoInMap(dono)
+				continue
+			}
+		}
+
 		if dono.CurrencyType != "XMR" && dono.CurrencyType != "SOL" {
 			// Check if amount matches a completed dono amount
 			for _, transaction := range eth_transactions {
@@ -1413,24 +1444,11 @@ func checkUnfulfilledDonos() []Dono {
 						break
 					}
 				}
-
 			}
+
 			valueToCheck, _ := utils.ConvertStringTo18DecimalPlaces(dono.AmountToSend)
 			dono.UpdatedAt = time.Now().UTC()
 			fmt.Println(valueToCheck, dono.CurrencyType, "Dono incomplete.")
-			updateDonoInMap(dono)
-			continue
-		}
-
-		// Check if the dono has exceeded the killDono time
-		timeElapsedFromDonoCreation := time.Since(dono.CreatedAt)
-		if timeElapsedFromDonoCreation > killDono || dono.Address == " " || dono.AmountToSend == "0.0" {
-			dono.Fulfilled = true
-			if dono.Address == " " {
-				log.Println("No dono address, killed (marked as fulfilled) and won't be checked again. \n")
-			} else {
-				log.Println("Dono too old, killed (marked as fulfilled) and won't be checked again. \n")
-			}
 			updateDonoInMap(dono)
 			continue
 		}
@@ -2310,6 +2328,7 @@ func userOBSHandler(w http.ResponseWriter, r *http.Request) {
 	obsData.URLdonobar = host_url + "progressbar?value=" + user.AlertURL
 	obsData.URLdisplay = host_url + "alert?value=" + user.AlertURL
 	obsData_ := getObsData(db, user.UserID)
+	obsData_.Username = user.Username
 
 	if r.Method == http.MethodPost {
 		r.ParseMultipartForm(5 << 10) // max file size of 10 MB
@@ -2580,6 +2599,25 @@ func changeUserMoneroHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tmpl.Execute(w, data)
+}
+
+func registerUserHandler(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_token")
+	if err == nil {
+		user, valid := getUserBySessionCached(cookie.Value)
+		log.Println("Already logged in as", user.Username, " - redirecting from registration to user panel.")
+		if valid {
+			http.Redirect(w, r, "/user", http.StatusSeeOther)
+			return
+		}
+	}
+
+	err = registerTemplate.Execute(w, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 }
 
 func changeUserHandler(w http.ResponseWriter, r *http.Request) {

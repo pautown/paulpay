@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>    
+<head>
+	<link href=style.css rel=stylesheet>
+    <link href=fcash.png rel=icon>
+	<meta charset="UTF-8">
+
+	<title>ferret.cash Registration</title>
+</head>
+<body>
+	<h1>Create New Account</h1>
+	<form method="POST" action="/newaccount">
+		<label for="username">Username:</label>
+		<input type="text" id="username" name="username" required><br><br>
+		<label for="new-password">New Password:</label>
+	    <input type="password" id="new-password" name="new_password" required><br><br>
+	    <label for="new-password-confirm">Confirm New Password:</label>
+	    <input type="password" id="new-password-confirm" name="new_password_confirm" required><br><br>
+	    <button type="submit" id="change-password">Register account</button>
+</form>
+
+	<footer>
+        <small><small>
+            <p>Ferret Cash &copy; 2023. Developed by <a href="http://www.paul.town/" target="_blank">Paul Town</a> with <a href="https://github.com/pautown/paulpay" target="_blank">PayPaul Source Code</a></p>
+        </small></small>
+    </footer>
+
+    <script>
+    	window.onload = function() {
+  const form = document.querySelector('form');
+  const newPasswordInput = document.getElementById('new-password');
+  const newPasswordConfirmInput = document.getElementById('new-password-confirm');
+  const submitButton = document.getElementById('change-password');
+  
+  function validatePassword() {
+    if (newPasswordInput.value !== newPasswordConfirmInput.value) {
+      newPasswordConfirmInput.setCustomValidity("Passwords don't match");
+      submitButton.disabled = true;
+      submitButton.textContent = "Passwords Don't Match";
+    } else if (newPasswordInput.value === '' || newPasswordConfirmInput.value === '') {
+      submitButton.disabled = true;
+      submitButton.textContent = "Register account";
+    } else {
+      newPasswordConfirmInput.setCustomValidity('');
+      submitButton.disabled = false;
+      submitButton.textContent = "Register account";
+    }
+  }
+
+  newPasswordInput.addEventListener('input', validatePassword);
+  newPasswordConfirmInput.addEventListener('input', validatePassword);
+
+  form.addEventListener('submit', function(event) {
+    if (newPasswordInput.value !== newPasswordConfirmInput.value) {
+      event.preventDefault();
+      alert('Passwords do not match');
+    }
+  });
+};
+
+    </script>
+</body>
+</html>
+
