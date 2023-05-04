@@ -71,6 +71,8 @@ var logoutTemplate *template.Template
 var incorrectPasswordTemplate *template.Template
 var baseCheckingRate = 25
 
+var eth_transactions []utils.Transfer
+
 var minSolana, minMonero, minEthereum, minPaint, minHex, minPolygon, minBusd, minShib, minUsdc, minTusd, minWbtc, minPnk float64 // Global variables to hold minimum values required to equal the global value.
 var minDonoValue float64 = 5.0
 
@@ -142,12 +144,22 @@ type UserPageData struct {
 	ErrorMessage string
 }
 
+type PendingUser struct {
+	ID             int
+	Username       string
+	HashedPassword []byte
+	XMRAddress     string
+	ETHNeeded      string
+	XMRNeeded      string
+}
+
 var ServerMinMediaDono = 5
 var ServerMediaEnabled = true
 
 var xmrWallets = [][]int{}
 
-var globalUsers = map[int]User{}
+var globalUsers = make(map[int]User{})
+var pendingGlobalUsers = make(map[int]PendingUser{})
 
 var db *sql.DB
 var userSessions = make(map[string]int)
@@ -396,6 +408,7 @@ func main() {
 	// Schedule a function to run fetchExchangeRates every three minutes
 	go fetchExchangeRates()
 	go checkDonos()
+	go checkPendingAccounts()
 
 	a.Refresh = 10
 	pb.Refresh = 1
@@ -512,6 +525,7 @@ func setupRoutes() {
 	http.HandleFunc("/changeuser", changeUserHandler)
 
 	http.HandleFunc("/register", registerUserHandler)
+	http.HandleFunc("/newaccount", newAccountHandler)
 	http.HandleFunc("/changeusermonero", changeUserMoneroHandler)
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
@@ -1048,6 +1062,53 @@ func checkDonos() {
 	}
 }
 
+func getAdminETHAdd() string {
+	user, validUser := getUserByUsernameCached(username)
+
+	if !validUser {
+		// Redirect to the payment page if the request is not a POST request
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return ""
+	}
+
+	return user.EthAddress
+}
+
+func checkPendingAccounts() {
+	for {
+		for _, transaction := range eth_transactions {
+			tN := utils.GetTransactionToken(transaction)
+			if tN == "ETH" && transaction.To == getAdminETHAdd() {
+				valueStr := fmt.Sprintf("%.18f", transaction.Value)
+
+				for _, user := range pendingGlobalUsers {
+					if user.ETHNeeded == valueStr {
+						err := createNewUserFromPending(user)
+						if err != nil {
+							log.Println("Error marking payment as complete:", err)
+						} else {
+							log.Println("Payment marked as complete for:", user.Username)
+						}
+					}
+				}
+			}
+		}
+
+		for _, user := range pendingGlobalUsers {
+			if user.XMRNeeded == getXMRBalance(user.XMRAddress) {
+				err := createNewUserFromPending(user)
+				if err != nil {
+					log.Println("Error marking payment as complete:", err)
+				} else {
+					log.Println("Payment marked as complete for:", user.Username)
+				}
+			}
+		}
+
+		time.Sleep(time.Duration(25) * time.Second)
+	}
+}
+
 func getUSDValue(as float64, c string) float64 {
 	usdVal := 0.00
 
@@ -1394,16 +1455,22 @@ func checkUnfulfilledDonos() []Dono {
 	updatePendingDonos()
 
 	var fulfilledDonos []Dono
-	var eth_transactions []utils.Transfer
+
 	eth_addresses := returnETHAddresses()
 	for _, eth_address := range eth_addresses {
 		log.Println("Getting ETH txs for:", eth_address)
 	}
 
+	tempMap := make(map[string]bool)
 	for _, eth_address := range eth_addresses {
 		log.Println("Getting ETH txs for:", eth_address)
 		transactions, _ := utils.GetEth(eth_address)
-		eth_transactions = append(eth_transactions, transactions...)
+		for _, tx := range transactions {
+			if _, exists := tempMap[tx.Hash]; !exists {
+				eth_transactions = append(eth_transactions, tx)
+				tempMap[tx.Hash] = true
+			}
+		}
 		time.Sleep(2 * time.Second)
 	}
 
@@ -1816,6 +1883,19 @@ func createDatabaseIfNotExists(db *sql.DB) error {
             date_enabled DATETIME,
             wallet_uploaded BOOL
 
+        )
+    `)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`
+        CREATE TABLE IF NOT EXISTS pendingusers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            HashedPassword BLOB,
+            AmountNeeded TEXT,
+            PaymentID TEXT
         )
     `)
 
@@ -2989,18 +3069,172 @@ func returnIPPenalty(ips []string, currentDonoIP string) float64 {
 	return expoAdder
 }
 
+func newAccountHandler(w http.ResponseWriter, r *http.Request) {
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+	_, validUser := getUserByUsernameCached(username)
+	if r.Method != http.MethodPost || validUser {
+		// Redirect to the payment page if the request is not a POST request
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	createNewPendingUser(username, password)
+}
+
+func getNewAccountETHPrice() string {
+	ethPrice := strconv.ParseFloat(fmt.Sprintf("%.5f", (15.00/prices.Ethereum)), 64)
+	return (utils.FuzzDono(ethPrice, "ETH"))
+}
+func getNewAccountXMRPrice() string {
+	return strconv.ParseFloat(fmt.Sprintf("%.5f", (15.00/prices.Monero)), 64)
+}
+
+func getNewAccountXMRPayID() string {
+
+	payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
+	userID := 1
+	portID := getPortID(xmrWallets, userID)
+
+	found := true
+	if portID == -100 {
+		found = false
+	}
+
+	if found {
+		fmt.Println("Port ID for user", userID, "is", portID)
+	} else {
+		fmt.Println("Port ID not found for user", userID)
+	}
+
+	rpcURL_ := "http://127.0.0.1:" + strconv.Itoa(portID) + "/json_rpc"
+
+	req, err := http.NewRequest("POST", rpcURL_, payload)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("ERROR CREATING")
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("ERROR CREATING")
+	}
+
+	resp := &rpcResponse{}
+	if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
+		fmt.Println(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("ERROR CREATING")
+	}
+
+	Address = html.EscapeString(resp.Result.IntegratedAddress)
+
+	return Address
+}
+
+func createNewPendingUser(username string, password string) error {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	user := PendingUser{
+		Username:       username,
+		HashedPassword: hashedPassword,
+		ETHNeeded:      getNewAccountETHPrice(),
+		XMRNeeded:      getNewAccountXMRPrice(),
+		XMRAddress:     getNewAccountXMRPayID(),
+	}
+
+	err = createPendingUser(user)
+	if err != nil {
+		return err
+	}
+	// Get the ID of the newly inserted user
+	row := db.QueryRow(`SELECT last_insert_rowid()`)
+	err = row.Scan(&user.ID)
+	if err != nil {
+		return err
+	}
+	pendingGlobalUsers[user.ID] = user
+	return nil
+}
+
+func createPendingUser(user PendingUser) error {
+	_, err := db.Exec(`
+        INSERT INTO pendingusers (username, HashedPassword, AmountNeeded, PaymentID)
+        VALUES (?, ?, ?, ?)
+    `, user.Username, user.HashedPassword, user.AmountNeeded, user.PaymentID)
+	if err != nil {
+		return err
+	}
+
+	// Get the ID of the newly inserted user
+	row := db.QueryRow(`SELECT last_insert_rowid()`)
+	err = row.Scan(&user.ID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func createNewUserFromPending(user PendingUser) error {
+	log.Println("running createNewUserFromPending")
+	// create admin user if not exists
+	user := User{
+		Username:          user.Username,
+		HashedPassword:    user.HashedPassword,
+		EthAddress:        "0x5b5856dA280e592e166A1634d353A53224ed409c",
+		SolAddress:        "adWqokePHcAbyF11TgfvvM1eKax3Kxtnn9sZVQh6fXo",
+		HexcoinAddress:    "0x5b5856dA280e592e166A1634d353A53224ed409c",
+		XMRWalletPassword: "",
+		MinDono:           3,
+		MinMediaDono:      5,
+		MediaEnabled:      true,
+		DonoGIF:           "default.gif",
+		DonoSound:         "default.mp3",
+		AlertURL:          utils.GenerateUniqueURL(),
+		WalletUploaded:    false,
+		Links:             "",
+		DateEnabled:       time.Now().UTC(),
+	}
+	userID := createUser(user)
+	if userID != 0 {
+		createNewOBS(db, userID, "default message", 100.00, 50.00, 5, user.DonoGIF, user.DonoSound, "test_voice")
+		log.Println("createNewUserFromPending() succeeded, so OBS row was created. Deleting pending user from pendingusers table")
+		err := deletePendingUser(user)
+		if err != nil {
+			return err
+		}
+	} else {
+		log.Println("createNewUserFromPending() didn't succeed, so OBS row wasn't created. Pending user remains in DB")
+	}
+
+	log.Println("finished createNewUserFromPending()")
+
+	return nil
+}
+
+func deletePendingUser(user PendingUser) error {
+	delete(pendingGlobalUsers, user.ID)
+	_, err := db.Exec(`DELETE FROM pendingusers WHERE id = ?`, user.ID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
-	validUser, id := checkUserByUsername(username)
+	user, validUser := getUserByUsernameCached(username)
 
 	if r.Method != http.MethodPost || !validUser {
 		// Redirect to the payment page if the request is not a POST request
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-
-	user_, _ := getUserByUsernameCached(username)
-	user := globalUsers[user_.UserID]
 
 	// Get the user's IP address
 	ip := r.RemoteAddr
@@ -3072,19 +3306,19 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	if fCrypto == "XMR" {
 
 		fmt.Println("Amount", amount)
-		handleMoneroPayment(w, &s, params, amount, encrypted_ip, showAmount, USDAmount, id)
+		handleMoneroPayment(w, &s, params, amount, encrypted_ip, showAmount, USDAmount, user.UserID)
 	} else if fCrypto == "SOL" {
 		fmt.Println("Amount", amount)
 		new_dono := createNewSolDono(s.Name, s.Message, s.Media, utils.FuzzDono(amount, "SOL"))
 		fmt.Println("Amount needed:", new_dono.AmountNeeded)
-		handleSolanaPayment(w, &s, params, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, media, encrypted_ip, USDAmount, id)
+		handleSolanaPayment(w, &s, params, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, media, encrypted_ip, USDAmount, user.UserID)
 	} else {
 		fmt.Println("Amount", amount)
 		s.Currency = fCrypto
 		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount, fCrypto)
 		fmt.Printf("Amount needed: %.18f\n", new_dono.AmountNeeded)
 
-		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL, fCrypto, encrypted_ip, USDAmount, id)
+		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL, fCrypto, encrypted_ip, USDAmount, user.UserID)
 	}
 }
 
