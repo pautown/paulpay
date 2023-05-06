@@ -3133,7 +3133,7 @@ func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		tmpl.Execute(w, user)
-	} else {
+	} else if PublicRegistrationsEnabled {
 		pendingUser, err := createNewPendingUser(username, password)
 		if err != nil {
 			log.Println(err)
@@ -3167,6 +3167,9 @@ func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			fmt.Println(err)
 		}
+	} else {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
 	}
 }
 
