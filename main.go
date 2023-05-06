@@ -59,6 +59,7 @@ var donationTemplate *template.Template
 var payTemplate *template.Template
 
 var alertTemplate *template.Template
+var accountPayTemplate *template.Template
 var progressbarTemplate *template.Template
 var userOBSTemplate *template.Template
 var viewTemplate *template.Template
@@ -148,18 +149,22 @@ type PendingUser struct {
 	ID             int
 	Username       string
 	HashedPassword []byte
-	XMRAddress     string
+	XMRPayID       string
 	ETHNeeded      string
 	XMRNeeded      string
+	ETHAddress     string
+	XMRAddress     string
 }
+
+var PublicRegistrationsEnabled = false
 
 var ServerMinMediaDono = 5
 var ServerMediaEnabled = true
 
 var xmrWallets = [][]int{}
 
-var globalUsers = make(map[int]User{})
-var pendingGlobalUsers = make(map[int]PendingUser{})
+var globalUsers = map[int]User{}
+var pendingGlobalUsers = map[int]PendingUser{}
 
 var db *sql.DB
 var userSessions = make(map[string]int)
@@ -239,6 +244,18 @@ type progressbarData struct {
 	Refresh int
 }
 
+type accountPayData struct {
+	Username    string
+	AmountXMR   string
+	AmountETH   string
+	AddressXMR  string
+	AddressETH  string
+	QRB64XMR    string
+	QRB64ETH    string
+	UserID      int
+	DateCreated time.Time
+}
+
 type obsDataStruct struct {
 	Username    string
 	FilenameGIF string
@@ -314,6 +331,24 @@ func checkLoggedIn(w http.ResponseWriter, r *http.Request) {
 
 	user = user
 	cookie = cookie
+}
+
+func checkLoggedInAdmin(w http.ResponseWriter, r *http.Request) bool {
+	cookie, err := r.Cookie("session_token")
+	if err != nil {
+		return false
+	}
+
+	user, valid := getUserBySessionCached(cookie.Value)
+	if !valid {
+		return false
+	}
+
+	if user.Username == "admin" {
+		return true
+	} else {
+		return false
+	}
 }
 
 // Handler function for the "/donations" endpoint
@@ -534,6 +569,7 @@ func setupRoutes() {
 	footerTemplate, _ = template.ParseFiles("web/footer.html")
 	payTemplate, _ = template.ParseFiles("web/pay.html")
 	alertTemplate, _ = template.ParseFiles("web/alert.html")
+	accountPayTemplate, _ = template.ParseFiles("web/accountpay.html")
 
 	userOBSTemplate, _ = template.ParseFiles("web/obs/settings.html")
 	progressbarTemplate, _ = template.ParseFiles("web/obs/progressbar.html")
@@ -1066,8 +1102,6 @@ func getAdminETHAdd() string {
 	user, validUser := getUserByUsernameCached(username)
 
 	if !validUser {
-		// Redirect to the payment page if the request is not a POST request
-		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return ""
 	}
 
@@ -1076,6 +1110,7 @@ func getAdminETHAdd() string {
 
 func checkPendingAccounts() {
 	for {
+
 		for _, transaction := range eth_transactions {
 			tN := utils.GetTransactionToken(transaction)
 			if tN == "ETH" && transaction.To == getAdminETHAdd() {
@@ -1095,7 +1130,12 @@ func checkPendingAccounts() {
 		}
 
 		for _, user := range pendingGlobalUsers {
-			if user.XMRNeeded == getXMRBalance(user.XMRAddress) {
+			xmrSent, _ := getXMRBalance(user.XMRPayID)
+			log.Println("XMR sent:", xmrSent)
+			xmrSentStr, _ := utils.ConvertStringTo18DecimalPlaces(xmrSent)
+			log.Println("XMR sent str:", xmrSentStr)
+			log.Println("XMRNeeded str:", user.XMRNeeded)
+			if user.XMRNeeded == xmrSentStr {
 				err := createNewUserFromPending(user)
 				if err != nil {
 					log.Println("Error marking payment as complete:", err)
@@ -1894,8 +1934,9 @@ func createDatabaseIfNotExists(db *sql.DB) error {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
             HashedPassword BLOB,
-            AmountNeeded TEXT,
-            PaymentID TEXT
+            XMRPayID TEXT,
+            XMRNeeded TEXT,
+            ETHNeeded TEXT
         )
     `)
 
@@ -2685,8 +2726,8 @@ func registerUserHandler(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session_token")
 	if err == nil {
 		user, valid := getUserBySessionCached(cookie.Value)
-		log.Println("Already logged in as", user.Username, " - redirecting from registration to user panel.")
-		if valid {
+		if valid && !checkLoggedInAdmin(w, r) {
+			log.Println("Already logged in as", user.Username, " - redirecting from registration to user panel.")
 			http.Redirect(w, r, "/user", http.StatusSeeOther)
 			return
 		}
@@ -3072,26 +3113,76 @@ func returnIPPenalty(ips []string, currentDonoIP string) float64 {
 func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	password := r.FormValue("password")
+	isAdmin := checkLoggedInAdmin(w, r)
 	_, validUser := getUserByUsernameCached(username)
-	if r.Method != http.MethodPost || validUser {
+	if r.Method != http.MethodPost || (validUser && !isAdmin) {
 		// Redirect to the payment page if the request is not a POST request
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 
-	createNewPendingUser(username, password)
+	if isAdmin {
+		createNewUser(username, password)
+		cookie, _ := r.Cookie("session_token")
+		user, _ := getUserBySessionCached(cookie.Value)
+
+		tmpl, err := template.ParseFiles("web/user.html")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		tmpl.Execute(w, user)
+	} else {
+		pendingUser, err := createNewPendingUser(username, password)
+		if err != nil {
+			log.Println(err)
+		}
+
+		xmrNeeded, err := strconv.ParseFloat(pendingUser.XMRNeeded, 64)
+		if err != nil {
+			// Handle the error
+		}
+
+		xmrNeededFormatted := fmt.Sprintf("%.5f", xmrNeeded)
+
+		d := accountPayData{
+			Username:    pendingUser.Username,
+			AmountXMR:   xmrNeededFormatted,
+			AmountETH:   pendingUser.ETHNeeded,
+			AddressXMR:  pendingUser.XMRAddress,
+			AddressETH:  pendingUser.ETHAddress,
+			UserID:      pendingUser.ID,
+			DateCreated: time.Now().UTC(),
+		}
+
+		tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", pendingUser.XMRAddress, pendingUser.XMRNeeded), qrcode.Low, 320)
+		d.QRB64XMR = base64.StdEncoding.EncodeToString(tmp)
+
+		donationLink := fmt.Sprintf("ethereum:%s?value=%s", pendingUser.ETHAddress, pendingUser.ETHNeeded)
+		tmp, _ = qrcode.Encode(donationLink, qrcode.Low, 320)
+		d.QRB64ETH = base64.StdEncoding.EncodeToString(tmp)
+
+		err = accountPayTemplate.Execute(w, d)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
 }
 
 func getNewAccountETHPrice() string {
-	ethPrice := strconv.ParseFloat(fmt.Sprintf("%.5f", (15.00/prices.Ethereum)), 64)
-	return (utils.FuzzDono(ethPrice, "ETH"))
+	ethPrice, _ := strconv.ParseFloat(fmt.Sprintf("%.18f", (15.00/prices.Ethereum)), 64)
+	ethStr := utils.FuzzDono(ethPrice, "ETH")
+	ethStr_ := utils.FloatToString(ethStr)
+	return ethStr_
 }
 func getNewAccountXMRPrice() string {
-	return strconv.ParseFloat(fmt.Sprintf("%.5f", (15.00/prices.Monero)), 64)
+	xmrPrice, _ := strconv.ParseFloat(fmt.Sprintf("%.5f", (15.00/prices.Monero)), 64)
+	xmrStr, _ := utils.ConvertFloatTo18DecimalPlaces(xmrPrice)
+	return xmrStr
 }
 
-func getNewAccountXMRPayID() string {
-
+func getNewAccountXMR() (string, string) {
 	payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
 	userID := 1
 	portID := getPortID(xmrWallets, userID)
@@ -3111,60 +3202,77 @@ func getNewAccountXMRPayID() string {
 
 	req, err := http.NewRequest("POST", rpcURL_, payload)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("ERROR CREATING")
+		log.Println("ERROR CREATING req:", err)
+		return "", ""
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("ERROR CREATING")
+		log.Println("ERROR SENDING REQUEST:", err)
+		return "", ""
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		log.Println("ERROR: Non-200 response code received:", res.StatusCode)
+		return "", ""
 	}
 
 	resp := &rpcResponse{}
 	if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
-		fmt.Println(err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("ERROR CREATING")
+		log.Println("ERROR DECODING RESPONSE:", err)
+		return "", ""
 	}
 
-	Address = html.EscapeString(resp.Result.IntegratedAddress)
+	PayID := html.EscapeString(resp.Result.PaymentID)
 
-	return Address
+	PayAddress := html.EscapeString(resp.Result.IntegratedAddress)
+
+	log.Println("RETURNING XMR PAYID:", PayID)
+	return PayID, PayAddress
 }
 
-func createNewPendingUser(username string, password string) error {
+func createNewPendingUser(username string, password string) (PendingUser, error) {
+	log.Println("begin createNewPendingUser()")
+	user_, _ := getUserByUsernameCached("admin")
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return err
+		return PendingUser{}, err
 	}
+	PayID, PayAddress := getNewAccountXMR()
 	user := PendingUser{
 		Username:       username,
 		HashedPassword: hashedPassword,
+		ETHAddress:     user_.EthAddress,
+		XMRAddress:     PayAddress,
 		ETHNeeded:      getNewAccountETHPrice(),
 		XMRNeeded:      getNewAccountXMRPrice(),
-		XMRAddress:     getNewAccountXMRPayID(),
+		XMRPayID:       PayID,
 	}
 
 	err = createPendingUser(user)
 	if err != nil {
-		return err
+		log.Println("createPendingUser:", err)
+		return PendingUser{}, err
 	}
 	// Get the ID of the newly inserted user
 	row := db.QueryRow(`SELECT last_insert_rowid()`)
 	err = row.Scan(&user.ID)
 	if err != nil {
-		return err
+		return PendingUser{}, err
 	}
 	pendingGlobalUsers[user.ID] = user
-	return nil
+	log.Println("finish createNewPendingUser() without error")
+	return user, nil
+
 }
 
 func createPendingUser(user PendingUser) error {
 	_, err := db.Exec(`
-        INSERT INTO pendingusers (username, HashedPassword, AmountNeeded, PaymentID)
-        VALUES (?, ?, ?, ?)
-    `, user.Username, user.HashedPassword, user.AmountNeeded, user.PaymentID)
+        INSERT INTO pendingusers (username, HashedPassword, XMRPayID, XMRNeeded, ETHNeeded)
+        VALUES (?, ?, ?, ?, ?)
+    `, user.Username, user.HashedPassword, user.XMRPayID, user.XMRNeeded, user.ETHNeeded)
 	if err != nil {
 		return err
 	}
@@ -3179,12 +3287,12 @@ func createPendingUser(user PendingUser) error {
 	return nil
 }
 
-func createNewUserFromPending(user PendingUser) error {
+func createNewUserFromPending(user_ PendingUser) error {
 	log.Println("running createNewUserFromPending")
 	// create admin user if not exists
 	user := User{
-		Username:          user.Username,
-		HashedPassword:    user.HashedPassword,
+		Username:          user_.Username,
+		HashedPassword:    user_.HashedPassword,
 		EthAddress:        "0x5b5856dA280e592e166A1634d353A53224ed409c",
 		SolAddress:        "adWqokePHcAbyF11TgfvvM1eKax3Kxtnn9sZVQh6fXo",
 		HexcoinAddress:    "0x5b5856dA280e592e166A1634d353A53224ed409c",
@@ -3203,7 +3311,7 @@ func createNewUserFromPending(user PendingUser) error {
 	if userID != 0 {
 		createNewOBS(db, userID, "default message", 100.00, 50.00, 5, user.DonoGIF, user.DonoSound, "test_voice")
 		log.Println("createNewUserFromPending() succeeded, so OBS row was created. Deleting pending user from pendingusers table")
-		err := deletePendingUser(user)
+		err := deletePendingUser(user_)
 		if err != nil {
 			return err
 		}

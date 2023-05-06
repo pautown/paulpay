@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ferret.cash</title>
+    <link href=fcash.png rel=icon>
+    <link href="style.css" rel="stylesheet">
+</head>
+<body>
+     <br><br><br>
+  <h1>Crypto Settings Panel</h1>
+  <hr>
+
+   <div style="display: flex; align-items: center; margin-right: 10px;">
+      <form method="GET" action="/viewdonos">
+        <button style="padding: 0 10px 0;">View Donations</button>
+      </form>
+      <form method="GET" action="/user">
+        <button style="padding: 0 10px 0;">User Settings</button>
+      </form>
+      {{ if eq .Username "admin" }}
+      <form method="GET" action="/usermanager">
+        <button style="padding: 0 10px 0;">Admin Dash</button>
+      </form>
+      {{ end }}
+  </div>
+<div class="content">
+    <h3>Select which cryptos to accept:</h3>
+    <table>
+        <tr>
+            <td>
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="monero" style="width: auto;">
+                    <label for="monero">Monero</label>
+                </div>
+            </td>
+            <td>
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="solana" style="width: auto;">
+                    <label for="solana">Solana</label>
+                </div>
+            </td>
+            <td>
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="ethereum" style="width: auto;">
+                    <label for="ethereum">Ethereum</label>
+                </div>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="paint" style="width: auto;">
+                    <label for="paint">Paint</label>
+                </div>
+            </td>
+            <td>
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="hex" style="width: auto;">
+                    <label for="hex">Hexcoin</label>
+                </div>
+            </td>
+            <td>
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="matic" style="width: auto;">
+                    <label for="matic">Polygon</label>
+                </div>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="busd" style="width: auto;">
+                    <label for="busd">Binance USD</label>
+                </div>
+            </td>
+            <td>
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="shiba_inu" style="width: auto;">
+                    <label for="shiba_inu">Shiba Inu</label>
+                </div>
+            </td>
+            <td>
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="pnk" style="width: auto;">
+                    <label for="pnk">Kleros</label>
+                </div>
+            </td>
+        </tr>
+    </table>
+    <button onclick="updateSelection()">Update</button>
+</div>
+<footer>
+    <small><small>
+        <p>Ferret Cash &copy; 2023. Developed by <a href="http://www.paul.town/" target="_blank">Paul Town</a> with <a href="https://github.com/pautown/paulpay" target="_blank">PayPaul Source Code</a></p>
+    </small></small>
+</footer>
+<script>
+    function updateSelection() {
+        // Add your logic to handle the selected checkboxes
+    }
+</script>
+</body>
+</html>

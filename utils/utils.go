@@ -183,6 +183,20 @@ func ConvertStringTo18DecimalPlaces(str string) (string, error) {
 	return str[:idx+1] + decimalPart, nil
 }
 
+func ConvertFloatTo18DecimalPlaces(f float64) (string, error) {
+	str := fmt.Sprintf("%.4f", f)
+	idx := strings.Index(str, ".")
+	if idx < 0 {
+		str = str + ".0000"
+	}
+	decimalPart := str[idx+1:]
+	needsZeroes := 18 - len(decimalPart)
+	for i := 0; i < needsZeroes; i++ {
+		decimalPart += "0"
+	}
+	return str[:idx+1] + decimalPart, nil
+}
+
 func GetTransactionAmount(t Transfer) string {
 	d := decimal.NewFromFloat(t.Value)
 	return d.String()
@@ -275,8 +289,8 @@ func CheckDonos(transfers []Transfer, pending_donos []SuperChat) []SuperChat {
 }
 
 func FloatToString(f float64) string {
-	d := decimal.NewFromFloat(f)
-	return d.String()
+	d, _ := ConvertStringTo18DecimalPlaces(decimal.NewFromFloat(f).String())
+	return d
 }
 
 func CreatePendingDono(name string, message string, mediaURL string, amountNeeded float64, cryptoCode string) SuperChat {
