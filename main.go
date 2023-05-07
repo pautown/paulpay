@@ -68,6 +68,7 @@ var loginTemplate *template.Template
 var footerTemplate *template.Template
 var incorrectLoginTemplate *template.Template
 var userTemplate *template.Template
+var cryptoSettingsTemplate *template.Template
 var logoutTemplate *template.Template
 var incorrectPasswordTemplate *template.Template
 var baseCheckingRate = 25
@@ -92,6 +93,11 @@ type priceData struct {
 type Link struct {
 	URL         string `json:"url"`
 	Description string `json:"description"`
+}
+
+type CryptoData struct {
+	CryptoCode string `json:"cryptocode"`
+	Enabled    bool   `json:"enabled"`
 }
 
 type User struct {
@@ -125,6 +131,19 @@ type User struct {
 	MinPnk               float64
 	DateEnabled          time.Time
 	WalletUploaded       bool
+	CryptosEnabled       CryptosEnabled
+}
+
+type CryptosEnabled struct {
+	XMR   bool
+	SOL   bool
+	ETH   bool
+	PAINT bool
+	HEX   bool
+	MATIC bool
+	BUSD  bool
+	SHIB  bool
+	PNK   bool
 }
 
 type CryptoPrice struct {
@@ -323,14 +342,11 @@ func checkLoggedIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, valid := getUserBySessionCached(cookie.Value)
+	_, valid := getUserBySessionCached(cookie.Value)
 	if !valid {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-
-	user = user
-	cookie = cookie
 }
 
 func checkLoggedInAdmin(w http.ResponseWriter, r *http.Request) bool {
@@ -461,10 +477,85 @@ func main() {
 
 }
 
+// Add the following struct to store the incoming data
+type UpdateCryptosRequest struct {
+	UserID          string          `json:"userId"`
+	SelectedCryptos map[string]bool `json:"selectedCryptos"`
+}
+
+func updateCryptosHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to read request body: %v", err), http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var updateRequest UpdateCryptosRequest
+	err = json.Unmarshal(body, &updateRequest)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to parse request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	cookie, err := r.Cookie("session_token")
+	if err != nil {
+		fmt.Println(err)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	user, valid := getUserBySessionCached(cookie.Value)
+	if !valid {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	userID, err := strconv.Atoi(updateRequest.UserID)
+
+	log.Println(userID, user.UserID)
+
+	if userID == user.UserID {
+		user.CryptosEnabled = mapToCryptosEnabled(updateRequest.SelectedCryptos)
+		log.Println(user.CryptosEnabled)
+		err = updateUser(user)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func mapToCryptosEnabled(selectedCryptos map[string]bool) CryptosEnabled {
+	// Create a new instance of the CryptosEnabled struct
+	cryptosEnabled := CryptosEnabled{}
+
+	// Set each field of the CryptosEnabled struct based on the corresponding value in the map
+	cryptosEnabled.XMR = selectedCryptos["monero"]
+	cryptosEnabled.SOL = selectedCryptos["solana"]
+	cryptosEnabled.ETH = selectedCryptos["ethereum"]
+	cryptosEnabled.PAINT = selectedCryptos["paint"]
+	cryptosEnabled.HEX = selectedCryptos["hex"]
+	cryptosEnabled.MATIC = selectedCryptos["matic"]
+	cryptosEnabled.BUSD = selectedCryptos["busd"]
+	cryptosEnabled.SHIB = selectedCryptos["shiba_inu"]
+	cryptosEnabled.PNK = selectedCryptos["pnk"]
+
+	// Return the populated CryptosEnabled struct
+	return cryptosEnabled
+}
 func setupRoutes() {
 	http.HandleFunc("/style.css", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/style.css")
 	})
+
+	http.HandleFunc("/updatecryptos", updateCryptosHandler)
 
 	http.HandleFunc("/check_donation_status/", checkDonationStatusHandler)
 
@@ -536,6 +627,8 @@ func setupRoutes() {
 		http.ServeFile(w, r, "web/wbtc.svg")
 	})
 
+	http.HandleFunc("/cryptosettings", cryptoSettingsHandler)
+
 	http.HandleFunc("/usermanager", allUsersHandler)
 	http.HandleFunc("/refresh", refreshHandler)
 
@@ -577,6 +670,8 @@ func setupRoutes() {
 	loginTemplate, _ = template.ParseFiles("web/login.html")
 	incorrectLoginTemplate, _ = template.ParseFiles("web/incorrect_login.html")
 	userTemplate, _ = template.ParseFiles("web/user.html")
+	cryptoSettingsTemplate, _ = template.ParseFiles("web/cryptoselect.html")
+
 	logoutTemplate, _ = template.ParseFiles("web/logout.html")
 	incorrectPasswordTemplate, _ = template.ParseFiles("web/password_change_failed.html")
 }
@@ -717,12 +812,12 @@ func getAllUsers() ([]User, error) {
 
 	for rows.Next() {
 		var user User
-		var links, donoGIF, donoSound, alertURL sql.NullString
+		var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString
 
 		err = rows.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 			&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
 			&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound,
-			&alertURL, &user.DateEnabled, &user.WalletUploaded)
+			&alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
 
 		if err != nil {
 			return nil, err
@@ -746,6 +841,24 @@ func getAllUsers() ([]User, error) {
 		user.AlertURL = alertURL.String
 		if !alertURL.Valid {
 			user.AlertURL = utils.GenerateUniqueURL()
+		}
+
+		ce := CryptosEnabled{
+			XMR:   true,
+			SOL:   true,
+			ETH:   false,
+			PAINT: false,
+			HEX:   true,
+			MATIC: false,
+			BUSD:  true,
+			SHIB:  false,
+			PNK:   true,
+		}
+
+		user.CryptosEnabled = cryptosJsonStringToStruct(cryptosEnabled.String)
+		if !cryptosEnabled.Valid {
+			log.Println("user cryptos enabled not fixed")
+			user.CryptosEnabled = ce
 		}
 
 		users = append(users, user)
@@ -842,6 +955,22 @@ func getCryptoPrices() (CryptoPrice, error) {
 	}
 
 	return prices, nil
+}
+
+func getUserCryptosEnabled(user User) (User, error) {
+
+	user.CryptosEnabled.XMR = false
+	user.CryptosEnabled.SOL = false
+	user.CryptosEnabled.ETH = false
+	user.CryptosEnabled.PAINT = true
+	user.CryptosEnabled.HEX = false
+	user.CryptosEnabled.MATIC = true
+	user.CryptosEnabled.BUSD = false
+	user.CryptosEnabled.SHIB = true
+	user.CryptosEnabled.PNK = false
+
+	return user, nil
+
 }
 
 // get links for a user
@@ -1921,7 +2050,8 @@ func createDatabaseIfNotExists(db *sql.DB) error {
             dono_sound TEXT,
             alert_url TEXT,
             date_enabled DATETIME,
-            wallet_uploaded BOOL
+            wallet_uploaded BOOL,
+            cryptos_enabled TEXT
 
         )
     `)
@@ -2048,23 +2178,7 @@ func createNewUser(username, password string) {
 		log.Println(err)
 	}
 	// create admin user if not exists
-	user := User{
-		Username:          username,
-		HashedPassword:    hashedPassword,
-		EthAddress:        "0x5b5856dA280e592e166A1634d353A53224ed409c",
-		SolAddress:        "adWqokePHcAbyF11TgfvvM1eKax3Kxtnn9sZVQh6fXo",
-		HexcoinAddress:    "0x5b5856dA280e592e166A1634d353A53224ed409c",
-		XMRWalletPassword: "",
-		MinDono:           3,
-		MinMediaDono:      5,
-		MediaEnabled:      true,
-		DonoGIF:           "default.gif",
-		DonoSound:         "default.mp3",
-		AlertURL:          utils.GenerateUniqueURL(),
-		WalletUploaded:    false,
-		Links:             "",
-		DateEnabled:       time.Now().UTC(),
-	}
+	user := getNewUser(username, hashedPassword)
 	userID := createUser(user)
 	if userID != 0 {
 		createNewOBS(db, userID, "default message", 100.00, 50.00, 5, user.DonoGIF, user.DonoSound, "test_voice")
@@ -2079,6 +2193,21 @@ func createNewUser(username, password string) {
 func createUser(user User) int {
 	log.Println("running CreateUser")
 	// Insert the user's data into the database
+
+	ce := CryptosEnabled{
+		XMR:   false,
+		SOL:   false,
+		ETH:   false,
+		PAINT: false,
+		HEX:   false,
+		MATIC: false,
+		BUSD:  false,
+		SHIB:  false,
+		PNK:   false,
+	}
+
+	ce_ := cryptosStructToJSONString(ce)
+
 	_, err := db.Exec(`
         INSERT INTO users (
             username,
@@ -2097,9 +2226,10 @@ func createUser(user User) int {
             dono_sound,
             alert_url,
             date_enabled,
-            wallet_uploaded
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now().UTC(), time.Now(), "", user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, 0)
+            wallet_uploaded,
+            cryptos_enabled
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now().UTC(), time.Now(), "", user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, 0, ce_)
 
 	if err != nil {
 		log.Println(err)
@@ -2152,12 +2282,12 @@ func updateUser(user User) error {
 	statement := `
 		UPDATE users
 		SET Username=?, HashedPassword=?, eth_address=?, sol_address=?, hex_address=?,
-			xmr_wallet_password=?, min_donation_threshold=?, min_media_threshold=?, media_enabled=?, modified_at=?, links=?, dono_gif=?, dono_sound=?, alert_url=?, date_enabled=?, wallet_uploaded=?
+			xmr_wallet_password=?, min_donation_threshold=?, min_media_threshold=?, media_enabled=?, modified_at=?, links=?, dono_gif=?, dono_sound=?, alert_url=?, date_enabled=?, wallet_uploaded=?, cryptos_enabled=?
 		WHERE id=?
 	`
 	_, err := db.Exec(statement, user.Username, user.HashedPassword, user.EthAddress,
 		user.SolAddress, user.HexcoinAddress, user.XMRWalletPassword, user.MinDono, user.MinMediaDono,
-		user.MediaEnabled, time.Now().UTC(), []byte(user.Links), user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, user.WalletUploaded, user.UserID) // convert user.Links to []byte
+		user.MediaEnabled, time.Now().UTC(), []byte(user.Links), user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, user.WalletUploaded, cryptosStructToJSONString(user.CryptosEnabled), user.UserID)
 	if err != nil {
 		log.Fatalf("failed, err: %v", err)
 	}
@@ -2166,11 +2296,11 @@ func updateUser(user User) error {
 
 func getUserByAlertURL(AlertURL string) (User, error) {
 	var user User
-	var links, donoGIF, donoSound, alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE alert_url=?", AlertURL)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
 	if err != nil {
 		return User{}, err
 	}
@@ -2189,6 +2319,23 @@ func getUserByAlertURL(AlertURL string) (User, error) {
 	user.AlertURL = alertURL.String // assign the sql.NullString to the user's "DonoGIF" field
 	if !alertURL.Valid {            // check if the "dono_gif" column is null
 		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"
+	}
+
+	ce := CryptosEnabled{
+		XMR:   true,
+		SOL:   true,
+		ETH:   false,
+		PAINT: false,
+		HEX:   true,
+		MATIC: false,
+		BUSD:  true,
+		SHIB:  false,
+		PNK:   true,
+	}
+
+	user.CryptosEnabled = cryptosJsonStringToStruct(cryptosEnabled.String) // assign the sql.NullString to the user's "DonoGIF" field
+	if !cryptosEnabled.Valid {                                             // check if the "dono_gif" column is null
+		user.CryptosEnabled = ce // set the user's "DonoSound"
 	}
 
 	return user, nil
@@ -2257,11 +2404,11 @@ func getUserByUsernameCached(username string) (User, bool) {
 // get a user by their username
 func getUserByUsername(username string) (User, error) {
 	var user User
-	var links, donoGIF, donoSound, alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
 	if err != nil {
 		return User{}, err
 	}
@@ -2281,6 +2428,24 @@ func getUserByUsername(username string) (User, error) {
 	if !alertURL.Valid {            // check if the "dono_gif" column is null
 		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"
 	}
+
+	ce := CryptosEnabled{
+		XMR:   true,
+		SOL:   true,
+		ETH:   false,
+		PAINT: false,
+		HEX:   true,
+		MATIC: false,
+		BUSD:  true,
+		SHIB:  false,
+		PNK:   true,
+	}
+
+	user.CryptosEnabled = cryptosJsonStringToStruct(cryptosEnabled.String) // assign the sql.NullString to the user's "DonoGIF" field
+	if !cryptosEnabled.Valid {                                             // check if the "dono_gif" column is null
+		user.CryptosEnabled = ce // set the user's "DonoSound"
+	}
+
 	user = setUserMinDonos(user)
 
 	return user, nil
@@ -2290,11 +2455,29 @@ func getUserByUsername(username string) (User, error) {
 // check a user by their ID
 func checkUserByID(id int) bool {
 	var user User
-	var links, donoGIF, donoSound, alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE id=?", id)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
+
+	ce := CryptosEnabled{
+		XMR:   true,
+		SOL:   true,
+		ETH:   false,
+		PAINT: false,
+		HEX:   true,
+		MATIC: false,
+		BUSD:  true,
+		SHIB:  false,
+		PNK:   true,
+	}
+
+	user.CryptosEnabled = cryptosJsonStringToStruct(cryptosEnabled.String) // assign the sql.NullString to the user's "DonoGIF" field
+	if !cryptosEnabled.Valid {                                             // check if the "dono_gif" column is null
+		user.CryptosEnabled = ce // set the user's "DonoSound"
+	}
+
 	if err == sql.ErrNoRows {
 		log.Println("checkUserByID(", id, "): User doesn't exist")
 		return false // user doesn't exist
@@ -2328,11 +2511,29 @@ func printUserColumns() error {
 func checkUserByUsername(username string) (bool, int) {
 	printUserColumns()
 	var user User
-	var links, donoGIF, donoSound, alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
+
+	ce := CryptosEnabled{
+		XMR:   true,
+		SOL:   true,
+		ETH:   false,
+		PAINT: false,
+		HEX:   true,
+		MATIC: false,
+		BUSD:  true,
+		SHIB:  false,
+		PNK:   true,
+	}
+
+	user.CryptosEnabled = cryptosJsonStringToStruct(cryptosEnabled.String) // assign the sql.NullString to the user's "DonoGIF" field
+	if !cryptosEnabled.Valid {                                             // check if the "dono_gif" column is null
+		user.CryptosEnabled = ce // set the user's "DonoSound"
+	}
+
 	if err == sql.ErrNoRows {
 		log.Println("checkUserByUsername(", username, "): User doesn't exist")
 		return false, 0 // user doesn't exist
@@ -2350,11 +2551,11 @@ func getUserBySession(sessionToken string) (User, error) {
 		return User{}, fmt.Errorf("session token not found")
 	}
 	var user User
-	var links, donoGIF, donoSound, alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE id=?", userID)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
 	if err != nil {
 		return User{}, err
 	}
@@ -2373,6 +2574,23 @@ func getUserBySession(sessionToken string) (User, error) {
 	user.AlertURL = alertURL.String // assign the sql.NullString to the user's "DonoGIF" field
 	if !alertURL.Valid {            // check if the "dono_gif" column is null
 		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"
+	}
+
+	ce := CryptosEnabled{
+		XMR:   true,
+		SOL:   true,
+		ETH:   false,
+		PAINT: false,
+		HEX:   true,
+		MATIC: false,
+		BUSD:  true,
+		SHIB:  false,
+		PNK:   true,
+	}
+
+	user.CryptosEnabled = cryptosJsonStringToStruct(cryptosEnabled.String) // assign the sql.NullString to the user's "DonoGIF" field
+	if !cryptosEnabled.Valid {                                             // check if the "dono_gif" column is null
+		user.CryptosEnabled = ce // set the user's "DonoSound"
 	}
 
 	return user, nil
@@ -2969,6 +3187,55 @@ func progressbarOBSHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func cryptosStructToJSONString(s CryptosEnabled) string {
+	bytes, err := json.Marshal(s)
+	if err != nil {
+		log.Println("cryptosStructToJSONString error:", err)
+		return ""
+	}
+	return string(bytes)
+}
+
+func cryptosJsonStringToStruct(jsonStr string) CryptosEnabled {
+	var s CryptosEnabled
+	err := json.Unmarshal([]byte(jsonStr), &s)
+	if err != nil {
+		log.Println("cryptosJsonStringToStruct error:", err)
+		return CryptosEnabled{}
+	}
+	return s
+}
+
+func cryptoSettingsHandler(w http.ResponseWriter, r *http.Request) {
+
+	cookie, err := r.Cookie("session_token")
+	if err != nil {
+		fmt.Println(err)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	user, valid := getUserBySessionCached(cookie.Value)
+	if !valid {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		tmpl, err := template.ParseFiles("web/cryptoselect.html")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		err = tmpl.Execute(w, user)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	// Ignore requests for the favicon
 	if r.URL.Path == "/favicon.ico" {
@@ -3290,12 +3557,24 @@ func createPendingUser(user PendingUser) error {
 	return nil
 }
 
-func createNewUserFromPending(user_ PendingUser) error {
-	log.Println("running createNewUserFromPending")
-	// create admin user if not exists
+func getNewUser(username string, hashedPassword []byte) User {
+
+	ce := CryptosEnabled{
+		XMR:   false,
+		SOL:   false,
+		ETH:   false,
+		PAINT: false,
+		HEX:   false,
+		MATIC: false,
+		BUSD:  false,
+		SHIB:  false,
+		PNK:   false,
+	}
+
 	user := User{
-		Username:          user_.Username,
-		HashedPassword:    user_.HashedPassword,
+		Username:          username,
+		HashedPassword:    hashedPassword,
+		CryptosEnabled:    ce,
 		EthAddress:        "0x5b5856dA280e592e166A1634d353A53224ed409c",
 		SolAddress:        "adWqokePHcAbyF11TgfvvM1eKax3Kxtnn9sZVQh6fXo",
 		HexcoinAddress:    "0x5b5856dA280e592e166A1634d353A53224ed409c",
@@ -3310,6 +3589,13 @@ func createNewUserFromPending(user_ PendingUser) error {
 		Links:             "",
 		DateEnabled:       time.Now().UTC(),
 	}
+	return user
+}
+
+func createNewUserFromPending(user_ PendingUser) error {
+	log.Println("running createNewUserFromPending")
+
+	user := getNewUser(user_.Username, user_.HashedPassword)
 	userID := createUser(user)
 	if userID != 0 {
 		createNewOBS(db, userID, "default message", 100.00, 50.00, 5, user.DonoGIF, user.DonoSound, "test_voice")

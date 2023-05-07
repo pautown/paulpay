@@ -29,19 +29,19 @@
         <tr>
             <td>
                 <div style="display: flex; align-items: center;">
-                    <input type="checkbox" id="monero" style="width: auto;">
+                    <input type="checkbox" id="monero" style="width: auto;" {{ if .CryptosEnabled.XMR }}checked{{ end }}>
                     <label for="monero">Monero</label>
                 </div>
             </td>
             <td>
                 <div style="display: flex; align-items: center;">
-                    <input type="checkbox" id="solana" style="width: auto;">
+                    <input type="checkbox" id="solana" style="width: auto;" {{ if .CryptosEnabled.SOL }}checked{{ end }}>
                     <label for="solana">Solana</label>
                 </div>
             </td>
             <td>
                 <div style="display: flex; align-items: center;">
-                    <input type="checkbox" id="ethereum" style="width: auto;">
+                    <input type="checkbox" id="ethereum" style="width: auto;" {{ if .CryptosEnabled.ETH }}checked{{ end }}>
                     <label for="ethereum">Ethereum</label>
                 </div>
             </td>
@@ -49,19 +49,19 @@
         <tr>
             <td>
                 <div style="display: flex; align-items: center;">
-                    <input type="checkbox" id="paint" style="width: auto;">
+                    <input type="checkbox" id="paint" style="width: auto;" {{ if .CryptosEnabled.PAINT }}checked{{ end }}>
                     <label for="paint">Paint</label>
                 </div>
             </td>
             <td>
                 <div style="display: flex; align-items: center;">
-                    <input type="checkbox" id="hex" style="width: auto;">
+                    <input type="checkbox" id="hex" style="width: auto;" {{ if .CryptosEnabled.HEX }}checked{{ end }}>
                     <label for="hex">Hexcoin</label>
                 </div>
             </td>
             <td>
                 <div style="display: flex; align-items: center;">
-                    <input type="checkbox" id="matic" style="width: auto;">
+                    <input type="checkbox" id="matic" style="width: auto;" {{ if .CryptosEnabled.MATIC }}checked{{ end }}>
                     <label for="matic">Polygon</label>
                 </div>
             </td>
@@ -69,24 +69,25 @@
         <tr>
             <td>
                 <div style="display: flex; align-items: center;">
-                    <input type="checkbox" id="busd" style="width: auto;">
+                    <input type="checkbox" id="busd" style="width: auto;" {{ if .CryptosEnabled.BUSD }}checked{{ end }}>
                     <label for="busd">Binance USD</label>
                 </div>
             </td>
             <td>
                 <div style="display: flex; align-items: center;">
-                    <input type="checkbox" id="shiba_inu" style="width: auto;">
+                    <input type="checkbox" id="shiba_inu" style="width: auto;" {{ if .CryptosEnabled.SHIB }}checked{{ end }}>
                     <label for="shiba_inu">Shiba Inu</label>
                 </div>
             </td>
             <td>
                 <div style="display: flex; align-items: center;">
-                    <input type="checkbox" id="pnk" style="width: auto;">
+                    <input type="checkbox" id="pnk" style="width: auto;" {{ if .CryptosEnabled.PNK }}checked{{ end }}>
                     <label for="pnk">Kleros</label>
                 </div>
             </td>
         </tr>
     </table>
+    <input type="hidden" id="user_id" value="{{ .UserID }}">
     <button onclick="updateSelection()">Update</button>
 </div>
 <footer>
@@ -96,8 +97,52 @@
 </footer>
 <script>
     function updateSelection() {
-        // Add your logic to handle the selected checkboxes
+        const userId = document.getElementById('user_id').value;
+
+        const checkboxIds = [
+            'monero',
+            'solana',
+            'ethereum',
+            'paint',
+            'hex',
+            'matic',
+            'busd',
+            'shiba_inu',
+            'pnk'
+        ];
+
+        const selectedCryptos = checkboxIds.reduce((cryptos, id) => {
+            cryptos[id] = document.getElementById(id).checked;
+            return cryptos;
+        }, {});
+
+        console.log('User ID:', userId);
+        console.log('Selected Cryptos:', selectedCryptos);
+
+        sendSelectedCryptos(userId, selectedCryptos);
     }
+
+
+async function sendSelectedCryptos(userId, selectedCryptos) {
+    const response = await fetch('/updatecryptos', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ userId, selectedCryptos })
+    });
+
+    if (response.ok) {
+        console.log('Cryptos updated successfully');
+    } else {
+        console.error('Error updating cryptos:', response.statusText);
+        const responseBody = await response.text();
+        console.error('Server error message:', responseBody);
+    }
+}
+
+
 </script>
 </body>
 </html>
+
