@@ -6,16 +6,19 @@
   <link href="style.css" rel="stylesheet">
 </head>
 <body>
-   <br><br><br>
+   <br>
   <h1>OBS Settings Panel</h1>
   <hr>
 
    <div style="display: flex; align-items: center; margin-right: 10px;">
-      <form method="GET" action="/viewdonos">
-        <button style="padding: 0 10px 0;">View Donations</button>
-      </form>
       <form method="GET" action="/user">
         <button style="padding: 0 10px 0;">User Settings</button>
+      </form>
+      <form method="GET" action="/userobs">
+        <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">OBS Settings</button>
+      </form>
+      <form method="GET" action="/viewdonos">
+        <button style="padding: 0 10px 0;">View Donations</button>
       </form>
       {{ if eq .Username "admin" }}
       <form method="GET" action="/usermanager">

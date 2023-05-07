@@ -52,77 +52,86 @@ window.onload = function() {
       alert('Passwords do not match');
     }
   });
+
+   // Get the creation date string from the server-side template
+  const creationDateStr = "{{.CreationDatetime}}";
+
+  // Parse the string into a Date object
+  const creationDate = new Date(creationDateStr);
+
+  // Format the date into a human-readable string
+  const formattedDate = creationDate.toLocaleString();
+
+  // Set the formatted date as the text content of the <span> element
+  document.getElementById("creation-date").textContent = formattedDate;
+
+ // Get the current date as a Date object
+  const currentDate = new Date();
+
+  // Add one month to the current date
+  const nextMonthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1);
+
+  // Set the target date to the first day of the next month
+  const targetDate = new Date(nextMonthDate.getFullYear(), nextMonthDate.getMonth(), 1);
+
+  // Calculate the difference between the current date and the target date
+  const timeDiff = targetDate.getTime() - currentDate.getTime();
+  const daysLeft = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+
+  // Update the text content of the <span> element with the number of days left
+  document.getElementById("days-left").textContent = daysLeft.toString();
+
+
 };
+
+
+ 
+
   </script>
 </head>
 <body>
   <br>
   <h1>User Settings Panel</h1>
   <hr>
-  <h3>User settings for <i>{{ .Username }}</i></h3>
 
-<div style="display: flex; align-items: center;">
-  <form method="GET" action="/viewdonos">
-    <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">View Donations</button>
-  </form>
-  <form method="GET" action="/userobs">
-    <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">OBS Settings</button>
-  </form>
-  {{ if eq .Username "admin" }}
-  <form method="GET" action="/usermanager">
-    <button style="padding: 0 10px; display: inline-block;">Admin Dash</button>
-  </form>
-  {{ end }}
-</div>
+<div style="display: flex; align-items: center; margin-right: 10px;">
+      <form method="GET" action="/user">
+        <button style="padding: 0 10px 0;">User Settings</button>
+      </form>
+      <form method="GET" action="/userobs">
+        <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">OBS Settings</button>
+      </form>
+      <form method="GET" action="/viewdonos">
+        <button style="padding: 0 10px 0;">View Donations</button>
+      </form>
+      {{ if eq .Username "admin" }}
+      <form method="GET" action="/usermanager">
+        <button style="padding: 0 10px 0;">Admin Dash</button>
+      </form>
+      {{ end }}
+  </div>
 
 
 
   <br><br>
-  <h2>User Info:</h2>
-  
-  <form method="POST" action="/changeuser">
-    <label for="ethereumAddress">Ethereum Address:</label>
-    <input type="text" id="ethereumAddress" name="ethereumAddress" placeholder="{{.EthAddress}}" value="{{.EthAddress}}">
-    <br>
-    <label for="solanaAddress">Solana Address:</label>
-    <input type="text" id="solanaAddress" name="solanaAddress" placeholder="{{.SolAddress}}" value="{{.SolAddress}}">
 
-    <br>
-    <br>
-
-    <submit>Minimum Donation Amount (USD)</submit>
-    <submit><input type="number" id="minUsdAmount" name="minUsdAmount" min="1"  value="{{.MinDono}}"></submit>
-    <br>
-    <br>
-
-    <input type="submit" value="Update User Info" id="update-profile">
-
+  <p> <b style="color: lightsteelblue;"> Username: </b> {{.Username}} </p>
+  <p> <b style="color: lightsteelblue;">Created on:</b> <span id="creation-date"></span></p>
+  <p> <b style="color: lightsteelblue;"> Days until next payment: </b> <span id="days-left"></span> </p>
+  <p id="media-status"> <b style="color: lightsteelblue;">Monero Wallet: </b> {{ if .WalletUploaded }}uploaded{{ else }}<b>not yet uploaded.</b>{{ end }}</p>
+  <form method="GET" action="/cryptosettings">
+    <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">View/Change Crypto Settings</button>
   </form>
-    <hr>
+
+
+  
+  
  <br>
  <br>
 
-  <form method="POST" action="/changeusermonero"enctype="multipart/form-data">
-  <label for="moneroWallet">View-Only Monero Wallet:</label>
-  <input type="file" id="moneroWallet" name="moneroWallet">
-  <label for="moneroWallet">View-Only Monero Wallet Keys:</label>
-  <input type="file" id="moneroWalletKeys" name="moneroWalletKeys" accept=".keys">
-  <br>
-    <br>
-  <input type="submit" value="Upload Monero Wallets" id="update-profile">
-  <hr>
-  <br> 
-  
-  <p id="media-status">Media donations are currently {{ if .MediaEnabled }}enabled{{ else }}<b>disabled</b>{{ end }}</p>
 
-   
-  <button type="button" id="toggle-media-donos" onclick="toggleDonos()">Turn Media Donations  {{ if .MediaEnabled }}OFF{{ else }} ON{{ end }}</button>
-   
-    <input type="submit" value="Update User Dono Limits" id="update-profile">
-  </form>
   
   <hr>
-  <small>
     <br>
     <h2>Change Password</h2>
   <form method="POST" action="/changepassword">
@@ -134,7 +143,7 @@ window.onload = function() {
 <input type="password" id="new-password-confirm" name="new_password_confirm" required><br><br>
     <button type="submit" id="change-password">Change Password</button>
 </form>
-  </small>
+
   <hr><br><br><br>
   <form method="POST" action="/logout">
     <input type="submit" value="Logout">

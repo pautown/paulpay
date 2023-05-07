@@ -103,6 +103,17 @@
           const eightButton = document.getElementById("eightButton");
           eightButton.textContent = `$${parseFloat({{.MinDono}}) * 27}`;
 
+
+          const toggleSelect = document.getElementById('toggleSelect');
+          const optionsCount = toggleSelect.options.length;
+          
+          if (optionsCount <= 2) {
+            toggleSelect.classList.remove('visible');
+            toggleSelect.classList.add('hidden');
+          }
+          document.getElementById("toggleSelect").selectedIndex = 1;
+          toggleText();
+
         };
 
         var buttonText = "Switch Cryptocurrency";
@@ -183,6 +194,7 @@
 
           // switch focus to amount input field
           document.getElementById("amount").focus();
+          console.log("toggleText() called")
         }
 
 
@@ -227,7 +239,7 @@
     <div style="display: flex; align-items: center;">
       <input id="amount" min="{{.MinMonero}}" name="amount" placeholder="{{.MinMonero}} Minimum" step="0.00001" type="number" onblur="validateAmount()" onchange="validateAmount()">
       <small> ≈ $</small>    
-      <input id="amountUSD" min=8 name="amountUSD" placeholder="{{.MinDono}}.00 Minimum" step="0.01" type="number" onblur="validateUSDAmount()" onchange="validateUSDAmount()">
+      <input id="amountUSD" min={{.MinDono}} name="amountUSD" placeholder="{{.MinDono}}.00 Minimum" step="0.01" type="number" onblur="validateUSDAmount()" onchange="validateUSDAmount()">
     </div>
 
     <div style="display: flex; align-items: center;">  
@@ -252,17 +264,39 @@
         <img id="currencyIcon" src="xmr.svg" style="margin-right: 10px;">
         <span id="currencyText">Ferret XMR</span>
       </button>
-      <select id="toggleSelect" onchange="toggleText()" onblur="this.selectedIndex=0;">
+      
+
+        <select id="toggleSelect" onchange="toggleText()" onblur="this.selectedIndex=0;" class="visible">
+       
+
         <option value="" disabled selected>Switch Cryptocurrency</option>
+        {{ if .CryptosEnabled.XMR }}
         <option value="XMR">Switch to Monero</option>
+        {{ end }}
+        {{ if .CryptosEnabled.SOL }}
         <option value="SOL">Switch to Solana</option>
+        {{ end }}
+        {{ if .CryptosEnabled.ETH }}
         <option value="ETH">Switch to Ethereum</option>
+        {{ end }}
+        {{ if .CryptosEnabled.PAINT }}
         <option value="PAINT">Switch to Paint</option>
+        {{ end }}
+        {{ if .CryptosEnabled.HEX }}
         <option value="HEX">Switch to Hexcoin</option>
+        {{ end }}
+        {{ if .CryptosEnabled.MATIC }}
         <option value="MATIC">Switch to Polygon</option>
+        {{ end }}
+        {{ if .CryptosEnabled.BUSD }}
         <option value="BUSD">Switch to Binance USD</option>
+        {{ end }}
+        {{ if .CryptosEnabled.SHIB }}
         <option value="SHIB">Switch to Shiba Inu</option>
+        {{ end }}
+        {{ if .CryptosEnabled.PNK }}
         <option value="PNK">Switch to Kleros</option>
+        {{ end }}
       </select>
     </div>       
   </form>

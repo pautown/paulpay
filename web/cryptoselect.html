@@ -6,16 +6,19 @@
     <link href="style.css" rel="stylesheet">
 </head>
 <body>
-     <br><br><br>
+     <br>
   <h1>Crypto Settings Panel</h1>
   <hr>
 
    <div style="display: flex; align-items: center; margin-right: 10px;">
-      <form method="GET" action="/viewdonos">
-        <button style="padding: 0 10px 0;">View Donations</button>
-      </form>
       <form method="GET" action="/user">
         <button style="padding: 0 10px 0;">User Settings</button>
+      </form>
+      <form method="GET" action="/userobs">
+        <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">OBS Settings</button>
+      </form>
+      <form method="GET" action="/viewdonos">
+        <button style="padding: 0 10px 0;">View Donations</button>
       </form>
       {{ if eq .Username "admin" }}
       <form method="GET" action="/usermanager">
@@ -24,13 +27,16 @@
       {{ end }}
   </div>
 <div class="content">
-    <h3>Select which cryptos to accept:</h3>
+
+    <br>
+    <b style="color: lightsteelblue;">Accepted Cryptos:</b>
     <table>
         <tr>
             <td>
                 <div style="display: flex; align-items: center;">
-                    <input type="checkbox" id="monero" style="width: auto;" {{ if .CryptosEnabled.XMR }}checked{{ end }}>
+                    <input type="checkbox" id="monero" style="width: auto;" {{ if .CryptosEnabled.XMR }}checked{{ end }} {{ if not .WalletUploaded }}disabled{{ end }}>
                     <label for="monero">Monero</label>
+
                 </div>
             </td>
             <td>
@@ -89,6 +95,46 @@
     </table>
     <input type="hidden" id="user_id" value="{{ .UserID }}">
     <button onclick="updateSelection()">Update</button>
+
+    <br>
+    <br>
+
+    <form method="POST" action="/changeuser">
+    <label for="ethereumAddress"><b style="color: lightsteelblue;">Ethereum Address:</b></label>
+    <input type="text" id="ethereumAddress" name="ethereumAddress" placeholder="{{.EthAddress}}" value="{{.EthAddress}}">
+    <br>
+    <label for="solanaAddress"><b style="color: lightsteelblue;">Solana Address:</b></label>
+    <input type="text" id="solanaAddress" name="solanaAddress" placeholder="{{.SolAddress}}" value="{{.SolAddress}}">
+
+    <br>
+    <br>
+
+    <submit><b style="color: lightsteelblue;">Minimum Donation Amount (USD)</b></submit>
+    <submit><input type="number" id="minUsdAmount" name="minUsdAmount" min="1"  value="{{.MinDono}}"></submit>
+    <br>
+    <br>
+
+    <input type="submit" value="Update User Info" id="update-profile">
+
+  </form>
+    <hr>
+      <form method="POST" action="/changeusermonero"enctype="multipart/form-data">
+  <label for="moneroWallet"><b style="color: lightsteelblue;">View-Only Monero Wallet:</b></label>
+  <input type="file" id="moneroWallet" name="moneroWallet">
+  <label for="moneroWallet"><b style="color: lightsteelblue;">View-Only Monero Wallet Keys:</b></label>
+  <input type="file" id="moneroWalletKeys" name="moneroWalletKeys" accept=".keys">
+  <br>
+    <br>
+  <input type="submit" value="Upload Monero Wallets" id="update-profile">
+  <hr>
+  <br> 
+  
+  <p id="media-status">Media donations are currently {{ if .MediaEnabled }}enabled{{ else }}<b>disabled</b>{{ end }}</p>
+
+   
+  <button type="button" id="toggle-media-donos" onclick="toggleDonos()">Turn Media Donations  {{ if .MediaEnabled }}OFF{{ else }} ON{{ end }}</button>
+  </form>
+
 </div>
 <footer>
     <small><small>

@@ -218,30 +218,31 @@ type superChat struct {
 }
 
 type indexDisplay struct {
-	MaxChar      int
-	MinDono      int
-	MinSolana    float64
-	MinMonero    float64
-	MinEthereum  float64
-	MinPaint     float64
-	MinHex       float64
-	MinPolygon   float64
-	MinBusd      float64
-	MinShib      float64
-	MinPnk       float64
-	SolPrice     float64
-	XMRPrice     float64
-	ETHPrice     float64
-	PaintPrice   float64
-	HexPrice     float64
-	PolygonPrice float64
-	BusdPrice    float64
-	ShibPrice    float64
-	PnkPrice     float64
-	MinAmnt      float64
-	Links        string
-	Checked      string
-	Username     string
+	MaxChar        int
+	MinDono        int
+	MinSolana      float64
+	MinMonero      float64
+	MinEthereum    float64
+	MinPaint       float64
+	MinHex         float64
+	MinPolygon     float64
+	MinBusd        float64
+	MinShib        float64
+	MinPnk         float64
+	SolPrice       float64
+	XMRPrice       float64
+	ETHPrice       float64
+	PaintPrice     float64
+	HexPrice       float64
+	PolygonPrice   float64
+	BusdPrice      float64
+	ShibPrice      float64
+	PnkPrice       float64
+	MinAmnt        float64
+	Links          string
+	Checked        string
+	CryptosEnabled CryptosEnabled
+	Username       string
 }
 
 type alertPageData struct {
@@ -522,6 +523,9 @@ func updateCryptosHandler(w http.ResponseWriter, r *http.Request) {
 
 	if userID == user.UserID {
 		user.CryptosEnabled = mapToCryptosEnabled(updateRequest.SelectedCryptos)
+		if user.CryptosEnabled.XMR && !user.WalletUploaded {
+			user.CryptosEnabled.XMR = false
+		}
 		log.Println(user.CryptosEnabled)
 		err = updateUser(user)
 		if err != nil {
@@ -3263,29 +3267,30 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		i := indexDisplay{
-			MaxChar:      MessageMaxChar,
-			MinDono:      user.MinDono,
-			MinSolana:    user.MinSol,
-			MinEthereum:  user.MinEth,
-			MinMonero:    user.MinXmr,
-			MinHex:       user.MinHex,
-			MinPolygon:   user.MinMatic,
-			MinBusd:      user.MinBusd,
-			MinShib:      user.MinShib,
-			MinPnk:       user.MinPnk,
-			MinPaint:     user.MinPaint,
-			SolPrice:     prices.Solana,
-			ETHPrice:     prices.Ethereum,
-			XMRPrice:     prices.Monero,
-			PolygonPrice: prices.Polygon,
-			HexPrice:     prices.Hexcoin,
-			BusdPrice:    prices.BinanceUSD,
-			ShibPrice:    prices.ShibaInu,
-			PnkPrice:     prices.Kleros,
-			PaintPrice:   prices.Paint,
-			Checked:      checked,
-			Links:        string(linksJSON),
-			Username:     username,
+			MaxChar:        MessageMaxChar,
+			MinDono:        user.MinDono,
+			MinSolana:      user.MinSol,
+			MinEthereum:    user.MinEth,
+			MinMonero:      user.MinXmr,
+			MinHex:         user.MinHex,
+			MinPolygon:     user.MinMatic,
+			MinBusd:        user.MinBusd,
+			MinShib:        user.MinShib,
+			MinPnk:         user.MinPnk,
+			MinPaint:       user.MinPaint,
+			SolPrice:       prices.Solana,
+			ETHPrice:       prices.Ethereum,
+			XMRPrice:       prices.Monero,
+			PolygonPrice:   prices.Polygon,
+			HexPrice:       prices.Hexcoin,
+			BusdPrice:      prices.BinanceUSD,
+			ShibPrice:      prices.ShibaInu,
+			PnkPrice:       prices.Kleros,
+			PaintPrice:     prices.Paint,
+			CryptosEnabled: user.CryptosEnabled,
+			Checked:        checked,
+			Links:          string(linksJSON),
+			Username:       username,
 		}
 
 		fmt.Println("user.MinSol =", user.MinSol)

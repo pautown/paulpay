@@ -11,14 +11,17 @@
         <button style="padding: 0 10px 0;">User Settings</button>
       </form>
       <form method="GET" action="/userobs">
-        <button style="padding: 0 10px 0;">OBS Settings</button>
+        <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">OBS Settings</button>
+      </form>
+      <form method="GET" action="/viewdonos">
+        <button style="padding: 0 10px 0;">View Donations</button>
       </form>
       {{ if eq .Username "admin" }}
       <form method="GET" action="/usermanager">
         <button style="padding: 0 10px 0;">Admin Dash</button>
       </form>
       {{ end }}
-    </div>
+  </div>
   <br><br>
 	<style>
 		body {
