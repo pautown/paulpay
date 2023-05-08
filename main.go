@@ -132,6 +132,7 @@ type User struct {
 	DateEnabled          time.Time
 	WalletUploaded       bool
 	CryptosEnabled       CryptosEnabled
+	BillingData          BillingData
 }
 
 type CryptosEnabled struct {
@@ -215,6 +216,14 @@ type superChat struct {
 	DonationID      int64
 	ContractAddress string
 	WeiAmount       *big.Int
+}
+
+type BillingData struct {
+	UserID          int
+	AmountThisMonth float64
+	AmountTotal     float64
+	CreatedAt       date.Date
+	UpdatedAt       date.Date
 }
 
 type indexDisplay struct {
@@ -2217,8 +2226,8 @@ func createUser(user User) int {
 
 	ce := CryptosEnabled{
 		XMR:   false,
-		SOL:   false,
-		ETH:   false,
+		SOL:   true,
+		ETH:   true,
 		PAINT: false,
 		HEX:   false,
 		MATIC: false,
@@ -2266,6 +2275,14 @@ func createUser(user User) int {
 		return 0
 	}
 
+	billing := BillingData{
+		UserID:          userID,
+		AmountThisMonth: 0.00,
+		AmountTotal:     0.00,
+		CreatedAt:       time.Now().UTC(),
+		UpdatedAt:       time.Now().UTC(),
+	}
+
 	_, err := db.Exec(`
         INSERT INTO billing (
             user_id,
@@ -2274,7 +2291,11 @@ func createUser(user User) int {
             created_at,
             updated_at
         ) VALUES (?, ?, ?, ?, ?)
-    `, userID, 0.00, 0.00, time.Now().UTC(), time.Now().UTC())
+    `, billing.UserID, billing.AmountThisMonth, billing.AmountTotal, billing.CreatedAt, billing.CreatedAt)
+
+	user.BillingData = billing
+
+	globalUsers[user.UserID] = user
 
 	// Create a directory for the user based on their ID
 	userDir := fmt.Sprintf("users/%d", userID)
