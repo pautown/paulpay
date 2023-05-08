@@ -2015,6 +2015,22 @@ func createDatabaseIfNotExists(db *sql.DB) error {
 	}
 
 	_, err = db.Exec(`
+        CREATE TABLE IF NOT EXISTS billing (
+        	billing_id INTEGER PRIMARY KEY,
+            user_id INTEGER,
+            amount_this_month FLOAT,
+            amount_total FLOAT,
+            created_at DATETIME,
+            updated_at DATETIME,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    `)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`
         CREATE TABLE IF NOT EXISTS addresses (
             key_public TEXT NOT NULL,
             key_private BLOB NOT NULL
@@ -2249,6 +2265,16 @@ func createUser(user User) int {
 		log.Println(err)
 		return 0
 	}
+
+	_, err := db.Exec(`
+        INSERT INTO billing (
+            user_id,
+            amount_this_month,
+            amount_total,
+            created_at,
+            updated_at
+        ) VALUES (?, ?, ?, ?, ?)
+    `, userID, 0.00, 0.00, time.Now().UTC(), time.Now().UTC())
 
 	// Create a directory for the user based on their ID
 	userDir := fmt.Sprintf("users/%d", userID)
