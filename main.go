@@ -370,6 +370,7 @@ func checkLoggedInAdmin(w http.ResponseWriter, r *http.Request) bool {
 
 // Handler function for the "/donations" endpoint
 func donationsHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("donationsHandler Called")
 	checkLoggedIn(w, r)
 	// Fetch the latest data from your database or other data source
 

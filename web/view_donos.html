@@ -16,12 +16,7 @@
       <form method="GET" action="/viewdonos">
         <button style="padding: 0 10px 0;">View Donations</button>
       </form>
-      {{ if eq .Username "admin" }}
-      <form method="GET" action="/usermanager">
-        <button style="padding: 0 10px 0;">Admin Dash</button>
-      </form>
-      {{ end }}
-  </div>
+    </div>
   <br><br>
 	<style>
 		body {
@@ -58,6 +53,111 @@
 			content: "\25bc";
 		}
 	</style>
+    <script>
+
+        function sortTable(n) {
+            var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+            table = document.getElementsByTagName("table")[0];
+            switching = true;
+            dir = "asc";
+            while (switching) {
+                switching = false;
+                rows = table.rows;
+                for (i = 1; i < (rows.length - 1); i++) {
+                    shouldSwitch = false;
+                    x = rows[i].getElementsByTagName("td")[n];
+                    y = rows[i + 1].getElementsByTagName("td")[n];
+                    if (n == 0) { // sort date column
+                        var dateX = new Date(x.innerHTML);
+                        var dateY = new Date(y.innerHTML);
+                        if (dir == "asc") {
+                            if (dateX.getTime() > dateY.getTime()) {
+                                shouldSwitch = true;
+                                break;
+                            }
+                        } else if (dir == "desc") {
+                            if (dateX.getTime() < dateY.getTime()) {
+                                shouldSwitch = true;
+                                break;
+                            }
+                        }
+                    } else if (n == 3 || n == 4) { // sort amount column
+                        var numX = parseFloat(x.innerHTML.replace("$", ""));
+                        var numY = parseFloat(y.innerHTML.replace("$", ""));
+                        if (dir == "asc") {
+                            if (numX > numY) {
+                                shouldSwitch = true;
+                                break;
+                            }
+                        } else if (dir == "desc") {
+                            if (numX < numY) {
+                                shouldSwitch = true;
+                                break;
+                            }
+                        }
+                    } else { // sort other columns
+                        if (dir == "asc") {
+                            if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+                                shouldSwitch = true;
+                                break;
+                            }
+                        } else if (dir == "desc") {
+                            if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+                                shouldSwitch = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (shouldSwitch) {
+                    rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                    switching = true;
+                    switchcount ++;
+                } else {
+                    if (switchcount == 0 && dir == "asc") {
+                        dir = "desc";
+                        switching = true;
+                    }
+                }
+            }
+            // remove the "asc" or "desc" class from all other rows
+            for (i = 0; i < rows.length; i++) {
+                if (i == 0) {
+                    rows[i].classList.add(dir == "asc" ? "asc" : "desc");
+                } else {
+                    rows[i].classList.remove("asc");
+                    rows[i].classList.remove("desc");
+                }
+            }
+        }
+        
+    document.addEventListener("DOMContentLoaded", function() {
+        
+
+
+    function updateDonations() {
+        var xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    var tableBody = document.getElementById("donations-table-body");
+                    tableBody.innerHTML = xhr.responseText;
+                } else {
+                    console.log("Error fetching donations: " + xhr.status);
+                }
+            }
+        };
+        xhr.open("GET", "/donations");
+        xhr.send();
+    }
+
+
+    // Call the updateDonations function every 5 seconds
+    setInterval(updateDonations, 4000);
+});
+        
+    </script>
+    
 </head>
 <body>
 	<h1>View Donos</h1>
@@ -87,108 +187,5 @@
 			</tbody>
 		</table>
 	</div>
-	<script>
-
-
-	function sortTable(n) {
-    var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-    table = document.getElementsByTagName("table")[0];
-    switching = true;
-    dir = "asc";
-    while (switching) {
-        switching = false;
-        rows = table.rows;
-        for (i = 1; i < (rows.length - 1); i++) {
-            shouldSwitch = false;
-            x = rows[i].getElementsByTagName("td")[n];
-            y = rows[i + 1].getElementsByTagName("td")[n];
-            if (n == 0) { // sort date column
-                var dateX = new Date(x.innerHTML);
-                var dateY = new Date(y.innerHTML);
-                if (dir == "asc") {
-                    if (dateX.getTime() > dateY.getTime()) {
-                        shouldSwitch = true;
-                        break;
-                    }
-                } else if (dir == "desc") {
-                    if (dateX.getTime() < dateY.getTime()) {
-                        shouldSwitch = true;
-                        break;
-                    }
-                }
-            } else if (n == 3 || n == 4) { // sort amount column
-                var numX = parseFloat(x.innerHTML.replace("$", ""));
-                var numY = parseFloat(y.innerHTML.replace("$", ""));
-                if (dir == "asc") {
-                    if (numX > numY) {
-                        shouldSwitch = true;
-                        break;
-                    }
-                } else if (dir == "desc") {
-                    if (numX < numY) {
-                        shouldSwitch = true;
-                        break;
-                    }
-                }
-            } else { // sort other columns
-                if (dir == "asc") {
-                    if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
-                        shouldSwitch = true;
-                        break;
-                    }
-                } else if (dir == "desc") {
-                    if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
-                        shouldSwitch = true;
-                        break;
-                    }
-                }
-            }
-        }
-        if (shouldSwitch) {
-            rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-            switching = true;
-            switchcount ++;
-        } else {
-            if (switchcount == 0 && dir == "asc") {
-                dir = "desc";
-                switching = true;
-            }
-        }
-    }
-    // remove the "asc" or "desc" class from all other rows
-    for (i = 0; i < rows.length; i++) {
-        if (i == 0) {
-            rows[i].classList.add(dir == "asc" ? "asc" : "desc");
-        } else {
-            rows[i].classList.remove("asc");
-            rows[i].classList.remove("desc");
-        }
-    }
-}
-
-
-function updateDonations() {
-    var xhr = new XMLHttpRequest();
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState === XMLHttpRequest.DONE) {
-            if (xhr.status === 200) {
-                var tableBody = document.getElementById("donations-table-body");
-                tableBody.innerHTML = xhr.responseText;
-            } else {
-                console.log("Error fetching donations: " + xhr.status);
-            }
-        }
-    };
-    xhr.open("GET", "/donations");
-    xhr.send();
-}
-
-
-// Call the updateDonations function every 5 seconds
-setInterval(updateDonations, 4000);
-
-
-	</script>
-
 </body>
 </html>
