@@ -706,7 +706,6 @@ func startWallets() {
 	for _, user := range users {
 		log.Println("Checking user:", user.Username, "User ID:", user.UserID, "User billing data enabled:", user.BillingData.Enabled)
 		if user.BillingData.Enabled {
-			globalUsers[user.UserID] = user
 			log.Println("User valid", user.UserID, "User eth_address:", globalUsers[user.UserID].EthAddress)
 			if user.WalletUploaded {
 				log.Println("Monero wallet uploaded")
@@ -899,6 +898,7 @@ func getAllUsers() ([]User, error) {
 		billing, ok := billingMap[users[i].UserID]
 		if ok {
 			users[i].BillingData = billing
+			globalUsers[users[i].UserID] = users[i]
 		}
 	}
 
