@@ -225,8 +225,8 @@ type BillingData struct {
 	AmountNeeded    float64
 	Enabled         bool
 	NeedToPay       bool
-	CreatedAt       date.Date
-	UpdatedAt       date.Date
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type indexDisplay struct {
@@ -1237,11 +1237,11 @@ func checkDonos() {
 			fmt.Println(dono)
 			user := globalUsers[dono.UserID]
 			if user.BillingData.AmountTotal >= 500 {
-				user.BillingData.AmountThisMonth += dono.usdAmount
-			} else if user.BillingData.AmountTotal+dono.usdAmount >= 500 {
-				user.BillingData.AmountThisMonth += user.BillingData.AmountTotal + dono.usdAmount - 500
+				user.BillingData.AmountThisMonth += dono.USDAmount
+			} else if user.BillingData.AmountTotal+dono.USDAmount >= 500 {
+				user.BillingData.AmountThisMonth += user.BillingData.AmountTotal + dono.USDAmount - 500
 			}
-			user.BillingData.AmountTotal += dono.usdAmount
+			user.BillingData.AmountTotal += dono.USDAmount
 			updateUser(user)
 
 			err := createNewQueueEntry(db, dono.UserID, dono.Address, dono.Name, dono.Message, dono.AmountSent, dono.CurrencyType, dono.USDAmount, dono.MediaURL)
@@ -1321,7 +1321,7 @@ func checkAccountBillings() {
 					} else if now.Day() >= 4 {
 						// the updated amount is from an earlier month, so disable billing
 						user.BillingData.Enabled = false
-						fmt.Printf("Disabling billing for user %d\n", user.ID)
+						fmt.Printf("Disabling billing for user %d\n", user.UserID)
 					} else {
 						user.BillingData.NeedToPay = true
 					}
@@ -2325,7 +2325,7 @@ func createUser(user User) int {
 		UpdatedAt:       time.Now().UTC(),
 	}
 
-	_, err := db.Exec(`
+	_, err = db.Exec(`
         INSERT INTO billing (
             user_id,
             amount_this_month,

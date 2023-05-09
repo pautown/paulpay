@@ -118,7 +118,7 @@ window.onload = function() {
   <p> <b style="color: lightsteelblue;"> Username: </b> {{.Username}} </p>
   <p> <b style="color: lightsteelblue;">Created on:</b> <span id="creation-date"></span></p>
   <p> <b style="color: lightsteelblue;"> Days until next payment: </b> <span id="days-left"></span> </p>
-  <p id="media-status"> <b style="color: lightsteelblue;">Monero Wallet: </b> {{ if .WalletUploaded }}uploaded{{ else }}<b>not yet uploaded.</b>{{ end }}</p>
+  <p id="media-status"> <b style="color: lightsteelblue;">Monero Wallet: </b> {{ if .WalletUploaded }}<b style="color: lightseagreen;">uploaded</b>{{ else }}<b>not yet uploaded.</b>{{ end }}</p>
   <form method="GET" action="/cryptosettings">
     <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">View/Change Crypto Settings</button>
   </form>
