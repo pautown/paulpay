@@ -222,6 +222,9 @@ type BillingData struct {
 	UserID          int
 	AmountThisMonth float64
 	AmountTotal     float64
+	AmountNeeded    float64
+	Enabled         bool
+	NeedToPay       bool
 	CreatedAt       date.Date
 	UpdatedAt       date.Date
 }
@@ -471,6 +474,8 @@ func main() {
 	go fetchExchangeRates()
 	go checkDonos()
 	go checkPendingAccounts()
+
+	go checkAccountBillings()
 
 	a.Refresh = 10
 	pb.Refresh = 1
@@ -1230,6 +1235,14 @@ func checkDonos() {
 
 		for _, dono := range fulfilledDonos {
 			fmt.Println(dono)
+			user := globalUsers[dono.UserID]
+			if user.BillingData.AmountTotal >= 500 {
+				user.BillingData.AmountThisMonth += dono.usdAmount
+			} else if user.BillingData.AmountTotal+dono.usdAmount >= 500 {
+				user.BillingData.AmountThisMonth += user.BillingData.AmountTotal + dono.usdAmount - 500
+			}
+			user.BillingData.AmountTotal += dono.usdAmount
+			updateUser(user)
 
 			err := createNewQueueEntry(db, dono.UserID, dono.Address, dono.Name, dono.Message, dono.AmountSent, dono.CurrencyType, dono.USDAmount, dono.MediaURL)
 			if err != nil {
@@ -1289,6 +1302,33 @@ func checkPendingAccounts() {
 		}
 
 		time.Sleep(time.Duration(25) * time.Second)
+	}
+}
+
+func checkAccountBillings() {
+	for {
+		for _, user := range globalUsers {
+			if user.BillingData.Enabled {
+				// check if the updated amount is from the current or previous month
+				now := time.Now()
+				updatedMonth := user.BillingData.UpdatedAt.Month()
+				currentMonth := now.Month()
+				if user.BillingData.AmountTotal >= 500 {
+
+					if updatedMonth == currentMonth {
+						// the updated amount is from the current or previous month, so keep billing enabled
+						continue
+					} else if now.Day() >= 4 {
+						// the updated amount is from an earlier month, so disable billing
+						user.BillingData.Enabled = false
+						fmt.Printf("Disabling billing for user %d\n", user.ID)
+					} else {
+						user.BillingData.NeedToPay = true
+					}
+				}
+			}
+		}
+		time.Sleep(time.Duration(12) * time.Hour)
 	}
 }
 
@@ -2279,6 +2319,8 @@ func createUser(user User) int {
 		UserID:          userID,
 		AmountThisMonth: 0.00,
 		AmountTotal:     0.00,
+		Enabled:         true,
+		NeedToPay:       false,
 		CreatedAt:       time.Now().UTC(),
 		UpdatedAt:       time.Now().UTC(),
 	}
