@@ -46,6 +46,7 @@ var USDMinimum float64 = 5
 var MediaMin float64 = 0.025 // Currently unused
 var MessageMaxChar int = 250
 var NameMaxChar int = 25
+var starting_port int = 28088
 
 var host_url string = "https://ferret.cash/"
 
@@ -702,11 +703,9 @@ func startWallets() {
 		log.Fatalf("startWallet() error:", err)
 	}
 
-	starting_port := 28088
-
 	for _, user := range users {
-		log.Println("Checking user:", user.Username, "User ID:", user.UserID)
-		if checkValidSubscription(user.DateEnabled) {
+		log.Println("Checking user:", user.Username, "User ID:", user.UserID, "User billing data enabled:", user.BillingData.Enabled)
+		if user.BillingData.Enabled {
 			globalUsers[user.UserID] = user
 			log.Println("User valid", user.UserID, "User eth_address:", globalUsers[user.UserID].EthAddress)
 			if user.WalletUploaded {
@@ -714,7 +713,6 @@ func startWallets() {
 				xmrWallets = append(xmrWallets, []int{user.UserID, starting_port})
 				go startMoneroWallet(starting_port, user.UserID)
 				starting_port++
-
 			} else {
 				log.Println("Monero wallet not uploaded")
 			}
@@ -887,7 +885,47 @@ func getAllUsers() ([]User, error) {
 		return nil, err
 	}
 
+	billings, err := getAllBilling()
+	if err != nil {
+		return nil, err
+	}
+
+	billingMap := make(map[int]BillingData)
+	for _, billing := range billings {
+		billingMap[billing.UserID] = billing
+	}
+
+	for i := range users {
+		billing, ok := billingMap[users[i].UserID]
+		if ok {
+			users[i].BillingData = billing
+		}
+	}
+
 	return users, nil
+}
+
+func getAllBilling() ([]BillingData, error) {
+	var billings []BillingData
+	rows, err := db.Query("SELECT * FROM billing")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var billingData BillingData
+
+		err = rows.Scan(&billingData.UserID, &billingData.AmountThisMonth, &billingData.AmountTotal, &billingData.AmountNeeded, &billingData.Enabled, &billingData.NeedToPay, &billingData.CreatedAt, &billingData.UpdatedAt)
+
+		billings = append(billings, billingData)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return billings, nil
 }
 
 func getActiveETHUsers(db *sql.DB) ([]*User, error) {
@@ -1201,7 +1239,28 @@ func createNewEthDono(name string, message string, mediaURL string, amountNeeded
 }
 
 func startMoneroWallet(port_int, user_id int) {
-	cmd := exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", strconv.Itoa(port_int), "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/"+strconv.Itoa(user_id)+"/monero/wallet", "--disable-rpc-login", "--password", "")
+
+	portID := getPortID(xmrWallets, user_id)
+
+	found := true
+	if portID == -100 {
+		found = false
+	}
+
+	if found {
+		fmt.Println("Port ID for user", user_id, "is", portID)
+	} else {
+		fmt.Println("Port ID not found for user", user_id)
+	}
+
+	portStr := strconv.Itoa(portID)
+
+	var cmd *exec.Cmd
+	if found {
+		cmd = exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", portStr, "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/"+strconv.Itoa(user_id)+"/monero/wallet", "--disable-rpc-login", "--password", "")
+	} else {
+		cmd = exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", strconv.Itoa(port_int), "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/"+strconv.Itoa(user_id)+"/monero/wallet", "--disable-rpc-login", "--password", "")
+	}
 	_, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Println("Error running command:", err)
@@ -1211,8 +1270,23 @@ func startMoneroWallet(port_int, user_id int) {
 	})
 }
 
-func stopMoneroWallet() {
-	cmd := exec.Command("monero/monero-wallet-rpc.exe", "--rpc-bind-port", "28088", "--command", "stop_wallet")
+func stopMoneroWallet(user User) {
+	portID := getPortID(xmrWallets, user.UserID)
+
+	found := true
+	if portID == -100 {
+		found = false
+	}
+
+	if found {
+		fmt.Println("Port ID for user", user.UserID, "is", portID)
+	} else {
+		fmt.Println("Port ID not found for user", user.UserID)
+	}
+
+	portStr := strconv.Itoa(portID)
+
+	cmd := exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", portStr, "--command", "stop_wallet")
 
 	// Capture the output of the command
 	output, err := cmd.CombinedOutput()
@@ -2069,6 +2143,8 @@ func createDatabaseIfNotExists(db *sql.DB) error {
             user_id INTEGER,
             amount_this_month FLOAT,
             amount_total FLOAT,
+            enabled BOOL,
+            need_to_pay BOOL,
             created_at DATETIME,
             updated_at DATETIME,
             FOREIGN KEY(user_id) REFERENCES users(id)
@@ -2330,14 +2406,18 @@ func createUser(user User) int {
             user_id,
             amount_this_month,
             amount_total,
+            enabled,
+            need_to_pay,
             created_at,
             updated_at
-        ) VALUES (?, ?, ?, ?, ?)
-    `, billing.UserID, billing.AmountThisMonth, billing.AmountTotal, billing.CreatedAt, billing.CreatedAt)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, billing.UserID, billing.AmountThisMonth, billing.AmountTotal, billing.Enabled, billing.NeedToPay, billing.CreatedAt, billing.CreatedAt)
 
 	user.BillingData = billing
 
 	globalUsers[user.UserID] = user
+
+	log.Printf("BillingData.Enabled: %v", billing.Enabled)
 
 	// Create a directory for the user based on their ID
 	userDir := fmt.Sprintf("users/%d", userID)
@@ -2983,11 +3063,16 @@ func changeUserMoneroHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		user.WalletUploaded = true
+
+		if user.WalletUploaded {
+			stopMoneroWallet(user)
+		}
 
 		// Get the uploaded monero wallet file and save it to disk
 		moneroDir := fmt.Sprintf("users/%d/monero", user.UserID)
 		file, header, err := r.FormFile("moneroWallet")
+		walletUploadServer := false
+		walletKeysUploadServer := false
 		if err == nil {
 			defer file.Close()
 			walletPath := filepath.Join(moneroDir, "wallet")
@@ -2996,6 +3081,8 @@ func changeUserMoneroHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				user.WalletUploaded = false
 				return
+			} else {
+				walletUploadServer = true
 			}
 
 		}
@@ -3010,6 +3097,30 @@ func changeUserMoneroHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				user.WalletUploaded = false
 				return
+			} else {
+				walletKeysUploadServer = true
+			}
+		}
+
+		if walletUploadServer && walletKeysUploadServer {
+
+			// convert xmrWallets to a map
+			existingWallets := make(map[int]int)
+			for _, wallet := range xmrWallets {
+				existingWallets[wallet[0]*10000+wallet[1]] = 1
+			}
+
+			user.WalletUploaded = true
+			walletRunning := true
+			log.Println("Monero wallet uploaded")
+			// check if the element exists in the map and append if not
+			if _, ok := existingWallets[user.UserID*10000+starting_port]; !ok {
+				xmrWallets = append(xmrWallets, []int{user.UserID, starting_port})
+				walletRunning = false
+			}
+			go startMoneroWallet(starting_port, user.UserID)
+			if !walletRunning {
+				starting_port++
 			}
 		}
 
