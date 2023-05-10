@@ -13,7 +13,6 @@ import (
 	"github.com/gabstv/go-monero/walletrpc"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/shopspring/decimal"
 	qrcode "github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/bcrypt"
 	"html"
@@ -1246,20 +1245,22 @@ func startMoneroWallet(port_int, user_id int) {
 	if portID == -100 {
 		found = false
 	}
+	portStr := strconv.Itoa(portID)
 
 	if found {
 		fmt.Println("Port ID for user", user_id, "is", portID)
+
 	} else {
 		fmt.Println("Port ID not found for user", user_id)
+		portStr = strconv.Itoa(port_int)
 	}
-
-	portStr := strconv.Itoa(portID)
 
 	var cmd *exec.Cmd
 	if found {
+		fmt.Println("Starting monero wallet for", portStr, user_id)
 		cmd = exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", portStr, "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/"+strconv.Itoa(user_id)+"/monero/wallet", "--disable-rpc-login", "--password", "")
 	} else {
-		cmd = exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", strconv.Itoa(port_int), "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/"+strconv.Itoa(user_id)+"/monero/wallet", "--disable-rpc-login", "--password", "")
+		cmd = exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", portStr, "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/"+strconv.Itoa(user_id)+"/monero/wallet", "--disable-rpc-login", "--password", "")
 	}
 	_, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1268,6 +1269,8 @@ func startMoneroWallet(port_int, user_id int) {
 	_ = walletrpc.New(walletrpc.Config{
 		Address: "http://127.0.0.1:" + strconv.Itoa(port_int) + "/json_rpc",
 	})
+
+	fmt.Println("Done starting monero wallet for", portStr, user_id)
 }
 
 func stopMoneroWallet(user User) {
@@ -1360,7 +1363,9 @@ func checkPendingAccounts() {
 		}
 
 		for _, user := range pendingGlobalUsers {
-			xmrSent, _ := getXMRBalance(user.XMRPayID, 1)
+			xmrFl, _ := getXMRBalance(user.XMRPayID, 1)
+			xmrSent, _ := utils.StandardizeFloatToString(xmrFl)
+
 			log.Println("XMR sent:", xmrSent)
 			xmrSentStr, _ := utils.ConvertStringTo18DecimalPlaces(xmrSent)
 			log.Println("XMR sent str:", xmrSentStr)
@@ -1544,12 +1549,7 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
 		media_url_ = ""
 	}
 
-	// Parse the amount_to_send string as a Decimal
-	amountToSendDec, err := decimal.NewFromString(amount_to_send)
-	if err != nil {
-		log.Println(err)
-		panic(err)
-	}
+	amount_to_send, _ = utils.StandardizeString(amount_to_send)
 
 	// Execute the SQL INSERT statement
 	result, err := db.Exec(`
@@ -1569,7 +1569,7 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
             usd_amount,
             media_url
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, user_id, dono_address, dono_name, dono_message, amountToSendDec.String(), "0.0", currencyType, anon_dono, false, encrypted_ip, createdAt, createdAt, dono_usd, media_url_)
+    `, user_id, dono_address, dono_name, dono_message, amount_to_send, "0.0", currencyType, anon_dono, false, encrypted_ip, createdAt, createdAt, dono_usd, media_url_)
 	if err != nil {
 		log.Println(err)
 		panic(err)
@@ -1832,8 +1832,10 @@ func checkUnfulfilledDonos() []Dono {
 		log.Println("Enough time has passed, checking.")
 
 		if dono.CurrencyType == "XMR" {
-			dono.AmountSent, _ = getXMRBalance(dono.Address, dono.UserID)
-			xmrNeededStr, _ := utils.ConvertStringTo18DecimalPlaces(dono.AmountToSend)
+			xmrFl, _ := getXMRBalance(dono.Address, dono.UserID)
+			xmrSent, _ := utils.StandardizeFloatToString(xmrFl)
+			dono.AmountSent = xmrSent
+			xmrNeededStr, _ := utils.StandardizeString(dono.AmountToSend)
 			printDonoInfo(dono, secondsElapsedSinceLastCheck, secondsNeededToCheck)
 			if dono.AmountSent == xmrNeededStr {
 				addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID)
@@ -1904,7 +1906,7 @@ func updateDonosInDB() {
 	}
 }
 
-func getXMRBalance(checkID string, userID int) (string, error) {
+func getXMRBalance(checkID string, userID int) (float64, error) {
 
 	portID := getPortID(xmrWallets, userID)
 
@@ -1919,7 +1921,7 @@ func getXMRBalance(checkID string, userID int) (string, error) {
 		fmt.Println("Port ID not found for user", userID)
 	}
 
-	url := "http://localhost:" + +strconv.Itoa(portID) + "/json_rpc"
+	url := "http://localhost:" + strconv.Itoa(portID) + "/json_rpc"
 
 	payload := struct {
 		Jsonrpc string `json:"jsonrpc"`
@@ -1941,12 +1943,12 @@ func getXMRBalance(checkID string, userID int) (string, error) {
 
 	reqBody, err := json.Marshal(payload)
 	if err != nil {
-		return "0.0", err
+		return 0.0, err
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
 	if err != nil {
-		return "0.0", err
+		return 0.0, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -1954,35 +1956,35 @@ func getXMRBalance(checkID string, userID int) (string, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "0.0", err
+		return 0.0, err
 	}
 	defer resp.Body.Close()
 
 	var result map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	if err != nil {
-		return "0.0", err
+		return 0.0, err
 	}
 
 	fmt.Println(result)
 
 	resultMap, ok := result["result"].(map[string]interface{})
 	if !ok {
-		return "0.0", fmt.Errorf("result key not found in response")
+		return 0.0, fmt.Errorf("result key not found in response")
 	}
 
 	payments, ok := resultMap["payments"].([]interface{})
 	if !ok {
-		return "0.0", fmt.Errorf("payments key not found in result map")
+		return 0.0, fmt.Errorf("payments key not found in result map")
 	}
 
 	if len(payments) == 0 {
-		return "0.0", fmt.Errorf("no payments found for payment ID %s", checkID)
+		return 0.0, fmt.Errorf("no payments found for payment ID %s", checkID)
 	}
 
 	amount := payments[0].(map[string]interface{})["amount"].(float64)
 
-	return utils.FloatToString(amount / math.Pow(10, 12)), nil
+	return amount / math.Pow(10, 12), nil
 }
 
 func runDatabaseMigrations(db *sql.DB) error {
@@ -3664,12 +3666,12 @@ func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 func getNewAccountETHPrice() string {
 	ethPrice, _ := strconv.ParseFloat(fmt.Sprintf("%.18f", (15.00/prices.Ethereum)), 64)
 	ethStr := utils.FuzzDono(ethPrice, "ETH")
-	ethStr_ := utils.FloatToString(ethStr)
+	ethStr_, _ := utils.StandardizeFloatToString(ethStr)
 	return ethStr_
 }
 func getNewAccountXMRPrice() string {
 	xmrPrice, _ := strconv.ParseFloat(fmt.Sprintf("%.5f", (15.00/prices.Monero)), 64)
-	xmrStr, _ := utils.ConvertFloatTo18DecimalPlaces(xmrPrice)
+	xmrStr, _ := utils.StandardizeFloatToString(xmrPrice)
 	return xmrStr
 }
 
