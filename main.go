@@ -1360,7 +1360,7 @@ func checkPendingAccounts() {
 		}
 
 		for _, user := range pendingGlobalUsers {
-			xmrSent, _ := getXMRBalance(user.XMRPayID)
+			xmrSent, _ := getXMRBalance(user.XMRPayID, 1)
 			log.Println("XMR sent:", xmrSent)
 			xmrSentStr, _ := utils.ConvertStringTo18DecimalPlaces(xmrSent)
 			log.Println("XMR sent str:", xmrSentStr)
@@ -1823,7 +1823,6 @@ func checkUnfulfilledDonos() []Dono {
 
 		expoAdder := returnIPPenalty(ips, dono.EncryptedIP) + time.Since(dono.CreatedAt).Seconds()/60/60/19
 		secondsNeededToCheck := math.Pow(float64(baseCheckingRate)-0.02, expoAdder)
-		printDonoInfo(dono, secondsElapsedSinceLastCheck, secondsNeededToCheck)
 
 		if secondsElapsedSinceLastCheck < secondsNeededToCheck {
 			log.Println("Not enough time has passed, skipping. \n")
@@ -1833,8 +1832,10 @@ func checkUnfulfilledDonos() []Dono {
 		log.Println("Enough time has passed, checking.")
 
 		if dono.CurrencyType == "XMR" {
-			dono.AmountSent, _ = getXMRBalance(dono.Address)
-			if dono.AmountSent == dono.AmountToSend {
+			dono.AmountSent, _ = getXMRBalance(dono.Address, dono.UserID)
+			xmrNeededStr, _ := utils.ConvertStringTo18DecimalPlaces(dono.AmountToSend)
+			printDonoInfo(dono, secondsElapsedSinceLastCheck, secondsNeededToCheck)
+			if dono.AmountSent == xmrNeededStr {
 				addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID)
 				dono.Fulfilled = true
 				fulfilledDonos = append(fulfilledDonos, dono)
@@ -1903,8 +1904,22 @@ func updateDonosInDB() {
 	}
 }
 
-func getXMRBalance(checkID string) (string, error) {
-	url := "http://localhost:28088/json_rpc"
+func getXMRBalance(checkID string, userID int) (string, error) {
+
+	portID := getPortID(xmrWallets, userID)
+
+	found := true
+	if portID == -100 {
+		found = false
+	}
+
+	if found {
+		fmt.Println("Port ID for user", userID, "is", portID)
+	} else {
+		fmt.Println("Port ID not found for user", userID)
+	}
+
+	url := "http://localhost:" + +strconv.Itoa(portID) + "/json_rpc"
 
 	payload := struct {
 		Jsonrpc string `json:"jsonrpc"`
