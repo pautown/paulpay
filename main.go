@@ -60,6 +60,7 @@ var payTemplate *template.Template
 
 var alertTemplate *template.Template
 var accountPayTemplate *template.Template
+var billPayTemplate *template.Template
 var progressbarTemplate *template.Template
 var userOBSTemplate *template.Template
 var viewTemplate *template.Template
@@ -219,10 +220,15 @@ type superChat struct {
 }
 
 type BillingData struct {
+	BillingID       int
 	UserID          int
 	AmountThisMonth float64
 	AmountTotal     float64
 	AmountNeeded    float64
+	ETHAmount       string
+	XMRAmount       string
+	XMRPayID        string
+	XMRAddress      string
 	Enabled         bool
 	NeedToPay       bool
 	CreatedAt       time.Time
@@ -285,6 +291,7 @@ type accountPayData struct {
 	QRB64XMR    string
 	QRB64ETH    string
 	UserID      int
+	BillingData BillingData
 	DateCreated time.Time
 }
 
@@ -474,6 +481,7 @@ func main() {
 	go fetchExchangeRates()
 	go checkDonos()
 	go checkPendingAccounts()
+	go checkBillingAccounts()
 
 	go checkAccountBillings()
 
@@ -646,11 +654,6 @@ func setupRoutes() {
 		http.ServeFile(w, r, "web/wbtc.svg")
 	})
 
-	http.HandleFunc("/cryptosettings", cryptoSettingsHandler)
-
-	http.HandleFunc("/usermanager", allUsersHandler)
-	http.HandleFunc("/refresh", refreshHandler)
-
 	http.Handle("/media/", http.StripPrefix("/media/", http.FileServer(http.Dir("web/obs/media/"))))
 	http.Handle("/users/", http.StripPrefix("/users/", http.FileServer(http.Dir("users/"))))
 
@@ -659,10 +662,7 @@ func setupRoutes() {
 	http.HandleFunc("/pay", paymentHandler)
 	http.HandleFunc("/alert", alertOBSHandler)
 	http.HandleFunc("/viewdonos", viewDonosHandler)
-
 	http.HandleFunc("/progressbar", progressbarOBSHandler)
-
-	// serve login and user interface pages
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/incorrect_login", incorrectLoginHandler)
 	http.HandleFunc("/user", userHandler)
@@ -670,10 +670,13 @@ func setupRoutes() {
 	http.HandleFunc("/logout", logoutHandler)
 	http.HandleFunc("/changepassword", changePasswordHandler)
 	http.HandleFunc("/changeuser", changeUserHandler)
-
 	http.HandleFunc("/register", registerUserHandler)
 	http.HandleFunc("/newaccount", newAccountHandler)
+	http.HandleFunc("/billing", accountBillingHandler)
 	http.HandleFunc("/changeusermonero", changeUserMoneroHandler)
+	http.HandleFunc("/usermanager", allUsersHandler)
+	http.HandleFunc("/refresh", refreshHandler)
+	http.HandleFunc("/cryptosettings", cryptoSettingsHandler)
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
 	registerTemplate, _ = template.ParseFiles("web/new_account.html")
@@ -682,6 +685,8 @@ func setupRoutes() {
 	payTemplate, _ = template.ParseFiles("web/pay.html")
 	alertTemplate, _ = template.ParseFiles("web/alert.html")
 	accountPayTemplate, _ = template.ParseFiles("web/accountpay.html")
+
+	billPayTemplate, _ = template.ParseFiles("web/billpay.html")
 
 	userOBSTemplate, _ = template.ParseFiles("web/obs/settings.html")
 	progressbarTemplate, _ = template.ParseFiles("web/obs/progressbar.html")
@@ -914,13 +919,24 @@ func getAllBilling() ([]BillingData, error) {
 
 	for rows.Next() {
 		var billingData BillingData
+		err = rows.Scan(&billingData.BillingID, &billingData.UserID, &billingData.AmountThisMonth, &billingData.AmountTotal, &billingData.Enabled, &billingData.NeedToPay, &billingData.ETHAmount, &billingData.XMRAmount, &billingData.XMRPayID, &billingData.CreatedAt, &billingData.UpdatedAt)
+		if err != nil {
+			log.Println(err)
+		}
 
-		err = rows.Scan(&billingData.UserID, &billingData.AmountThisMonth, &billingData.AmountTotal, &billingData.AmountNeeded, &billingData.Enabled, &billingData.NeedToPay, &billingData.CreatedAt, &billingData.UpdatedAt)
+		fmt.Println("UserID: ", billingData.UserID)
+		fmt.Println("Amount This Month: ", billingData.AmountThisMonth)
+		fmt.Println("Amount Total: ", billingData.AmountTotal)
+		fmt.Println("Enabled: ", billingData.Enabled)
+		fmt.Println("Need To Pay: ", billingData.NeedToPay)
+		fmt.Println("Created At: ", billingData.CreatedAt)
+		fmt.Println("Updated At: ", billingData.UpdatedAt)
 
 		billings = append(billings, billingData)
 	}
 
 	if err = rows.Err(); err != nil {
+		log.Println(err)
 		return nil, err
 	}
 
@@ -1341,6 +1357,57 @@ func getAdminETHAdd() string {
 	return user.EthAddress
 }
 
+func checkBillingAccounts() {
+	for {
+		tMapGenerated := false
+		transactionMap := make(map[string]Transaction)
+
+		for _, user := range globalUsers {
+
+			if user.BillingData.NeedToPay {
+
+				xmrFl, _ := getXMRBalance(user.BillingData.XMRPayID, 1)
+				xmrSent, _ := utils.StandardizeFloatToString(xmrFl)
+				xmrSentStr, _ := utils.StandardizeString(xmrSent)
+				if user.XMRNeeded == xmrSentStr {
+					renewUserSubscription(user)
+					continue
+				}
+
+				adminETHAdd := getAdminETHAdd()
+
+				if !tMapGenerated { //Generate Map from transaction slice
+					for _, transaction := range eth_transactions {
+						hash := utils.GetTransactionAmount(transaction)
+						transactionMap[utils.StandardizeString(hash)] = transaction
+					}
+					tMapGenerated = true
+				}
+
+				valueToCheck := utils.StandardizeFloatToString(dono.AmountToSend)
+				transaction, ok := transactionMap[valueToCheck]
+				if ok {
+					tN := utils.GetTransactionToken(transaction)
+					if tN == "ETH" && transaction.To == adminETHAdd {
+						renewUserSubscription(user)
+						continue
+					}
+				}
+			}
+		}
+		time.Sleep(time.Duration(30) * time.Second)
+	}
+}
+
+func renewUserSubscription(user *User) {
+	user.BillingData.Enabled = true
+	user.BillingData.AmountThisMonth = 0.00
+	user.BillingData.AmountNeeded = 0.00
+	user.BillingData.NeedToPay = false
+	user.BillingData.UpdatedAt = time.Now().UTC()
+	updateUser(user)
+}
+
 func checkPendingAccounts() {
 	for {
 
@@ -1395,14 +1462,26 @@ func checkAccountBillings() {
 				if user.BillingData.AmountTotal >= 500 {
 
 					if updatedMonth == currentMonth {
-						// the updated amount is from the current or previous month, so keep billing enabled
 						continue
 					} else if now.Day() >= 4 {
 						// the updated amount is from an earlier month, so disable billing
 						user.BillingData.Enabled = false
+						user.BillingData.NeedToPay = true
+						user.BillingData.AmountNeeded = math.Round(user.BillingData.AmountThisMonth*0.03*100) / 100
+
+						xmrNeeded := getXMRAmountInUSD(user.BillingData.AmountNeeded)
+						ethNeeded := getETHAmountInUSD(user.BillingData.AmountNeeded)
+
+						PayID, PayAddress := getNewAccountXMR()
+						user.BillingData.XMRPayID = PayID
+						user.BillingData.XMRAddress = PayAddress
+						user.BillingData.XMRAmount = xmrNeeded
+						user.BillingData.ETHAmount = ethNeeded
+
 						fmt.Printf("Disabling billing for user %d\n", user.UserID)
 					} else {
 						user.BillingData.NeedToPay = true
+						user.BillingData.Enabled = true
 					}
 				}
 			}
@@ -1766,6 +1845,9 @@ func checkUnfulfilledDonos() []Dono {
 			if _, exists := tempMap[tx.Hash]; !exists {
 				eth_transactions = append(eth_transactions, tx)
 				tempMap[tx.Hash] = true
+				log.Println("TX doesn't exist, adding:", tx)
+			} else {
+				log.Println("TX already exists:", tx)
 			}
 		}
 		time.Sleep(2 * time.Second)
@@ -1793,7 +1875,7 @@ func checkUnfulfilledDonos() []Dono {
 				tN := utils.GetTransactionToken(transaction)
 				if tN == dono.CurrencyType {
 					valueStr := fmt.Sprintf("%.18f", transaction.Value)
-					valueToCheck, _ := utils.ConvertStringTo18DecimalPlaces(dono.AmountToSend)
+					valueToCheck, _ := utils.StandardizeString(dono.AmountToSend)
 					log.Println("TX checked:", tN)
 					log.Println("Needed:", valueToCheck)
 					log.Println("Got   :", valueStr)
@@ -2162,6 +2244,9 @@ func createDatabaseIfNotExists(db *sql.DB) error {
             amount_total FLOAT,
             enabled BOOL,
             need_to_pay BOOL,
+            eth_amount TEXT,
+            xmr_amount TEXT,
+            xmr_pay_id TEXT,
             created_at DATETIME,
             updated_at DATETIME,
             FOREIGN KEY(user_id) REFERENCES users(id)
@@ -2414,6 +2499,9 @@ func createUser(user User) int {
 		AmountTotal:     0.00,
 		Enabled:         true,
 		NeedToPay:       false,
+		ETHAmount:       "",
+		XMRAmount:       "",
+		XMRPayID:        "",
 		CreatedAt:       time.Now().UTC(),
 		UpdatedAt:       time.Now().UTC(),
 	}
@@ -2425,10 +2513,13 @@ func createUser(user User) int {
             amount_total,
             enabled,
             need_to_pay,
+            eth_amount,
+            xmr_amount,
+            xmr_pay_id,
             created_at,
             updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, billing.UserID, billing.AmountThisMonth, billing.AmountTotal, billing.Enabled, billing.NeedToPay, billing.CreatedAt, billing.CreatedAt)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, billing.UserID, billing.AmountThisMonth, billing.AmountTotal, billing.Enabled, billing.NeedToPay, "", "", "", billing.CreatedAt, billing.CreatedAt)
 
 	user.BillingData = billing
 
@@ -3663,6 +3754,44 @@ func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func accountBillingHandler(w http.ResponseWriter, r *http.Request) {
+	checkLoggedIn(w, r)
+	cookie, _ := r.Cookie("session_token")
+	user, _ := getUserBySessionCached(cookie.Value)
+
+	if user.BillingData.NeedToPay {
+
+		admin, _ := getUserByUsernameCached("admin")
+
+		xmrNeededFormatted := fmt.Sprintf("%.5f", user.BillingData.XMRAmount)
+		d := accountPayData{
+			Username:    user.Username,
+			AmountXMR:   xmrNeededFormatted,
+			BillingData: user.BillingData,
+			AmountETH:   user.BillingData.ETHAmount,
+			AddressXMR:  user.BillingData.XMRAddress,
+			AddressETH:  admin.EthAddress,
+			UserID:      user.UserID,
+			DateCreated: time.Now().UTC(),
+		}
+
+		tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", PayAddress, xmrNeededFormatted), qrcode.Low, 320)
+		d.QRB64XMR = base64.StdEncoding.EncodeToString(tmp)
+
+		donationLink := fmt.Sprintf("ethereum:%s?value=%s", admin.EthAddress, ethNeeded)
+		tmp, _ = qrcode.Encode(donationLink, qrcode.Low, 320)
+		d.QRB64ETH = base64.StdEncoding.EncodeToString(tmp)
+
+		err := billPayTemplate.Execute(w, d)
+		if err != nil {
+			fmt.Println(err)
+		}
+	} else {
+		http.Redirect(w, r, "/user", http.StatusSeeOther)
+		return
+	}
+}
+
 func getNewAccountETHPrice() string {
 	ethPrice, _ := strconv.ParseFloat(fmt.Sprintf("%.18f", (15.00/prices.Ethereum)), 64)
 	ethStr := utils.FuzzDono(ethPrice, "ETH")
@@ -3673,6 +3802,19 @@ func getNewAccountXMRPrice() string {
 	xmrPrice, _ := strconv.ParseFloat(fmt.Sprintf("%.5f", (15.00/prices.Monero)), 64)
 	xmrStr, _ := utils.StandardizeFloatToString(xmrPrice)
 	return xmrStr
+}
+
+func getXMRAmountInUSD(usdAmount float64) string {
+	xmrPrice, _ := strconv.ParseFloat(fmt.Sprintf("%.5f", (usdAmount/prices.Monero)), 64)
+	xmrStr, _ := utils.StandardizeFloatToString(xmrPrice)
+	return xmrStr
+}
+
+func getETHAmountInUSD(usdAmount float64) string {
+	ethPrice, _ := strconv.ParseFloat(fmt.Sprintf("%.18f", (usdAmount/prices.Ethereum)), 64)
+	ethStr := utils.FuzzDono(ethPrice, "ETH")
+	ethStr_, _ := utils.StandardizeFloatToString(ethStr)
+	return ethStr_
 }
 
 func getNewAccountXMR() (string, string) {

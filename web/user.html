@@ -28,6 +28,12 @@ window.onload = function() {
   const newPasswordConfirmInput = document.getElementById('new-password-confirm');
   const submitButton = document.getElementById('change-password');
   
+
+  let amountThisMonth = {{.BillingData.AmountThisMonth}};
+let threePercent = amountThisMonth * 0.03;
+document.getElementById('threePercent').textContent = `$${threePercent.toFixed(2)}`;
+
+
   function validatePassword() {
     if (newPasswordInput.value !== newPasswordConfirmInput.value) {
       newPasswordConfirmInput.setCustomValidity("Passwords don't match");
@@ -114,10 +120,19 @@ window.onload = function() {
 
 
   <br><br>
+<small><p> <b style="color: lightsteelblue;">Account {{.Username}} created on:</b> <span id="creation-date"></span></p></small>
+  <p> <b style="color: lightsteelblue;"> Total Earnings: </b> ${{.BillingData.AmountTotal}}</p>
+  <p>
+  <b style="color: lightsteelblue;"> Monthly Earnings: </b> ${{.BillingData.AmountThisMonth}} <b style="color: lightsteelblue;">  <small>(3% Fee: </b> <span id="threePercent"></span>) </small></p>
+  <button type="button">
+      <b style="color: lightsteelblue;"> Days until next payment: </b> 
+      <span id="days-left"></span>
+  </button>
+    
 
-  <p> <b style="color: lightsteelblue;"> Username: </b> {{.Username}} </p>
-  <p> <b style="color: lightsteelblue;">Created on:</b> <span id="creation-date"></span></p>
-  <p> <b style="color: lightsteelblue;"> Days until next payment: </b> <span id="days-left"></span> </p>
+
+  
+  
   <p id="media-status"> <b style="color: lightsteelblue;">Monero Wallet: </b> {{ if .WalletUploaded }}<b style="color: lightseagreen;">uploaded</b>{{ else }}<b>not yet uploaded.</b>{{ end }}</p>
   <form method="GET" action="/cryptosettings">
     <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">View/Change Crypto Settings</button>

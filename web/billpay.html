@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/web3@1.3.6/dist/web3.min.js"></script>
+  <title>ferret.cash - Account Billing</title>
+  <link href=fcash.png rel=icon>
+  <link href=style.css rel=stylesheet>
+</head>
+<body>
+  <br>
+  <h3>To continue using ferret, send <i>${{.BillingData.AmountNeeded}}</i> worth of Monero or Ethereum.</h3>
+  <small>${{.BillingData.AmountNeeded}} is 3% of your monthly (${{.BillingData.AmountThisMonth}}) earnings. This fee supports the cost of running the servers as well as interacting with the blockchain. <br><br><small>Want to know more? Check out how fees are calculated <a href="http://www.paul.town/" target="_blank">here.</a></small></small>
+  <br><br>
+
+  <div style="display: flex; align-items: center;">
+    <button class="tablinks" onclick="openPayment(event, 'Monero')">Monero</button>
+    <button class="tablinks" onclick="openPayment(event, 'Ethereum')">Ethereum</button>
+    
+  </div>
+  <div id="Ethereum" class="tabcontent">
+    <label>Ethereum (ETH): </label>
+    <div style="display: flex; align-items: center;">
+        <blockquote style="user-select: all">
+            <a href="javascript:void(0)" onclick="copyAddress()" style="color: steelblue;">{{.AmountETH}}</a>
+        </blockquote>
+    </div>
+    <label>Address:</label>
+    <div style="display: flex; align-items: center;">
+        <blockquote style="user-select: all">
+          <a href="javascript:void(0)" onclick="copyAddress()" style="color: steelblue;">{{.AddressETH}}</a>
+        </blockquote>
+    </div>
+    <input type="hidden" id="hidden-address-input-eth" value="{{.AddressETH}}">
+    <p id="payment-metamask"></p>
+
+    <label>Or scan:</label>
+    <div style="display: flex; align-items: center;">
+        <blockquote style="text-align: center;">
+          <img src="data:image/png;base64,{{.QRB64ETH}}"/>
+        </blockquote>
+    </div>
+  </div>
+  <div id="Monero" class="tabcontent">
+    <label>Monero (XMR): </label>
+    <div style="display: flex; align-items: center;">
+        <blockquote style="user-select: all">
+            <a href="javascript:void(0)" onclick="copyAddress()" style="color: steelblue;">{{.AmountXMR}}</a>
+        </blockquote>
+    </div>
+    
+    <label>Address:</label>
+    <div style="display: flex; align-items: center;">
+        <blockquote style="user-select: all">
+          <a href="javascript:void(0)" onclick="copyAddress()" style="color: steelblue;">{{.AddressXMR}}</a>
+        </blockquote>
+        <input type="hidden" id="hidden-address-input-xmr" value="{{.AddressXMR}}">
+    </div>
+
+    <label>Or scan:</label>
+    <div style="display: flex; align-items: center;">
+        <blockquote style="text-align: center;">
+          <img src="data:image/png;base64,{{.QRB64XMR}}"/>
+        </blockquote>
+    </div>
+  </div>
+<small>Please stay on this screen until the transaction is seen.</small><br>
+
+  <footer>
+    <small><small>
+      <p>Ferret Cash &copy; 2023. Developed by <a href="http://www.paul.town/" target="_blank">Paul Town</a> with <a href="https://github.com/pautown/paulpay" target="_blank">PayPaul Source Code</a></p>
+    </small></small>
+  </footer>
+</body>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+  const receiverAddress = "{{.AddressXMR}}";
+$(document).ready(function() {
+    openPayment({ currentTarget: document.querySelector(".tablinks") }, 'Monero');
+  });
+
+function openPayment(evt, paymentType) {
+  var i, tabcontent, tablinks;
+  tabcontent = document.getElementsByClassName("tabcontent");
+  for (i = 0; i < tabcontent.length; i++) {
+    tabcontent[i].style.display = "none";
+  }
+  tablinks = document.getElementsByClassName("tablinks");
+  for (i = 0; i < tablinks.length; i++) {
+    tablinks[i].className = tablinks[i].className.replace(" active", "");
+    tablinks[i].style.color = "white"; // Set the text color of unselected tabs to white
+  }
+  document.getElementById(paymentType).style.display = "block";
+  evt.currentTarget.className += " active";
+  evt.currentTarget.style.color = "black"; // Set the text color of the selected tab to black
+
+  if (paymentType === 'Monero') {
+    document.getElementById('payment-amount-xmr').placeholder = 'XMR amount';
+    document.querySelector('#Monero label:nth-child(3)').textContent = 'XMR Payment Address:';
+  } else if (paymentType === 'Ethereum') {
+    document.getElementById('payment-amount-eth').placeholder = 'ETH amount';
+    document.querySelector('#Ethereum label:nth-child(3)').textContent = 'ETH Payment Address:';
+  }
+}
+
+
+// The rest of the script remains unchanged
+</script>
+
+<style>
+ .tablinks {
+  background-color: inherit;
+  border: none;
+  cursor: pointer;
+  padding: 8px 16px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 5px;
+  transition: 0.3s;
+  color: white; /* Set the default text color of the tabs to white */
+}
+
+.tablinks:hover {
+  background-color: lightseagreen;
+}
+
+.tablinks.active {
+  background-color: lightsteelblue;
+}
+
+
+  .tabcontent {
+    display: none;
+    padding: 6px 12px;
+    border: 2px solid darkgrey;
+    border-top: none;
+  }
+</style>
+</html>
