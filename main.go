@@ -1360,7 +1360,7 @@ func getAdminETHAdd() string {
 func checkBillingAccounts() {
 	for {
 		tMapGenerated := false
-		transactionMap := make(map[string]Transaction)
+		transactionMap := make(map[string]utils.Transfer)
 
 		for _, user := range globalUsers {
 
@@ -1369,7 +1369,7 @@ func checkBillingAccounts() {
 				xmrFl, _ := getXMRBalance(user.BillingData.XMRPayID, 1)
 				xmrSent, _ := utils.StandardizeFloatToString(xmrFl)
 				xmrSentStr, _ := utils.StandardizeString(xmrSent)
-				if user.XMRNeeded == xmrSentStr {
+				if user.BillingData.XMRAmount == xmrSentStr {
 					renewUserSubscription(user)
 					continue
 				}
@@ -1379,12 +1379,13 @@ func checkBillingAccounts() {
 				if !tMapGenerated { //Generate Map from transaction slice
 					for _, transaction := range eth_transactions {
 						hash := utils.GetTransactionAmount(transaction)
-						transactionMap[utils.StandardizeString(hash)] = transaction
+						standard_hash, _ := utils.StandardizeString(hash)
+						transactionMap[standard_hash] = transaction
 					}
 					tMapGenerated = true
 				}
 
-				valueToCheck := utils.StandardizeFloatToString(dono.AmountToSend)
+				valueToCheck, _ := utils.StandardizeString(user.BillingData.ETHAmount)
 				transaction, ok := transactionMap[valueToCheck]
 				if ok {
 					tN := utils.GetTransactionToken(transaction)
@@ -1399,7 +1400,7 @@ func checkBillingAccounts() {
 	}
 }
 
-func renewUserSubscription(user *User) {
+func renewUserSubscription(user User) {
 	user.BillingData.Enabled = true
 	user.BillingData.AmountThisMonth = 0.00
 	user.BillingData.AmountNeeded = 0.00
@@ -3775,10 +3776,10 @@ func accountBillingHandler(w http.ResponseWriter, r *http.Request) {
 			DateCreated: time.Now().UTC(),
 		}
 
-		tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", PayAddress, xmrNeededFormatted), qrcode.Low, 320)
+		tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", d.AddressXMR, xmrNeededFormatted), qrcode.Low, 320)
 		d.QRB64XMR = base64.StdEncoding.EncodeToString(tmp)
 
-		donationLink := fmt.Sprintf("ethereum:%s?value=%s", admin.EthAddress, ethNeeded)
+		donationLink := fmt.Sprintf("ethereum:%s?value=%s", admin.EthAddress, d.AmountETH)
 		tmp, _ = qrcode.Encode(donationLink, qrcode.Low, 320)
 		d.QRB64ETH = base64.StdEncoding.EncodeToString(tmp)
 
