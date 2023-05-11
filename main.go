@@ -676,6 +676,7 @@ func setupRoutes() {
 	http.HandleFunc("/changeusermonero", changeUserMoneroHandler)
 	http.HandleFunc("/usermanager", allUsersHandler)
 	http.HandleFunc("/refresh", refreshHandler)
+	http.HandleFunc("/toggleUserRegistrations", toggleUserRegistrationsHandler)
 	http.HandleFunc("/cryptosettings", cryptoSettingsHandler)
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
@@ -758,20 +759,16 @@ func allUsersHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if user.Username == "admin" {
-		// Retrieve all users from the database
-		users, err := getAllUsers()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 
 		// Define the data to be passed to the HTML template
 		data := struct {
-			Title string
-			Users []User
+			Title            string
+			RegistrationOpen bool
+			Users            map[int]User
 		}{
-			Title: "Users Dashboard",
-			Users: users,
+			Title:            "Users Dashboard",
+			RegistrationOpen: PublicRegistrationsEnabled,
+			Users:            globalUsers,
 		}
 
 		// Parse the HTML template and execute it with the data
@@ -791,20 +788,23 @@ func allUsersHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func refreshHandler(w http.ResponseWriter, r *http.Request) {
-	// Get the user ID from the form data
-	userID, err := strconv.Atoi(r.FormValue("user_id"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+func toggleUserRegistrationsHandler(w http.ResponseWriter, r *http.Request) {
+
+	if checkLoggedInAdmin(w, r) {
+		PublicRegistrationsEnabled = !PublicRegistrationsEnabled
+		http.Redirect(w, r, "/usermanager", http.StatusSeeOther)
+		allUsersHandler(w, r)
+	} else {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 
-	// Update the user's enabled date in the database
-	err = updateEnabledDate(userID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+}
+
+func refreshHandler(w http.ResponseWriter, r *http.Request) {
+
+	user, _ := getUserByUsernameCached(r.FormValue("username"))
+	renewUserSubscription(user)
 
 	allUsersHandler(w, r)
 }
@@ -2572,6 +2572,19 @@ func updateUser(user User) error {
 	_, err := db.Exec(statement, user.Username, user.HashedPassword, user.EthAddress,
 		user.SolAddress, user.HexcoinAddress, user.XMRWalletPassword, user.MinDono, user.MinMediaDono,
 		user.MediaEnabled, time.Now().UTC(), []byte(user.Links), user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, user.WalletUploaded, cryptosStructToJSONString(user.CryptosEnabled), user.UserID)
+	if err != nil {
+		log.Fatalf("failed, err: %v", err)
+	}
+
+	statement = `
+		UPDATE billing
+		SET user_id=?, amount_this_month=?, amount_total=?, enabled=?, need_to_pay=?,
+			eth_amount=?, xmr_amount=?, xmr_pay_id=?, created_at=?, updated_at=?
+		WHERE billing_id=?
+	`
+	_, err = db.Exec(statement, user.UserID, user.BillingData.AmountThisMonth, user.BillingData.AmountTotal, user.BillingData.Enabled,
+		user.BillingData.NeedToPay, user.BillingData.ETHAmount, user.BillingData.XMRAmount, user.BillingData.XMRPayID, user.BillingData.CreatedAt,
+		user.BillingData.UpdatedAt, user.BillingData.UserID)
 	if err != nil {
 		log.Fatalf("failed, err: %v", err)
 	}

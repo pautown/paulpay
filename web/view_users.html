@@ -39,6 +39,9 @@
       </form>
   </div>
 
+  <span><b style="color: lightsteelblue;"> User Registrations Open: </b> {{.RegistrationOpen}}</span>
+  <form method="POST" action="/toggleUserRegistrations"><input type="submit" value="Toggle User Registrations"></form>
+
     
     <table>
         <thead>
@@ -54,8 +57,8 @@
             <tr>
                 <td>{{.UserID}}</td>
                 <td>{{.Username}}</td>
-                <td>{{.DateEnabled.Format "2006-01-02"}}</td>
-                <td><form method="POST" action="/refresh"><input type="hidden" name="user_id" value="{{.UserID}}"><input type="submit" value="Refresh"></form></td>
+                <td>{{.BillingData.UpdatedAt.Format "2006-01-02"}}</td>
+                <td><form method="POST" action="/refresh"><input type="hidden" name="username" value="{{.Username}}"><input type="submit" value="Refresh"></form></td>
             </tr>
             {{end}}
         </tbody>
