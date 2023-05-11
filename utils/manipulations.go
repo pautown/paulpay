@@ -35,6 +35,19 @@ func PruneStringDecimals(str string, dec_ int) string {
 	return str[:idx+1] + decimalPart
 }
 
+func pruneStringByDecimalPoints(value string, decimalPoints int) (string, error) {
+	// Parse the string value as a float64
+	number, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return "", err
+	}
+
+	// Format the float64 value with the desired decimal points
+	prunedValue := strconv.FormatFloat(number, 'f', decimalPoints, 64)
+
+	return prunedValue, nil
+}
+
 func ConvertStringTo18DecimalPlaces(str string) (string, error) {
 	idx := strings.Index(str, ".")
 	if idx < 0 {

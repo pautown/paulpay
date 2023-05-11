@@ -1921,6 +1921,7 @@ func checkUnfulfilledDonos() []Dono {
 			xmrNeededStr, _ := utils.StandardizeString(dono.AmountToSend)
 			printDonoInfo(dono, secondsElapsedSinceLastCheck, secondsNeededToCheck)
 			if dono.AmountSent == xmrNeededStr {
+				dono.AmountSent, _ = utils.PruneStringByDecimalPoints(dono.AmountToSend, 5)
 				addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID)
 				dono.Fulfilled = true
 				fulfilledDonos = append(fulfilledDonos, dono)
@@ -1929,7 +1930,7 @@ func checkUnfulfilledDonos() []Dono {
 			}
 		} else if dono.CurrencyType == "SOL" {
 			if utils.CheckTransactionSolana(dono.AmountToSend, dono.Address, 100) {
-				dono.AmountSent = dono.AmountToSend
+				dono.AmountSent, _ = utils.PruneStringByDecimalPoints(dono.AmountToSend, 5)
 				addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
 				dono.Fulfilled = true
 				fulfilledDonos = append(fulfilledDonos, dono)
