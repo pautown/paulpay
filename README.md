@@ -16,15 +16,22 @@ To see a working instance of PayPaul, see [ferret.cash](https://ferret.cash).
 
 A webserver at 127.0.0.1:8900 is running.
 
+# Features
+- Youtube Media 
+- Sound and GIF for donos
+- TTS integration for donos
+- 9 cryptos supported (XMR, SOLANA, ETH, and six ERC-20 tokens)
+- Keeping track of USD value
+- Selection of which dono methods are available
+
 This is currently designed to be run on a cloud server with nginx proxypass for TLS.
 
-# Monero Wallet Setup (needs to be rewritten.)
+# Monero Wallet Setup
 
 1. Generate a view only wallet using the `monero-wallet-gui` from getmonero.org. Preferably with no password (need to change code if you have a password)
-2. Copy the newly generated `walletname_viewonly` and `walletname_viewonly.keys` files to your VPS as 'wallet' and 'wallet.keys'
+2. Upload the newly generated `walletname_viewonly` and `walletname_viewonly.keys` files in the user account.
 3. Download the `monero-wallet-rpc` binary that is bundled with the getmonero.org wallets.
 4. Place the 'monero-wallet-rpc' inside monero folder
-5. Change code inside main.go to reflect what file extension monero-wallet-rpc is. This is being developed on windows so it has .exe in the start monero func but for linux (most server environments) it won't have the .exe file extension so remove that.
 
 # Usage
 - Visit 127.0.0.1:8900/user to view your user settings
@@ -32,20 +39,6 @@ This is currently designed to be run on a cloud server with nginx proxypass for 
 - Visit 127.0.0.1:8900/alert to see notifications (only have one of these open at a time, preferrably in the OBS screen)
 - Visit 127.0.0.1:8900/progressbar to see the OBS progressbar which gets modified in the OBS settings url
 - The default username is `admin` and password `hunter123`. Change these in the http://127.0.0.1:8900/user panel
-
-# OBS
-- Add a Browser source in OBS and point it to `127.0.0.1:8900/alert` for Dono Alerts
-- Add a Browser source in OBS and point it to `127.0.0.1:8900/progressbar` to display the Dono Bar in OBS
-
-# Future plans
-- Youtube Media Links
-- Sound and GIF for dono
-- TTS integration for donos
-- Hex donations using batch transaction processing
-- API integration for getting Powerchat and Streamlabs Donos and keeping track of USD value
-- Selection of which dono methods are available
-
-
 
 # License
 GPLv3
