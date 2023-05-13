@@ -1578,9 +1578,6 @@ func checkUnfulfilledDonos() []utils.Dono {
 				if _, exists := tempMap[tx.Hash]; !exists {
 					eth_transactions = append(eth_transactions, tx)
 					tempMap[tx.Hash] = true
-					log.Println("TX doesn't exist, adding:", tx)
-				} else {
-					log.Println("TX already exists:", tx)
 				}
 			}
 			time.Sleep(2 * time.Second)
