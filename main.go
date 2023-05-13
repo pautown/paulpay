@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/ed25519"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -49,7 +48,7 @@ var starting_port int = 28088
 
 var host_url string = "https://ferret.cash/"
 
-var addressSliceSolana []AddressSolana
+var addressSliceSolana []utils.AddressSolana
 
 var checked string = ""
 var killDono = 3.00 * time.Hour // hours it takes for a dono to be unfulfilled before it is no longer checked.
@@ -79,104 +78,6 @@ var eth_transactions []utils.Transfer
 var minSolana, minMonero, minEthereum, minPaint, minHex, minPolygon, minBusd, minShib, minUsdc, minTusd, minWbtc, minPnk float64 // Global variables to hold minimum values required to equal the global value.
 var minDonoValue float64 = 5.0
 
-type priceData struct {
-	Monero struct {
-		Usd float64 `json:"usd"`
-	} `json:"monero"`
-	Solana struct {
-		Usd float64 `json:"usd"`
-	} `json:"solana"`
-	Ethereum struct {
-		Usd float64 `json:"usd"`
-	} `json:"ethereum"`
-}
-
-type Link struct {
-	URL         string `json:"url"`
-	Description string `json:"description"`
-}
-
-type CryptoData struct {
-	CryptoCode string `json:"cryptocode"`
-	Enabled    bool   `json:"enabled"`
-}
-
-type User struct {
-	UserID               int
-	Username             string
-	HashedPassword       []byte
-	EthAddress           string
-	SolAddress           string
-	HexcoinAddress       string
-	XMRWalletPassword    string
-	MinDono              int
-	MinMediaDono         int
-	MediaEnabled         bool
-	CreationDatetime     string
-	ModificationDatetime string
-	Links                string
-	DonoGIF              string
-	DonoSound            string
-	AlertURL             string
-	MinSol               float64
-	MinEth               float64
-	MinXmr               float64
-	MinPaint             float64
-	MinHex               float64
-	MinMatic             float64
-	MinBusd              float64
-	MinShib              float64
-	MinUsdc              float64
-	MinTusd              float64
-	MinWbtc              float64
-	MinPnk               float64
-	DateEnabled          time.Time
-	WalletUploaded       bool
-	CryptosEnabled       CryptosEnabled
-	BillingData          BillingData
-}
-
-type CryptosEnabled struct {
-	XMR   bool
-	SOL   bool
-	ETH   bool
-	PAINT bool
-	HEX   bool
-	MATIC bool
-	BUSD  bool
-	SHIB  bool
-	PNK   bool
-}
-
-type CryptoPrice struct {
-	Monero     float64 `json:"monero"`
-	Solana     float64 `json:"solana"`
-	Ethereum   float64 `json:"ethereum"`
-	Paint      float64 `json:"paint"`
-	Hexcoin    float64 `json:"hex"`
-	Polygon    float64 `json:"matic"`
-	BinanceUSD float64 `json:"binance-usd"`
-	ShibaInu   float64 `json:"shiba-inu"`
-	Kleros     float64 `json:"pnk"`
-	WBTC       float64 `json:"wbtc"`
-	TUSD       float64 `json: "tusd"`
-}
-
-type UserPageData struct {
-	ErrorMessage string
-}
-
-type PendingUser struct {
-	ID             int
-	Username       string
-	HashedPassword []byte
-	XMRPayID       string
-	ETHNeeded      string
-	XMRNeeded      string
-	ETHAddress     string
-	XMRAddress     string
-}
-
 var PublicRegistrationsEnabled = false
 
 var ServerMinMediaDono = 5
@@ -184,157 +85,20 @@ var ServerMediaEnabled = true
 
 var xmrWallets = [][]int{}
 
-var globalUsers = map[int]User{}
-var pendingGlobalUsers = map[int]PendingUser{}
+var globalUsers = map[int]utils.User{}
+var pendingGlobalUsers = map[int]utils.PendingUser{}
 
 var db *sql.DB
 var userSessions = make(map[string]int)
 var amountNeeded = 1000.00
 var amountSent = 200.00
-var donosMap = make(map[int]Dono) // initialize an empty map
+var donosMap = make(map[int]utils.Dono) // initialize an empty map
 
-type getBalanceResponse struct {
-	Jsonrpc string `json:"jsonrpc"`
-	Result  struct {
-		Context struct {
-			Slot uint64 `json:"slot"`
-		} `json:"context"`
-		Value uint64 `json:"value"`
-	} `json:"result"`
-	ID int `json:"id"`
-}
+var a utils.AlertPageData
+var pb utils.ProgressbarData
+var obsData utils.OBSDataStruct
 
-type superChat struct {
-	Name            string
-	Message         string
-	Media           string
-	Amount          string
-	Address         string
-	QRB64           string
-	PayID           string
-	CheckURL        string
-	Currency        string
-	DonationID      int64
-	ContractAddress string
-	WeiAmount       *big.Int
-}
-
-type BillingData struct {
-	BillingID       int
-	UserID          int
-	AmountThisMonth float64
-	AmountTotal     float64
-	AmountNeeded    float64
-	ETHAmount       string
-	XMRAmount       string
-	XMRPayID        string
-	XMRAddress      string
-	Enabled         bool
-	NeedToPay       bool
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-}
-
-type indexDisplay struct {
-	MaxChar        int
-	MinDono        int
-	MinSolana      float64
-	MinMonero      float64
-	MinEthereum    float64
-	MinPaint       float64
-	MinHex         float64
-	MinPolygon     float64
-	MinBusd        float64
-	MinShib        float64
-	MinPnk         float64
-	SolPrice       float64
-	XMRPrice       float64
-	ETHPrice       float64
-	PaintPrice     float64
-	HexPrice       float64
-	PolygonPrice   float64
-	BusdPrice      float64
-	ShibPrice      float64
-	PnkPrice       float64
-	MinAmnt        float64
-	Links          string
-	Checked        string
-	CryptosEnabled CryptosEnabled
-	Username       string
-}
-
-type alertPageData struct {
-	Name          string
-	Message       string
-	Amount        float64
-	Currency      string
-	MediaURL      string
-	USDAmount     float64
-	Refresh       int
-	DisplayToggle string
-	Userpath      string
-}
-
-type progressbarData struct {
-	Message string
-	Needed  float64
-	Sent    float64
-	Refresh int
-}
-
-type accountPayData struct {
-	Username    string
-	AmountXMR   string
-	AmountETH   string
-	AddressXMR  string
-	AddressETH  string
-	QRB64XMR    string
-	QRB64ETH    string
-	UserID      int
-	BillingData BillingData
-	DateCreated time.Time
-}
-
-type obsDataStruct struct {
-	Username    string
-	FilenameGIF string
-	FilenameMP3 string
-	URLdisplay  string
-	URLdonobar  string
-	Message     string
-	Needed      float64
-	Sent        float64
-}
-
-type rpcResponse struct {
-	ID      string `json:"id"`
-	Jsonrpc string `json:"jsonrpc"`
-	Result  struct {
-		IntegratedAddress string `json:"integrated_address"`
-		PaymentID         string `json:"payment_id"`
-	} `json:"result"`
-}
-
-type AddressSolana struct {
-	KeyPublic  string
-	KeyPrivate ed25519.PrivateKey
-	DonoName   string
-	DonoString string
-	DonoAmount float64
-	DonoAnon   bool
-}
-
-type MoneroPrice struct {
-	Monero struct {
-		Usd float64 `json:"usd"`
-	} `json:"monero"`
-}
-
-var a alertPageData
-var pb progressbarData
-var obsData obsDataStruct
-
-var prices CryptoPrice
+var prices utils.CryptoPrice
 
 var pbMessage = "Stream Tomorrow"
 
@@ -401,9 +165,9 @@ func donationsHandler(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	// Create a slice to hold the data
-	var donos []Dono
+	var donos []utils.Dono
 	for rows.Next() {
-		var dono Dono
+		var dono utils.Dono
 		var name, message, address, currencyType, encryptedIP, amountToSend, amountSent, mediaURL sql.NullString
 		var usdAmount sql.NullFloat64
 		var userID sql.NullInt64
@@ -500,12 +264,6 @@ func main() {
 
 }
 
-// Add the following struct to store the incoming data
-type UpdateCryptosRequest struct {
-	UserID          string          `json:"userId"`
-	SelectedCryptos map[string]bool `json:"selectedCryptos"`
-}
-
 func updateCryptosHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -519,7 +277,7 @@ func updateCryptosHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	var updateRequest UpdateCryptosRequest
+	var updateRequest utils.UpdateCryptosRequest
 	err = json.Unmarshal(body, &updateRequest)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to parse request body: %v", err), http.StatusBadRequest)
@@ -558,9 +316,9 @@ func updateCryptosHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func mapToCryptosEnabled(selectedCryptos map[string]bool) CryptosEnabled {
+func mapToCryptosEnabled(selectedCryptos map[string]bool) utils.CryptosEnabled {
 	// Create a new instance of the CryptosEnabled struct
-	cryptosEnabled := CryptosEnabled{}
+	cryptosEnabled := utils.CryptosEnabled{}
 
 	// Set each field of the CryptosEnabled struct based on the corresponding value in the map
 	cryptosEnabled.XMR = selectedCryptos["monero"]
@@ -765,7 +523,7 @@ func allUsersHandler(w http.ResponseWriter, r *http.Request) {
 		data := struct {
 			Title            string
 			RegistrationOpen bool
-			Users            map[int]User
+			Users            map[int]utils.User
 		}{
 			Title:            "Users Dashboard",
 			RegistrationOpen: PublicRegistrationsEnabled,
@@ -823,8 +581,8 @@ func updateEnabledDate(userID int) error {
 	return nil
 }
 
-func getAllUsers() ([]User, error) {
-	var users []User
+func getAllUsers() ([]utils.User, error) {
+	var users []utils.User
 	rows, err := db.Query("SELECT * FROM users")
 	if err != nil {
 		return nil, err
@@ -832,7 +590,7 @@ func getAllUsers() ([]User, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var user User
+		var user utils.User
 		var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString
 
 		err = rows.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
@@ -864,7 +622,7 @@ func getAllUsers() ([]User, error) {
 			user.AlertURL = utils.GenerateUniqueURL()
 		}
 
-		ce := CryptosEnabled{
+		ce := utils.CryptosEnabled{
 			XMR:   true,
 			SOL:   true,
 			ETH:   false,
@@ -894,7 +652,7 @@ func getAllUsers() ([]User, error) {
 		return nil, err
 	}
 
-	billingMap := make(map[int]BillingData)
+	billingMap := make(map[int]utils.BillingData)
 	for _, billing := range billings {
 		billingMap[billing.UserID] = billing
 	}
@@ -910,8 +668,8 @@ func getAllUsers() ([]User, error) {
 	return users, nil
 }
 
-func getAllBilling() ([]BillingData, error) {
-	var billings []BillingData
+func getAllBilling() ([]utils.BillingData, error) {
+	var billings []utils.BillingData
 	rows, err := db.Query("SELECT * FROM billing")
 	if err != nil {
 		return nil, err
@@ -919,7 +677,7 @@ func getAllBilling() ([]BillingData, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var billingData BillingData
+		var billingData utils.BillingData
 		err = rows.Scan(&billingData.BillingID, &billingData.UserID, &billingData.AmountThisMonth, &billingData.AmountTotal, &billingData.Enabled, &billingData.NeedToPay, &billingData.ETHAmount, &billingData.XMRAmount, &billingData.XMRPayID, &billingData.CreatedAt, &billingData.UpdatedAt)
 		if err != nil {
 			log.Println(err)
@@ -944,8 +702,8 @@ func getAllBilling() ([]BillingData, error) {
 	return billings, nil
 }
 
-func getActiveETHUsers(db *sql.DB) ([]*User, error) {
-	var users []*User
+func getActiveETHUsers(db *sql.DB) ([]*utils.User, error) {
+	var users []*utils.User
 
 	// Define the query to select the active ETH users
 	query := `SELECT * FROM users WHERE eth_address != ''`
@@ -957,7 +715,7 @@ func getActiveETHUsers(db *sql.DB) ([]*User, error) {
 	}
 
 	for rows.Next() {
-		var user User
+		var user utils.User
 		err = rows.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress, &user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono, &user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &user.Links, &user.DonoGIF, &user.DonoSound, &user.AlertURL, &user.WalletUploaded, &user.DateEnabled)
 		if err != nil {
 			return nil, err
@@ -971,8 +729,8 @@ func getActiveETHUsers(db *sql.DB) ([]*User, error) {
 	return users, nil
 }
 
-func getActiveXMRUsers(db *sql.DB) ([]*User, error) {
-	var users []*User
+func getActiveXMRUsers(db *sql.DB) ([]*utils.User, error) {
+	var users []*utils.User
 
 	// Define the query to select the active XMR users
 	query := `SELECT * FROM users WHERE wallet_uploaded = ?`
@@ -984,7 +742,7 @@ func getActiveXMRUsers(db *sql.DB) ([]*User, error) {
 	}
 
 	for rows.Next() {
-		var user User
+		var user utils.User
 		err = rows.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress, &user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono, &user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &user.Links, &user.DonoGIF, &user.DonoSound, &user.AlertURL, &user.WalletUploaded, &user.DateEnabled)
 		if err != nil {
 			return nil, err
@@ -999,7 +757,7 @@ func getActiveXMRUsers(db *sql.DB) ([]*User, error) {
 	return users, nil
 }
 
-func getCryptoPrices() (CryptoPrice, error) {
+func getCryptoPrices() (utils.CryptoPrice, error) {
 
 	// Call the Coingecko API to get the current price for each cryptocurrency
 	url := "https://api.coingecko.com/api/v3/simple/price?ids=monero,solana,ethereum,paint,hex,matic-network,binance-usd,shiba-inu,kleros&vs_currencies=usd"
@@ -1015,7 +773,7 @@ func getCryptoPrices() (CryptoPrice, error) {
 		panic(err)
 	}
 
-	prices := CryptoPrice{
+	prices := utils.CryptoPrice{
 		Monero:     data["monero"]["usd"],
 		Solana:     data["solana"]["usd"],
 		Ethereum:   data["ethereum"]["usd"],
@@ -1030,7 +788,7 @@ func getCryptoPrices() (CryptoPrice, error) {
 	return prices, nil
 }
 
-func getUserCryptosEnabled(user User) (User, error) {
+func getUserCryptosEnabled(user utils.User) (utils.User, error) {
 
 	user.CryptosEnabled.XMR = false
 	user.CryptosEnabled.SOL = false
@@ -1047,10 +805,10 @@ func getUserCryptosEnabled(user User) (User, error) {
 }
 
 // get links for a user
-func getUserLinks(user User) ([]Link, error) {
+func getUserLinks(user utils.User) ([]utils.Link, error) {
 	if user.Links == "" {
 		// Insert default links for the user
-		defaultLinks := []Link{
+		defaultLinks := []utils.Link{
 			{URL: "https://powerchat.live/paultown?tab=donation", Description: "Powerchat"},
 			{URL: "https://cozy.tv/paultown", Description: "cozy.tv/paultown"},
 			{URL: "http://twitter.paul.town/", Description: "Twitter"},
@@ -1071,7 +829,7 @@ func getUserLinks(user User) ([]Link, error) {
 		return defaultLinks, nil
 	}
 
-	var links []Link
+	var links []utils.Link
 	if err := json.Unmarshal([]byte(user.Links), &links); err != nil {
 		return nil, err
 	}
@@ -1142,9 +900,9 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	// Create a slice to hold the data
-	var donos []Dono
+	var donos []utils.Dono
 	for rows.Next() {
-		var dono Dono
+		var dono utils.Dono
 		var name, amountToSend, amountSent, message, address, currencyType, encryptedIP, mediaURL sql.NullString
 		var usdAmount sql.NullFloat64
 		var userID sql.NullInt64
@@ -1196,14 +954,14 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := ViewDonosData{
+	data := utils.ViewDonosData{
 		Username: user.Username,
 		Donos:    donos,
 	}
 	tpl.Execute(w, data)
 }
 
-func setUserMinDonos(user User) User {
+func setUserMinDonos(user utils.User) utils.User {
 	log.Println("begin setUserMinDonos() for", user.UserID)
 	var err error
 	user.MinSol, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.Solana)), 64)
@@ -1285,7 +1043,7 @@ func startMoneroWallet(port_int, user_id int) {
 	fmt.Println("Done starting monero wallet for", portStr, user_id)
 }
 
-func stopMoneroWallet(user User) {
+func stopMoneroWallet(user utils.User) {
 	portID := getPortID(xmrWallets, user.UserID)
 
 	found := true
@@ -1396,7 +1154,7 @@ func checkBillingAccounts() {
 	}
 }
 
-func renewUserSubscription(user User) {
+func renewUserSubscription(user utils.User) {
 	user.BillingData.Enabled = true
 	user.BillingData.AmountThisMonth = 0.00
 	user.BillingData.AmountNeeded = 0.00
@@ -1661,30 +1419,7 @@ func createNewDono(user_id int, dono_address string, dono_name string, dono_mess
 	return id
 }
 
-type ViewDonosData struct {
-	Username string
-	Donos    []Dono
-}
-
-type Dono struct {
-	ID           int
-	UserID       int
-	Address      string
-	Name         string
-	Message      string
-	AmountToSend string
-	AmountSent   string
-	CurrencyType string
-	AnonDono     bool
-	Fulfilled    bool
-	EncryptedIP  string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	USDAmount    float64
-	MediaURL     string
-}
-
-func clearEncryptedIP(dono *Dono) {
+func clearEncryptedIP(dono *utils.Dono) {
 	dono.EncryptedIP = ""
 }
 
@@ -1743,7 +1478,7 @@ func updatePendingDonos() {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var dono Dono
+		var dono utils.Dono
 		var tmpAmountToSend sql.NullString
 		var tmpAmountSent sql.NullString
 		var tmpUSDAmount sql.NullFloat64
@@ -1782,14 +1517,14 @@ func updatePendingDonos() {
 	}
 }
 
-func addToDonosMap(dono Dono) {
+func addToDonosMap(dono utils.Dono) {
 	_, ok := donosMap[dono.ID]
 	if !ok {
 		donosMap[dono.ID] = dono
 	}
 }
 
-func updateDonoInMap(updatedDono Dono) {
+func updateDonoInMap(updatedDono utils.Dono) {
 	if _, ok := donosMap[updatedDono.ID]; ok {
 		// The dono exists in the map, update it
 		donosMap[updatedDono.ID] = updatedDono
@@ -1798,7 +1533,7 @@ func updateDonoInMap(updatedDono Dono) {
 	}
 }
 
-func printDonoInfo(dono Dono, secondsElapsedSinceLastCheck, secondsNeededToCheck float64) {
+func printDonoInfo(dono utils.Dono, secondsElapsedSinceLastCheck, secondsNeededToCheck float64) {
 	log.Println("Dono ID:", dono.ID, "Address:", dono.Address, "Name:", dono.Name, "To User:", dono.UserID)
 	log.Println("Message:", dono.Message)
 	fmt.Println(dono.CurrencyType, "Needed:", dono.AmountToSend, "Recieved:", dono.AmountSent)
@@ -1822,12 +1557,12 @@ func printTransferInfo(t utils.Transfer) {
 		t.Category)
 }
 
-func checkUnfulfilledDonos() []Dono {
+func checkUnfulfilledDonos() []utils.Dono {
 	ips, _ := getUnfulfilledDonoIPs() // get ips
 
 	updatePendingDonos()
 
-	var fulfilledDonos []Dono
+	var fulfilledDonos []utils.Dono
 
 	eth_addresses := returnETHAddresses()
 	for _, eth_address := range eth_addresses {
@@ -1940,7 +1675,7 @@ func checkUnfulfilledDonos() []Dono {
 	return fulfilledDonos
 }
 
-func removeFulfilledDonos(donos []Dono) {
+func removeFulfilledDonos(donos []utils.Dono) {
 	for _, dono := range donos {
 		if _, ok := donosMap[dono.ID]; ok {
 			delete(donosMap, dono.ID)
@@ -2332,7 +2067,7 @@ func createDatabaseIfNotExists(db *sql.DB) error {
 }
 
 func createNewOBS(db *sql.DB, userID int, message string, needed, sent float64, refresh int, gifFile, soundFile, ttsVoice string) {
-	pbData := progressbarData{
+	pbData := utils.ProgressbarData{
 		Message: message,
 		Needed:  needed,
 		Sent:    sent,
@@ -2366,7 +2101,7 @@ func createObsTable(db *sql.DB) error {
 	return err
 }
 
-func insertObsData(db *sql.DB, userId int, gifName, mp3Name, ttsVoice string, pbData progressbarData) error {
+func insertObsData(db *sql.DB, userId int, gifName, mp3Name, ttsVoice string, pbData utils.ProgressbarData) error {
 	obsData := `
         INSERT INTO obs (
             user_id,
@@ -2390,7 +2125,7 @@ func checkObsData(db *sql.DB) (bool, error) {
 	return count == 0, nil
 }
 
-func updateObsData(db *sql.DB, userID int, gifName string, mp3Name string, ttsVoice string, pbData progressbarData) error {
+func updateObsData(db *sql.DB, userID int, gifName string, mp3Name string, ttsVoice string, pbData utils.ProgressbarData) error {
 
 	updateObsData := `
         UPDATE obs
@@ -2406,8 +2141,8 @@ func updateObsData(db *sql.DB, userID int, gifName string, mp3Name string, ttsVo
 	return err
 }
 
-func getObsData(db *sql.DB, userId int) obsDataStruct {
-	var tempObsData obsDataStruct
+func getObsData(db *sql.DB, userId int) utils.OBSDataStruct {
+	var tempObsData utils.OBSDataStruct
 	err := db.QueryRow("SELECT gif_name, mp3_name, `message`, needed, sent FROM obs WHERE user_id = ?", userId).
 		Scan(&tempObsData.FilenameGIF, &tempObsData.FilenameMP3, &tempObsData.Message, &tempObsData.Needed, &tempObsData.Sent)
 	if err != nil {
@@ -2436,11 +2171,11 @@ func createNewUser(username, password string) {
 	log.Println("finished createNewUser")
 }
 
-func createUser(user User) int {
+func createUser(user utils.User) int {
 	log.Println("running CreateUser")
 	// Insert the user's data into the database
 
-	ce := CryptosEnabled{
+	ce := utils.CryptosEnabled{
 		XMR:   false,
 		SOL:   true,
 		ETH:   true,
@@ -2491,7 +2226,7 @@ func createUser(user User) int {
 		return 0
 	}
 
-	billing := BillingData{
+	billing := utils.BillingData{
 		UserID:          userID,
 		AmountThisMonth: 0.00,
 		AmountTotal:     0.00,
@@ -2557,7 +2292,7 @@ func createUser(user User) int {
 }
 
 // update an existing user
-func updateUser(user User) error {
+func updateUser(user utils.User) error {
 	globalUsers[user.UserID] = user
 	statement := `
 		UPDATE users
@@ -2587,15 +2322,15 @@ func updateUser(user User) error {
 	return err
 }
 
-func getUserByAlertURL(AlertURL string) (User, error) {
-	var user User
+func getUserByAlertURL(AlertURL string) (utils.User, error) {
+	var user utils.User
 	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE alert_url=?", AlertURL)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
 		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
 	if err != nil {
-		return User{}, err
+		return utils.User{}, err
 	}
 	user.Links = links.String
 	if !links.Valid {
@@ -2614,7 +2349,7 @@ func getUserByAlertURL(AlertURL string) (User, error) {
 		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"
 	}
 
-	ce := CryptosEnabled{
+	ce := utils.CryptosEnabled{
 		XMR:   true,
 		SOL:   true,
 		ETH:   false,
@@ -2634,12 +2369,12 @@ func getUserByAlertURL(AlertURL string) (User, error) {
 	return user, nil
 }
 
-func getOBSDataByAlertURL(AlertURL string) (obsDataStruct, error) {
+func getOBSDataByAlertURL(AlertURL string) (utils.OBSDataStruct, error) {
 	user, err := getUserByAlertURL(AlertURL)
 	if err != nil {
 		log.Println("Couldn't get user,", err)
 	}
-	var obsData obsDataStruct
+	var obsData utils.OBSDataStruct
 	//var alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT gif_name, mp3_name, `message`, needed, sent FROM obs WHERE user_id=?", user.UserID)
 
@@ -2653,8 +2388,8 @@ func getOBSDataByAlertURL(AlertURL string) (obsDataStruct, error) {
 
 }
 
-func getOBSDataByUserID(userID int) (obsDataStruct, error) {
-	var obsData obsDataStruct
+func getOBSDataByUserID(userID int) (utils.OBSDataStruct, error) {
+	var obsData utils.OBSDataStruct
 	//var alertURL sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT gif_name, mp3_name, `message`, needed, sent FROM obs WHERE user_id=?", userID)
 
@@ -2669,7 +2404,7 @@ func getOBSDataByUserID(userID int) (obsDataStruct, error) {
 }
 
 // get a user by their session token
-func getUserBySessionCached(sessionToken string) (User, bool) {
+func getUserBySessionCached(sessionToken string) (utils.User, bool) {
 	userID, ok := userSessions[sessionToken]
 	if !ok {
 		log.Println("session token not found")
@@ -2683,7 +2418,7 @@ func getUserBySessionCached(sessionToken string) (User, bool) {
 	return globalUsers[0], false
 }
 
-func getUserByUsernameCached(username string) (User, bool) {
+func getUserByUsernameCached(username string) (utils.User, bool) {
 
 	for _, user := range globalUsers {
 		if user.Username == username {
@@ -2695,15 +2430,15 @@ func getUserByUsernameCached(username string) (User, bool) {
 }
 
 // get a user by their username
-func getUserByUsername(username string) (User, error) {
-	var user User
+func getUserByUsername(username string) (utils.User, error) {
+	var user utils.User
 	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
 		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
 	if err != nil {
-		return User{}, err
+		return utils.User{}, err
 	}
 	user.Links = links.String
 	if !links.Valid {
@@ -2722,7 +2457,7 @@ func getUserByUsername(username string) (User, error) {
 		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"
 	}
 
-	ce := CryptosEnabled{
+	ce := utils.CryptosEnabled{
 		XMR:   true,
 		SOL:   true,
 		ETH:   false,
@@ -2747,14 +2482,14 @@ func getUserByUsername(username string) (User, error) {
 
 // check a user by their ID
 func checkUserByID(id int) bool {
-	var user User
+	var user utils.User
 	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE id=?", id)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
 		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
 
-	ce := CryptosEnabled{
+	ce := utils.CryptosEnabled{
 		XMR:   true,
 		SOL:   true,
 		ETH:   false,
@@ -2803,14 +2538,14 @@ func printUserColumns() error {
 // check a user by their username and return a bool and the id
 func checkUserByUsername(username string) (bool, int) {
 	printUserColumns()
-	var user User
+	var user utils.User
 	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
 		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
 
-	ce := CryptosEnabled{
+	ce := utils.CryptosEnabled{
 		XMR:   true,
 		SOL:   true,
 		ETH:   false,
@@ -2838,19 +2573,19 @@ func checkUserByUsername(username string) (bool, int) {
 }
 
 // get a user by their session token
-func getUserBySession(sessionToken string) (User, error) {
+func getUserBySession(sessionToken string) (utils.User, error) {
 	userID, ok := userSessions[sessionToken]
 	if !ok {
-		return User{}, fmt.Errorf("session token not found")
+		return utils.User{}, fmt.Errorf("session token not found")
 	}
-	var user User
+	var user utils.User
 	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE id=?", userID)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
 		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
 	if err != nil {
-		return User{}, err
+		return utils.User{}, err
 	}
 	user.Links = links.String
 	if !links.Valid {
@@ -2869,7 +2604,7 @@ func getUserBySession(sessionToken string) (User, error) {
 		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"
 	}
 
-	ce := CryptosEnabled{
+	ce := utils.CryptosEnabled{
 		XMR:   true,
 		SOL:   true,
 		ETH:   false,
@@ -2890,7 +2625,7 @@ func getUserBySession(sessionToken string) (User, error) {
 }
 
 // verify that the entered password matches the stored hashed password for a user
-func verifyPassword(user User, password string) bool {
+func verifyPassword(user utils.User, password string) bool {
 	err := bcrypt.CompareHashAndPassword(user.HashedPassword, []byte(password))
 	return err == nil
 }
@@ -3094,7 +2829,7 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 		user.Links = "[]"
 	}
 	data := struct {
-		User  User
+		User  utils.User
 		Links string // Changed to string to hold JSON
 	}{
 		User:  user,
@@ -3122,7 +2857,7 @@ func updateLinksHandler(w http.ResponseWriter, r *http.Request) {
 	if user.Username == username {
 
 		// Parse the JSON string into a slice of Link structs
-		var links []Link
+		var links []utils.Link
 		err := json.Unmarshal([]byte(linksJson), &links)
 		if err != nil {
 			// Handle error
@@ -3151,7 +2886,7 @@ func changePasswordHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// initialize user page data struct
-	data := UserPageData{}
+	data := utils.UserPageData{}
 
 	// process form submission
 	if r.Method == "POST" {
@@ -3211,7 +2946,7 @@ func changeUserMoneroHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// initialize user page data struct
-	data := UserPageData{}
+	data := utils.UserPageData{}
 
 	// process form submission
 	if r.Method == "POST" {
@@ -3336,7 +3071,7 @@ func changeUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// initialize user page data struct
-	data := UserPageData{}
+	data := utils.UserPageData{}
 
 	// process form submission
 	if r.Method == "POST" {
@@ -3391,7 +3126,7 @@ func saveFileToDisk(file multipart.File, header *multipart.FileHeader, path stri
 	return nil
 }
 
-func renderChangePasswordForm(w http.ResponseWriter, data UserPageData) {
+func renderChangePasswordForm(w http.ResponseWriter, data utils.UserPageData) {
 	tmpl, err := template.ParseFiles("web/user.html")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -3549,7 +3284,7 @@ func progressbarOBSHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func cryptosStructToJSONString(s CryptosEnabled) string {
+func cryptosStructToJSONString(s utils.CryptosEnabled) string {
 	bytes, err := json.Marshal(s)
 	if err != nil {
 		log.Println("cryptosStructToJSONString error:", err)
@@ -3558,12 +3293,12 @@ func cryptosStructToJSONString(s CryptosEnabled) string {
 	return string(bytes)
 }
 
-func cryptosJsonStringToStruct(jsonStr string) CryptosEnabled {
-	var s CryptosEnabled
+func cryptosJsonStringToStruct(jsonStr string) utils.CryptosEnabled {
+	var s utils.CryptosEnabled
 	err := json.Unmarshal([]byte(jsonStr), &s)
 	if err != nil {
 		log.Println("cryptosJsonStringToStruct error:", err)
-		return CryptosEnabled{}
+		return utils.CryptosEnabled{}
 	}
 	return s
 }
@@ -3614,7 +3349,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			user.Links = "[]"
 		}
 
-		i := indexDisplay{
+		i := utils.IndexDisplay{
 			MaxChar:        MessageMaxChar,
 			MinDono:        user.MinDono,
 			MinSolana:      user.MinSol,
@@ -3766,7 +3501,7 @@ func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 
 		xmrNeededFormatted := fmt.Sprintf("%.5f", xmrNeeded)
 
-		d := accountPayData{
+		d := utils.AccountPayData{
 			Username:    pendingUser.Username,
 			AmountXMR:   xmrNeededFormatted,
 			AmountETH:   pendingUser.ETHNeeded,
@@ -3803,7 +3538,7 @@ func accountBillingHandler(w http.ResponseWriter, r *http.Request) {
 		admin, _ := getUserByUsernameCached("admin")
 
 		xmrNeededFormatted := fmt.Sprintf("%.5f", user.BillingData.XMRAmount)
-		d := accountPayData{
+		d := utils.AccountPayData{
 			Username:    user.Username,
 			AmountXMR:   xmrNeededFormatted,
 			BillingData: user.BillingData,
@@ -3893,7 +3628,7 @@ func getNewAccountXMR() (string, string) {
 		return "", ""
 	}
 
-	resp := &rpcResponse{}
+	resp := &utils.RPCResponse{}
 	if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
 		log.Println("ERROR DECODING RESPONSE:", err)
 		return "", ""
@@ -3907,15 +3642,15 @@ func getNewAccountXMR() (string, string) {
 	return PayID, PayAddress
 }
 
-func createNewPendingUser(username string, password string) (PendingUser, error) {
+func createNewPendingUser(username string, password string) (utils.PendingUser, error) {
 	log.Println("begin createNewPendingUser()")
 	user_, _ := getUserByUsernameCached("admin")
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return PendingUser{}, err
+		return utils.PendingUser{}, err
 	}
 	PayID, PayAddress := getNewAccountXMR()
-	user := PendingUser{
+	user := utils.PendingUser{
 		Username:       username,
 		HashedPassword: hashedPassword,
 		ETHAddress:     user_.EthAddress,
@@ -3928,13 +3663,13 @@ func createNewPendingUser(username string, password string) (PendingUser, error)
 	err = createPendingUser(user)
 	if err != nil {
 		log.Println("createPendingUser:", err)
-		return PendingUser{}, err
+		return utils.PendingUser{}, err
 	}
 	// Get the ID of the newly inserted user
 	row := db.QueryRow(`SELECT last_insert_rowid()`)
 	err = row.Scan(&user.ID)
 	if err != nil {
-		return PendingUser{}, err
+		return utils.PendingUser{}, err
 	}
 	pendingGlobalUsers[user.ID] = user
 	log.Println("finish createNewPendingUser() without error")
@@ -3942,7 +3677,7 @@ func createNewPendingUser(username string, password string) (PendingUser, error)
 
 }
 
-func createPendingUser(user PendingUser) error {
+func createPendingUser(user utils.PendingUser) error {
 	_, err := db.Exec(`
         INSERT INTO pendingusers (username, HashedPassword, XMRPayID, XMRNeeded, ETHNeeded)
         VALUES (?, ?, ?, ?, ?)
@@ -3961,9 +3696,9 @@ func createPendingUser(user PendingUser) error {
 	return nil
 }
 
-func getNewUser(username string, hashedPassword []byte) User {
+func getNewUser(username string, hashedPassword []byte) utils.User {
 
-	ce := CryptosEnabled{
+	ce := utils.CryptosEnabled{
 		XMR:   false,
 		SOL:   false,
 		ETH:   false,
@@ -3975,7 +3710,7 @@ func getNewUser(username string, hashedPassword []byte) User {
 		PNK:   false,
 	}
 
-	user := User{
+	user := utils.User{
 		Username:          username,
 		HashedPassword:    hashedPassword,
 		CryptosEnabled:    ce,
@@ -3996,7 +3731,7 @@ func getNewUser(username string, hashedPassword []byte) User {
 	return user
 }
 
-func createNewUserFromPending(user_ PendingUser) error {
+func createNewUserFromPending(user_ utils.PendingUser) error {
 	log.Println("running createNewUserFromPending")
 
 	user := getNewUser(user_.Username, user_.HashedPassword)
@@ -4017,7 +3752,7 @@ func createNewUserFromPending(user_ PendingUser) error {
 	return nil
 }
 
-func deletePendingUser(user PendingUser) error {
+func deletePendingUser(user utils.PendingUser) error {
 	delete(pendingGlobalUsers, user.ID)
 	_, err := db.Exec(`DELETE FROM pendingusers WHERE id = ?`, user.ID)
 	if err != nil {
@@ -4089,7 +3824,7 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	showAmount, _ := strconv.ParseBool(fShowAmount)
 
-	var s superChat
+	var s utils.CryptoSuperChat
 	params := url.Values{}
 
 	params.Add("name", name)
@@ -4209,7 +3944,7 @@ func getPortID(xmrWallets [][]int, userID int) int {
 	return -100
 }
 
-func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, fCrypto string, encrypted_ip string, USDAmount float64, userID int) {
+func handleEthereumPayment(w http.ResponseWriter, s *utils.CryptoSuperChat, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, fCrypto string, encrypted_ip string, USDAmount float64, userID int) {
 	address := getEthAddressByID(userID)
 	log.Println("handleEthereumPayment() address:", address)
 
@@ -4250,7 +3985,7 @@ func handleEthereumPayment(w http.ResponseWriter, s *superChat, name_ string, me
 	}
 }
 
-func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, encrypted_ip string, USDAmount float64, userID int) {
+func handleSolanaPayment(w http.ResponseWriter, s *utils.CryptoSuperChat, params url.Values, name_ string, message_ string, amount_ float64, showAmount_ bool, media_ string, encrypted_ip string, USDAmount float64, userID int) {
 	// Get Solana address and desired balance from request
 	address := getSolAddressByID(userID)
 	donoStr := fmt.Sprintf("%.*f", 9, amount_)
@@ -4283,7 +4018,7 @@ func handleSolanaPayment(w http.ResponseWriter, s *superChat, params url.Values,
 	}
 }
 
-func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values, amount float64, encrypted_ip string, showAmount bool, USDAmount float64, userID int) {
+func handleMoneroPayment(w http.ResponseWriter, s *utils.CryptoSuperChat, params url.Values, amount float64, encrypted_ip string, showAmount bool, USDAmount float64, userID int) {
 	payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
 	portID := getPortID(xmrWallets, userID)
 
@@ -4312,7 +4047,7 @@ func handleMoneroPayment(w http.ResponseWriter, s *superChat, params url.Values,
 		log.Println("ERROR CREATING")
 	}
 
-	resp := &rpcResponse{}
+	resp := &utils.RPCResponse{}
 	if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
 		fmt.Println(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
