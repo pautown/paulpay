@@ -51,7 +51,7 @@ var host_url string = "https://ferret.cash/"
 var addressSliceSolana []utils.AddressSolana
 
 var checked string = ""
-var killDono = 3.00 * time.Hour // hours it takes for a dono to be unfulfilled before it is no longer checked.
+var killDono = 20.00 * time.Minute // hours it takes for a dono to be unfulfilled before it is no longer checked.
 var indexTemplate *template.Template
 var registerTemplate *template.Template
 var donationTemplate *template.Template
@@ -1572,17 +1572,20 @@ func checkUnfulfilledDonos() []utils.Dono {
 	tempMap := make(map[string]bool)
 	for _, eth_address := range eth_addresses {
 		log.Println("Getting ETH txs for:", eth_address)
-		transactions, _ := utils.GetEth(eth_address)
-		for _, tx := range transactions {
-			if _, exists := tempMap[tx.Hash]; !exists {
-				eth_transactions = append(eth_transactions, tx)
-				tempMap[tx.Hash] = true
-				log.Println("TX doesn't exist, adding:", tx)
-			} else {
-				log.Println("TX already exists:", tx)
+		transactions, newTX, _ := utils.GetEth(eth_address)
+		if newTX {
+			for _, tx := range transactions {
+				if _, exists := tempMap[tx.Hash]; !exists {
+					eth_transactions = append(eth_transactions, tx)
+					tempMap[tx.Hash] = true
+					log.Println("TX doesn't exist, adding:", tx)
+				} else {
+					log.Println("TX already exists:", tx)
+				}
 			}
+			time.Sleep(2 * time.Second)
 		}
-		time.Sleep(2 * time.Second)
+
 	}
 
 	for _, dono := range donosMap {
