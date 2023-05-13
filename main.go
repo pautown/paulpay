@@ -330,7 +330,6 @@ type MoneroPrice struct {
 	} `json:"monero"`
 }
 
-var json_links []Link
 var a alertPageData
 var pb progressbarData
 var obsData obsDataStruct
@@ -583,6 +582,8 @@ func setupRoutes() {
 	})
 
 	http.HandleFunc("/updatecryptos", updateCryptosHandler)
+
+	http.HandleFunc("/update-links", updateLinksHandler)
 
 	http.HandleFunc("/check_donation_status/", checkDonationStatusHandler)
 
@@ -1083,11 +1084,6 @@ func setServerVars() {
 	log.Println("		 ..")
 	time.Sleep(2 * time.Second)
 	log.Println("------------ setServerVars()")
-	user, err := getUserByUsername(username)
-	if err != nil {
-		panic(err)
-	}
-	json_links, _ = getUserLinks(user)
 	setMinDonos()
 }
 func createTestDono(user_id int, name string, curr string, message string, amount string, usdAmount float64, media_url string) {
@@ -2571,7 +2567,7 @@ func updateUser(user User) error {
 	`
 	_, err := db.Exec(statement, user.Username, user.HashedPassword, user.EthAddress,
 		user.SolAddress, user.HexcoinAddress, user.XMRWalletPassword, user.MinDono, user.MinMediaDono,
-		user.MediaEnabled, time.Now().UTC(), []byte(user.Links), user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, user.WalletUploaded, cryptosStructToJSONString(user.CryptosEnabled), user.UserID)
+		user.MediaEnabled, time.Now().UTC(), user.Links, user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, user.WalletUploaded, cryptosStructToJSONString(user.CryptosEnabled), user.UserID)
 	if err != nil {
 		log.Fatalf("failed, err: %v", err)
 	}
@@ -3094,14 +3090,52 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if user.Links == "" {
+		user.Links = "[]"
+	}
+	data := struct {
+		User  User
+		Links string // Changed to string to hold JSON
+	}{
+		User:  user,
+		Links: user.Links, // Convert byte slice to string
+	}
+
 	tmpl, err := template.ParseFiles("web/user.html")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	tmpl.Execute(w, user)
+	tmpl.Execute(w, data)
 
+}
+
+func updateLinksHandler(w http.ResponseWriter, r *http.Request) {
+	// Get the links parameter from the POST request
+	linksJson := r.PostFormValue("links")
+	username := r.PostFormValue("username")
+
+	cookie, _ := r.Cookie("session_token")
+	user, _ := getUserBySessionCached(cookie.Value)
+
+	if user.Username == username {
+
+		// Parse the JSON string into a slice of Link structs
+		var links []Link
+		err := json.Unmarshal([]byte(linksJson), &links)
+		if err != nil {
+			// Handle error
+			return
+		}
+
+		user.Links = linksJson
+		updateUser(user)
+		http.Redirect(w, r, "/user", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/user", http.StatusSeeOther)
+	return
 }
 
 func changePasswordHandler(w http.ResponseWriter, r *http.Request) {
@@ -3576,18 +3610,8 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	user := globalUsers[user_.UserID]
 	log.Println("user ID in indexHandler =", user.UserID)
 	if valid && username != "admin" {
-
-		linksJSON, err := json.Marshal(json_links)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		var links []Link
-		err = json.Unmarshal(linksJSON, &links)
-		if err != nil {
-			fmt.Println(err)
-			return
+		if user.Links == "" {
+			user.Links = "[]"
 		}
 
 		i := indexDisplay{
@@ -3613,14 +3637,14 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			PaintPrice:     prices.Paint,
 			CryptosEnabled: user.CryptosEnabled,
 			Checked:        checked,
-			Links:          string(linksJSON),
+			Links:          user.Links,
 			Username:       username,
 		}
 
 		fmt.Println("user.MinSol =", user.MinSol)
 		fmt.Println("indexDisplay.MinSol =", i.MinSolana)
 
-		err = donationTemplate.Execute(w, i)
+		err := donationTemplate.Execute(w, i)
 		if err != nil {
 			fmt.Println(err)
 		}

@@ -5,7 +5,7 @@
   <title>User Page</title>
   <link href=style.css rel=stylesheet>
   <script>
-    var MediaEnabled = {{ if .MediaEnabled }} true {{ else }} false {{ end }};
+    var MediaEnabled = {{ if .User.MediaEnabled }} true {{ else }} false {{ end }};
 
 function toggleDonos() { 
   MediaEnabled = !MediaEnabled
@@ -21,15 +21,41 @@ function toggleDonos() {
   }
 }
 
-
+var links = JSON.parse('{{.Links}}')
 window.onload = function() {
   const form = document.querySelector('form');
   const newPasswordInput = document.getElementById('new-password');
   const newPasswordConfirmInput = document.getElementById('new-password-confirm');
   const submitButton = document.getElementById('change-password');
+
+  document.getElementById('update-links-form').addEventListener('submit', updateLinks);
+
+
+   // Get a reference to the container where the links will be inserted.
+  var container = document.getElementById('user-links-container');
+
+  // Iterate over the links and generate HTML for each one.
+  links.forEach(function(link) {
+      // Create the HTML for this link.
+      var html = `
+          <div style="display: flex; align-items: center; justify-content: center; margin-right: 10px;">
+              <button onclick="toggleTextField('${link.description}')" style="cursor: pointer; width: 80%;">
+                  ${link.description}
+              </button>
+              <button onclick="deleteLink('${link.url}')" style="cursor: pointer; width: 20%;">Delete</button>
+          </div>
+          <div id="text-field-${link.description}" style="display: none; align-items: center; justify-content: center; margin-right: 10px;">
+              <input type="text" id="url-field-${link.description}" value="${link.url}" style="width: 80%;">
+              <button onclick="applyLink('${link.description}')" style="cursor: pointer; width: 20%;">Apply</button>
+          </div>
+      `;
+
+      // Append the HTML to the container.
+      container.innerHTML += html;
+  });
   
 
-  let amountThisMonth = {{.BillingData.AmountThisMonth}};
+  let amountThisMonth = {{.User.BillingData.AmountThisMonth}};
 let threePercent = amountThisMonth * 0.03;
 document.getElementById('threePercent').textContent = `$${threePercent.toFixed(2)}`;
 
@@ -60,7 +86,7 @@ document.getElementById('threePercent').textContent = `$${threePercent.toFixed(2
   });
 
    // Get the creation date string from the server-side template
-  const creationDateStr = "{{.CreationDatetime}}";
+  const creationDateStr = "{{.User.CreationDatetime}}";
 
   // Parse the string into a Date object
   const creationDate = new Date(creationDateStr);
@@ -90,8 +116,101 @@ document.getElementById('threePercent').textContent = `$${threePercent.toFixed(2
 
 };
 
+function updateLinks() {
+    // Convert the links array to a JSON string
+    const linksJson = JSON.stringify(links);
 
- 
+    // Set the value of the hidden input field to the JSON string
+    document.getElementById('links-input').value = linksJson;
+}
+
+
+
+
+function addLink() {
+  var description = document.getElementById('new-description').value;
+  var url = document.getElementById('new-url').value;
+
+  // Create a new link object
+  var newLink = {
+    description: description,
+    url: url
+  };
+  
+  links.push(newLink);
+  
+  // Generate the updated HTML code for user links
+  var updatedLinksHTML = "";
+  for (var i = 0; i < links.length; i++) {
+    updatedLinksHTML += `
+      <div style="display: flex; align-items: center; justify-content: center; margin-right: 10px;">
+        <button onclick="toggleTextField('${links[i].description}')" style="cursor: pointer; width: 80%;">
+          ${links[i].description}
+        </button>
+        <button onclick="deleteLink('${links[i].url}')" style="cursor: pointer; width: 20%;">Delete</button>
+      </div>
+      <div id="text-field-${links[i].description}" style="display: none; align-items: center; justify-content: center; margin-right: 10px;">
+        <input type="text" id="url-field-${links[i].url}" value="${links[i].url}" style="width: 80%;">
+        <button onclick="applyLink('${links[i].description}')" style="cursor: pointer; width: 20%;">Apply</button>
+      </div>`;
+  }
+  
+  // Update the HTML content of the user links container
+  document.getElementById('user-links-container').innerHTML = updatedLinksHTML;
+}
+
+function toggleTextField(description) {
+  const textField = document.getElementById(`text-field-${description}`);
+  if (textField) {
+    textField.style.display = textField.style.display === 'none' ? 'flex' : 'none';
+  }
+}
+
+
+function applyLink(description) {
+  const urlField = document.getElementById(`url-field-${description}`);
+  if (urlField) {
+    const newURL = urlField.value;
+
+    // Perform the necessary logic to update the link in the Links variable
+    // After updating the link, you can perform additional actions if needed
+    toggleTextField(description);
+  }
+}
+
+
+  function deleteLink(url) {
+    // Find the index of the link with the given URL
+    var index = links.findIndex(function(link) {
+      return link.url === url;
+    });
+
+    // If the link is found in the array, remove it
+    if (index !== -1) {
+      links.splice(index, 1);
+    }
+
+    // Update the displayed links
+    var updatedLinksHTML = "";
+    for (var i = 0; i < links.length; i++) {
+      updatedLinksHTML += `
+        <div style="display: flex; align-items: center; justify-content: center; margin-right: 10px;">
+          <button onclick="toggleTextField('${links[i].description}')" style="cursor: pointer; width: 80%;">
+            ${links[i].description}
+          </button>
+          <button onclick="deleteLink('${links[i].url}')" style="cursor: pointer; width: 20%;">Delete</button>
+        </div>
+        <div id="text-field-${links[i].description}" style="display: none; align-items: center; justify-content: center; margin-right: 10px;">
+          <input type="text" id="url-field-${links[i].url}" value="${links[i].url}" style="width: 80%;">
+          <button onclick="applyLink('${links[i].description}')" style="cursor: pointer; width: 20%;">Apply</button>
+        </div>`;
+    }
+
+    // Update the HTML content of the user links container
+    document.getElementById('user-links-container').innerHTML = updatedLinksHTML;
+      updateLinks();
+  }
+
 
   </script>
 </head>
@@ -110,7 +229,7 @@ document.getElementById('threePercent').textContent = `$${threePercent.toFixed(2
       <form method="GET" action="/viewdonos">
         <button style="padding: 0 10px 0;">View Donations</button>
       </form>
-      {{ if eq .Username "admin" }}
+      {{ if eq .User.Username "admin" }}
       <form method="GET" action="/usermanager">
         <button style="padding: 0 10px 0;">Admin Dash</button>
       </form>
@@ -120,10 +239,10 @@ document.getElementById('threePercent').textContent = `$${threePercent.toFixed(2
 
 
   <br><br>
-<small><p> <b style="color: lightsteelblue;">Account {{.Username}} created on:</b> <span id="creation-date"></span></p></small>
-  <p> <b style="color: lightsteelblue;"> Total Earnings: </b> ${{.BillingData.AmountTotal}}</p>
+<small><p> <b style="color: lightsteelblue;">Account {{.User.Username}} created on:</b> <span id="creation-date"></span></p></small>
+  <p> <b style="color: lightsteelblue;"> Total Earnings: </b> ${{.User.BillingData.AmountTotal}}</p>
   <p>
-  <b style="color: lightsteelblue;"> Monthly Earnings: </b> ${{.BillingData.AmountThisMonth}} <b style="color: lightsteelblue;">  <small>(3% Fee: </b> <span id="threePercent"></span>) </small></p>
+  <b style="color: lightsteelblue;"> Monthly Earnings: </b> ${{.User.BillingData.AmountThisMonth}} <b style="color: lightsteelblue;">  <small>(3% Fee: </b> <span id="threePercent"></span>) </small></p>
   <button type="button">
       <b style="color: lightsteelblue;"> Days until next payment: </b> 
       <span id="days-left"></span>
@@ -133,14 +252,34 @@ document.getElementById('threePercent').textContent = `$${threePercent.toFixed(2
 
   
   
-  <p id="media-status"> <b style="color: lightsteelblue;">Monero Wallet: </b> {{ if .WalletUploaded }}<b style="color: lightseagreen;">uploaded</b>{{ else }}<b>not yet uploaded.</b>{{ end }}</p>
+  <p id="media-status"> <b style="color: lightsteelblue;">Monero Wallet: </b> {{ if .User.WalletUploaded }}<b style="color: lightseagreen;">uploaded</b>{{ else }}<b>not yet uploaded.</b>{{ end }}</p>
   <form method="GET" action="/cryptosettings">
     <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">View/Change Crypto Settings</button>
   </form>
 
 
-  
-  
+  <hr>
+  <br>
+
+
+</form>
+
+  <h2>User Links</h2>
+  <div id="user-links-container">
+  </div>
+
+  <div style="display: flex; align-items: center; justify-content: center; margin-top: 10px;">
+    <input type="text" id="new-description" placeholder="New Description" style="width: 40%;">
+    <input type="text" id="new-url" placeholder="New URL" style="width: 40%;">
+    <button onclick="addLink()" style="cursor: pointer; width: 20%;">Add</button>
+  </div>
+
+  <form id="update-links-form" method="POST" action="/update-links">
+    <input type="hidden" id="links-input" name="links">
+    <input type="hidden" id="username-input" name="username" value="{{.User.Username}}">
+    <button type="submit">Update Links</button>
+  </form>
+
  <br>
  <br>
 
