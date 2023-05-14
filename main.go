@@ -103,6 +103,13 @@ var prices utils.CryptoPrice
 
 var pbMessage = "Stream Tomorrow"
 
+type Route_ struct {
+	Path    string
+	Handler func(http.ResponseWriter, *http.Request)
+}
+
+var routes_ []Route_
+
 // Define a new template that only contains the table content
 var tableTemplate = template.Must(template.New("table").Parse(`
 	{{range .}}
@@ -340,12 +347,6 @@ func setupRoutes() {
 		http.ServeFile(w, r, "web/style.css")
 	})
 
-	http.HandleFunc("/updatecryptos", updateCryptosHandler)
-
-	http.HandleFunc("/update-links", updateLinksHandler)
-
-	http.HandleFunc("/check_donation_status/", checkDonationStatusHandler)
-
 	http.HandleFunc("/xmr.svg", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/xmr.svg")
 	})
@@ -417,28 +418,37 @@ func setupRoutes() {
 	http.Handle("/media/", http.StripPrefix("/media/", http.FileServer(http.Dir("web/obs/media/"))))
 	http.Handle("/users/", http.StripPrefix("/users/", http.FileServer(http.Dir("users/"))))
 
-	http.HandleFunc("/donations", donationsHandler)
-	http.HandleFunc("/", indexHandler)
-	http.HandleFunc("/termsofservice", tosHandler)
-	http.HandleFunc("/pay", paymentHandler)
-	http.HandleFunc("/alert", alertOBSHandler)
-	http.HandleFunc("/viewdonos", viewDonosHandler)
-	http.HandleFunc("/progressbar", progressbarOBSHandler)
-	http.HandleFunc("/login", loginHandler)
-	http.HandleFunc("/incorrect_login", incorrectLoginHandler)
-	http.HandleFunc("/user", userHandler)
-	http.HandleFunc("/userobs", userOBSHandler)
-	http.HandleFunc("/logout", logoutHandler)
-	http.HandleFunc("/changepassword", changePasswordHandler)
-	http.HandleFunc("/changeuser", changeUserHandler)
-	http.HandleFunc("/register", registerUserHandler)
-	http.HandleFunc("/newaccount", newAccountHandler)
-	http.HandleFunc("/billing", accountBillingHandler)
-	http.HandleFunc("/changeusermonero", changeUserMoneroHandler)
-	http.HandleFunc("/usermanager", allUsersHandler)
-	http.HandleFunc("/refresh", refreshHandler)
-	http.HandleFunc("/toggleUserRegistrations", toggleUserRegistrationsHandler)
-	http.HandleFunc("/cryptosettings", cryptoSettingsHandler)
+	routes_ = []Route_{
+		{"/updatecryptos", updateCryptosHandler},
+		{"/update-links", updateLinksHandler},
+		{"/check_donation_status/", checkDonationStatusHandler},
+		{"/donations", donationsHandler},
+		{"/", indexHandler},
+		{"/termsofservice", tosHandler},
+		{"/pay", paymentHandler},
+		{"/alert", alertOBSHandler},
+		{"/viewdonos", viewDonosHandler},
+		{"/progressbar", progressbarOBSHandler},
+		{"/login", loginHandler},
+		{"/incorrect_login", incorrectLoginHandler},
+		{"/user", userHandler},
+		{"/userobs", userOBSHandler},
+		{"/logout", logoutHandler},
+		{"/changepassword", changePasswordHandler},
+		{"/changeuser", changeUserHandler},
+		{"/register", registerUserHandler},
+		{"/newaccount", newAccountHandler},
+		{"/billing", accountBillingHandler},
+		{"/changeusermonero", changeUserMoneroHandler},
+		{"/usermanager", allUsersHandler},
+		{"/refresh", refreshHandler},
+		{"/toggleUserRegistrations", toggleUserRegistrationsHandler},
+		{"/cryptosettings", cryptoSettingsHandler},
+	}
+
+	for _, route_ := range routes_ {
+		http.HandleFunc(route_.Path, route_.Handler)
+	}
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
 	tosTemplate, _ = template.ParseFiles("web/tos.html")
@@ -3460,6 +3470,9 @@ func returnIPPenalty(ips []string, currentDonoIP string) float64 {
 
 func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
+
+	username = utils.SanitizeStringLetters(username)
+
 	password := r.FormValue("password")
 	isAdmin := checkLoggedInAdmin(w, r)
 	_, validUser := getUserByUsernameCached(username)
@@ -3510,15 +3523,46 @@ func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 		donationLink := fmt.Sprintf("ethereum:%s?value=%s", pendingUser.ETHAddress, pendingUser.ETHNeeded)
 		tmp, _ = qrcode.Encode(donationLink, qrcode.Low, 320)
 		d.QRB64ETH = base64.StdEncoding.EncodeToString(tmp)
+		if !checkUsernamePendingOrCreated(username) {
 
-		err = accountPayTemplate.Execute(w, d)
-		if err != nil {
-			fmt.Println(err)
+			err = accountPayTemplate.Execute(w, d)
+			if err != nil {
+				fmt.Println(err)
+			}
+		} else {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
 		}
 	} else {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
+}
+
+func checkUsernamePendingOrCreated(username_ string) bool {
+	username := strings.ToLower(username_)
+	for _, route_ := range routes_ {
+		if utils.SanitizeStringLetters(route_.Path) == username {
+			return true
+		}
+	}
+
+	for _, user := range pendingGlobalUsers {
+		if user.Username == username {
+			return true
+		}
+
+	}
+
+	for _, user := range globalUsers {
+		if user.Username == username {
+			return true
+		}
+
+	}
+
+	return false
+
 }
 
 func accountBillingHandler(w http.ResponseWriter, r *http.Request) {

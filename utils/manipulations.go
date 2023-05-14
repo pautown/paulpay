@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 func StandardizeString(str_ string) (string, error) {
@@ -16,6 +17,17 @@ func StandardizeString(str_ string) (string, error) {
 func StandardizeFloatToString(fl_ float64) (string, error) {
 	str_ := FloatToString(fl_)
 	return ConvertStringTo18DecimalPlaces(str_)
+}
+
+func SanitizeStringLetters(str string) string {
+	newS := strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) {
+			return r
+		}
+		return -1
+	}, str)
+
+	return newS
 }
 
 func PruneStringDecimals(str string, dec_ int) string {
