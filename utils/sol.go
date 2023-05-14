@@ -69,43 +69,24 @@ type Transaction struct {
 }
 
 // Create a struct to represent the data
-type Wallet struct {
+type SolWallet struct {
   Address string  `json:"address"`
   Amount  float64 `json:"amount"`
 }
 
 // Define a slice of Transaction objects
 var transactions []Transaction
-var wallets []Wallet
-var addresses []string
+var solWallets = map[int]SolWallet{}
 
 var firstRun bool = true
 
 // Mainnet
 var solClient = client.NewClient("https://api.mainnet-beta.solana.com")
 
-func StartMonitoringSolana(addrs []string) {
-  uniqueAddrs := removeDuplicates(addrs)
-  addresses = uniqueAddrs
-  getTransactionsForAddressesFirst()
-  time.Sleep(10 * time.Second)
+func StartMonitoringSolana() {
   for {
     getTransactionsForAddresses()
   }
-}
-
-func removeDuplicates(addrs []string) []string {
-  uniqueMap := make(map[string]bool)
-  uniqueAddrs := []string{}
-
-  for _, addr := range addrs {
-    if !uniqueMap[addr] {
-      uniqueMap[addr] = true
-      uniqueAddrs = append(uniqueAddrs, addr)
-    }
-  }
-
-  return uniqueAddrs
 }
 
 func CheckTransactionSolana(amt string, addr string, max_depth int) bool {
@@ -130,50 +111,58 @@ func CheckTransactionSolana(amt string, addr string, max_depth int) bool {
   return false
 }
 
+func SetSolWallets(sW map[int]SolWallet) {
+  solWallets = sW
+}
 func getTransactionsForAddresses() {
-  for _, addr := range addresses {
-    if checkSameBalanceSol(addr) {
-      fmt.Println("SOL:", addr[:7]+".. no new txs.")
-      time.Sleep(10 * time.Second)
-    }
-    endpoint := rpc.MainNetBeta_RPC
-    client := rpc.New(endpoint)
-    out, err := client.GetSignaturesForAddress(
-      context.TODO(),
-      solana.MustPublicKeyFromBase58(addr),
-    )
-    if err != nil {
-      panic(err)
-    }
-    for _, sig := range out {
-      tAmount, newTrans := getTransactionAmount(sig.Signature.String(), addr)
-      if newTrans {
-        addSolanaTransaction(addr, sig.Signature.String(), tAmount)
-      } else {
-        fmt.Println("SOL: No new", addr[:7]+"... txs.")
-      }
+  for _, wallet := range solWallets {
+    sameBalance := false
 
-      time.Sleep(6 * time.Second)
+    wallet, sameBalance = checkSameBalanceSol(wallet)
+
+    if sameBalance {
+      fmt.Println("SOL:", wallet.Address[:7]+".. no new txs.")
+      time.Sleep(10 * time.Second)
+    } else {
+      endpoint := rpc.MainNetBeta_RPC
+      client := rpc.New(endpoint)
+      out, err := client.GetSignaturesForAddress(
+        context.TODO(),
+        solana.MustPublicKeyFromBase58(wallet.Address),
+      )
+      if err != nil {
+        panic(err)
+      }
+      for _, sig := range out {
+        tAmount, newTrans := getTransactionAmount(sig.Signature.String(), wallet.Address)
+        if newTrans {
+          addSolanaTransaction(wallet.Address, sig.Signature.String(), tAmount)
+        } else {
+          fmt.Println("SOL: No new", wallet.Address[:7]+"... txs.")
+        }
+
+        time.Sleep(6 * time.Second)
+      }
+      time.Sleep(5 * time.Second)
     }
-    time.Sleep(5 * time.Second)
   }
 
 }
 
 func getTransactionsForAddressesFirst() {
-  for _, addr := range addresses {
+  for _, wallet := range solWallets {
     endpoint := rpc.MainNetBeta_RPC
     client := rpc.New(endpoint)
     out, err := client.GetSignaturesForAddress(
       context.TODO(),
-      solana.MustPublicKeyFromBase58(addr),
+      solana.MustPublicKeyFromBase58(wallet.Address),
     )
     if err != nil {
       panic(err)
     }
 
     for _, sig := range out {
-      addSolanaTransactionStart(addr, sig.Signature.String())
+      addSolanaTransactionStart(wallet.Address, sig.Signature.String())
     }
 
     time.Sleep(5 * time.Second)
@@ -229,25 +218,18 @@ func containsTransaction(sig string) bool {
   return false
 }
 
-func checkSameBalanceSol(address string) bool {
-  amt, _ := getSOLBalance(address)
-  for _, wallet := range wallets {
-    if wallet.Address == address {
-      if amt == wallet.Amount {
-        return true
-      } else {
-        return false
-      }
-    }
+func checkSameBalanceSol(wallet SolWallet) (SolWallet, bool) {
+  amt, _ := getSOLBalance(wallet.Address)
+  if wallet.Amount <= 1 {
+    wallet.Amount = amt
+    return wallet, true
   }
-
-  // if wallet isn't in the wallets slice, add it to the wallet slice
-  wallet := Wallet{
-    Address: address,
-    Amount:  amt,
+  if amt == wallet.Amount {
+    return wallet, true
+  } else {
+    wallet.Amount = amt
+    return wallet, false
   }
-  wallets = append(wallets, wallet)
-  return false
 
 }
 

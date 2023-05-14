@@ -79,6 +79,8 @@ var eth_transactions []utils.Transfer
 var minSolana, minMonero, minEthereum, minPaint, minHex, minPolygon, minBusd, minShib, minUsdc, minTusd, minWbtc, minPnk float64 // Global variables to hold minimum values required to equal the global value.
 var minDonoValue float64 = 5.0
 
+var solWallets = map[int]utils.SolWallet{}
+
 var PublicRegistrationsEnabled = false
 
 var ServerMinMediaDono = 5
@@ -262,7 +264,7 @@ func main() {
 
 	setServerVars()
 
-	go createTestDono(2, "Big Bob", "XMR", "This Cruel Message is Bob's Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", "50", 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
+	//go createTestDono(2, "Big Bob", "XMR", "This Cruel Message is Bob's Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", "50", 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 	// go createTestDono("Medium Bob", "XMR", "Hey it's medium Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
 
 	err = http.ListenAndServe(":8900", nil)
@@ -498,11 +500,15 @@ func startWallets() {
 	}
 
 	fmt.Println("startWallet() starting monitoring of solana addresses.")
-	var solAddrs []string
 	for _, user := range users {
-		solAddrs = append(solAddrs, user.SolAddress)
+		solWallets[user.UserID] = utils.SolWallet{
+			Address: user.SolAddress,
+			Amount:  0.00,
+		}
 	}
-	go utils.StartMonitoringSolana(solAddrs)
+
+	utils.SetSolWallets(solWallets)
+	go utils.StartMonitoringSolana()
 }
 
 func checkValidSubscription(DateEnabled time.Time) bool {
@@ -2140,11 +2146,12 @@ func getObsData(db *sql.DB, userId int) utils.OBSDataStruct {
 	return tempObsData
 }
 
-func createNewUser(username, password string) {
+func createNewUser(username, password string) error {
 	log.Println("running createNewUser")
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Println(err)
+		return err
 	}
 	// create admin user if not exists
 	user := getNewUser(username, hashedPassword)
@@ -2157,6 +2164,7 @@ func createNewUser(username, password string) {
 	}
 
 	log.Println("finished createNewUser")
+	return nil
 }
 
 func createUser(user utils.User) int {
@@ -2167,12 +2175,12 @@ func createUser(user utils.User) int {
 		XMR:   false,
 		SOL:   true,
 		ETH:   true,
-		PAINT: false,
-		HEX:   false,
-		MATIC: false,
-		BUSD:  false,
-		SHIB:  false,
-		PNK:   false,
+		PAINT: true,
+		HEX:   true,
+		MATIC: true,
+		BUSD:  true,
+		SHIB:  true,
+		PNK:   true,
 	}
 
 	ce_ := cryptosStructToJSONString(ce)
@@ -2243,8 +2251,7 @@ func createUser(user utils.User) int {
     `, billing.UserID, billing.AmountThisMonth, billing.AmountTotal, billing.Enabled, billing.NeedToPay, "", "", "", billing.CreatedAt, billing.CreatedAt)
 
 	user.BillingData = billing
-
-	globalUsers[user.UserID] = user
+	globalUsers[userID] = user
 
 	log.Printf("BillingData.Enabled: %v", billing.Enabled)
 
@@ -2276,6 +2283,12 @@ func createUser(user utils.User) int {
 
 	minDonoValue = float64(user.MinDono)
 	log.Println("finished createNewUser")
+
+	_, err = getAllUsers()
+	if err != nil {
+		log.Fatalf("createUser() getAllUsers() error:", err)
+	}
+
 	return userID
 }
 
@@ -2307,6 +2320,13 @@ func updateUser(user utils.User) error {
 	if err != nil {
 		log.Fatalf("failed, err: %v", err)
 	}
+
+	solWallets[user.UserID] = utils.SolWallet{
+		Address: user.SolAddress,
+		Amount:  0.00,
+	}
+
+	utils.SetSolWallets(solWallets)
 	return err
 }
 
@@ -2407,7 +2427,6 @@ func getUserBySessionCached(sessionToken string) (utils.User, bool) {
 }
 
 func getUserByUsernameCached(username string) (utils.User, bool) {
-
 	for _, user := range globalUsers {
 		if user.Username == username {
 			return user, true
@@ -2623,17 +2642,15 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		username := r.FormValue("username")
 		password := r.FormValue("password")
 
-		user, err := getUserByUsername(username)
+		log.Println("username:", username, "password:", password)
 
-		if err != nil {
-			if err.Error() == "sql: no rows in result set" { // can't find username in DB
-				http.Redirect(w, r, "/incorrect_login", http.StatusFound)
-				return
-			}
+		user, valid := getUserByUsernameCached(username)
 
-			log.Println(err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		if !valid {
+			log.Println("Can't find username")
+			http.Redirect(w, r, "/incorrect_login", http.StatusFound)
 			return
+
 		}
 
 		if user.UserID == 0 || !verifyPassword(user, password) {
@@ -3483,17 +3500,14 @@ func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isAdmin {
-		createNewUser(username, password)
-		cookie, _ := r.Cookie("session_token")
-		user, _ := getUserBySessionCached(cookie.Value)
-
-		tmpl, err := template.ParseFiles("web/user.html")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		log.Println("username:", username, "password:", password)
+		err_ := createNewUser(username, password)
+		if err_ != nil {
+			log.Println(err_)
 		}
 
-		tmpl.Execute(w, user)
+		http.Redirect(w, r, "/user", http.StatusSeeOther)
+		return
 	} else if PublicRegistrationsEnabled {
 		pendingUser, err := createNewPendingUser(username, password)
 		if err != nil {
