@@ -53,6 +53,7 @@ var addressSliceSolana []utils.AddressSolana
 var checked string = ""
 var killDono = 20.00 * time.Minute // hours it takes for a dono to be unfulfilled before it is no longer checked.
 var indexTemplate *template.Template
+var tosTemplate *template.Template
 var registerTemplate *template.Template
 var donationTemplate *template.Template
 var payTemplate *template.Template
@@ -418,6 +419,7 @@ func setupRoutes() {
 
 	http.HandleFunc("/donations", donationsHandler)
 	http.HandleFunc("/", indexHandler)
+	http.HandleFunc("/termsofservice", tosHandler)
 	http.HandleFunc("/pay", paymentHandler)
 	http.HandleFunc("/alert", alertOBSHandler)
 	http.HandleFunc("/viewdonos", viewDonosHandler)
@@ -439,6 +441,7 @@ func setupRoutes() {
 	http.HandleFunc("/cryptosettings", cryptoSettingsHandler)
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
+	tosTemplate, _ = template.ParseFiles("web/tos.html")
 	registerTemplate, _ = template.ParseFiles("web/new_account.html")
 	donationTemplate, _ = template.ParseFiles("web/donation.html")
 	footerTemplate, _ = template.ParseFiles("web/footer.html")
@@ -3306,6 +3309,21 @@ func cryptoSettingsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+func tosHandler(w http.ResponseWriter, r *http.Request) {
+	// Ignore requests for the favicon
+	if r.URL.Path == "/favicon.ico" {
+		return
+	}
+
+	// If no username is present in the URL path, serve the indexTemplate
+	err := tosTemplate.Execute(w, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {

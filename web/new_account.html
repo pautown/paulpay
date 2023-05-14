@@ -1,64 +1,79 @@
 <!DOCTYPE html>
 <html>    
 <head>
-	<link href=style.css rel=stylesheet>
+    <link href=style.css rel=stylesheet>
     <link href=fcash.png rel=icon>
-	<meta charset="UTF-8">
+    <meta charset="UTF-8">
 
-	<title>ferret.cash Registration</title>
+    <title>ferret.cash Registration</title>
+    <style>
+        .small-checkbox {
+            transform: scale(0.5);
+            margin-right: 8px;
+        }
+    </style>
 </head>
 <body>
-	<h1>Create New Account</h1>
-	<form method="POST" action="/newaccount">
-		<label for="username">Username:</label>
-		<input type="text" id="username" name="username" required><br><br>
-		<label for="password">New Password:</label>
-	    <input type="password" id="password" name="new_password" required><br><br>
-	    <label for="password-confirm">Confirm New Password:</label>
-	    <input type="password" id="password-confirm" name="password_confirm" required><br><br>
-	    <button type="submit" id="register-submit">Register account</button>
-	</form>
+    <h1>Create New Account</h1>
+    <form method="POST" action="/newaccount">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required><br><br>
+        <label for="password">New Password:</label>
+        <input type="password" id="password" name="new_password" required><br><br>
+        <label for="password-confirm">Confirm New Password:</label>
+        <input type="password" id="password-confirm" name="password_confirm" required><br><br>
+        <small>
+	        <div style="display: flex; align-items: center;">
+		        <label style="width: 80%;" for="terms">I have read and accepted the <a href="http://www.ferret.cash/termsofservice" target="_blank">Terms of Service</a></label>
+		        <input type="checkbox" id="terms" style="width: 20%;" name="terms" required class="small-checkbox">
+	        </div>
+	    </small>
+        <button type="submit" id="register-submit">Register account</button>
+    </form>
 
-	<footer>
+    <footer>
         <small><small>
             <p>Ferret Cash &copy; 2023. Developed by <a href="http://www.paul.town/" target="_blank">Paul Town</a> with <a href="https://github.com/pautown/paulpay" target="_blank">PayPaul Source Code</a></p>
         </small></small>
     </footer>
 
     <script>
-    	window.onload = function() {
-		  const form = document.querySelector('form');
-		  const newPasswordInput = document.getElementById('password');
-		  const newPasswordConfirmInput = document.getElementById('password-confirm');
-		  const submitButton = document.getElementById('register-submit');
-		  
-		  function validatePassword() {
-		    if (newPasswordInput.value !== newPasswordConfirmInput.value) {
-		      newPasswordConfirmInput.setCustomValidity("Passwords don't match");
-		      submitButton.disabled = true;
-		      submitButton.textContent = "Passwords Don't Match";
-		    } else if (newPasswordInput.value === '' || newPasswordConfirmInput.value === '') {
-		      submitButton.disabled = true;
-		      submitButton.textContent = "Register account";
-		    } else {
-		      newPasswordConfirmInput.setCustomValidity('');
-		      submitButton.disabled = false;
-		      submitButton.textContent = "Register account";
-		    }
-		  }
+        window.onload = function() {
+          const form = document.querySelector('form');
+          const newPasswordInput = document.getElementById('password');
+          const newPasswordConfirmInput = document.getElementById('password-confirm');
+          const submitButton = document.getElementById('register-submit');
+          const termsCheckbox = document.getElementById('terms');
+          
+          function validateForm() {
+            if (newPasswordInput.value !== newPasswordConfirmInput.value) {
+              newPasswordConfirmInput.setCustomValidity("Passwords don't match");
+              submitButton.disabled = true;
+              submitButton.textContent = "Passwords Don't Match";
+            } else if (!termsCheckbox.checked) {
+              submitButton.disabled = true;
+              submitButton.textContent = "Must Accept Terms";
+            } else if (newPasswordInput.value === '' || newPasswordConfirmInput.value === '') {
+              submitButton.disabled = true;
+              submitButton.textContent = "Register account";
+            } else {
+              newPasswordConfirmInput.setCustomValidity('');
+              submitButton.disabled = false;
+              submitButton.textContent = "Register account";
+            }
+          }
 
-		  newPasswordInput.addEventListener('input', validatePassword);
-		  newPasswordConfirmInput.addEventListener('input', validatePassword);
+          newPasswordInput.addEventListener('input', validateForm);
+          newPasswordConfirmInput.addEventListener('input', validateForm);
+          termsCheckbox.addEventListener('change', validateForm);
 
-		  form.addEventListener('submit', function(event) {
-		    if (newPasswordInput.value !== newPasswordConfirmInput.value) {
-		      event.preventDefault();
-		      alert('Passwords do not match');
-		    }
-		  });
-		};
-
+          form.addEventListener('submit', function(event) {
+            if (newPasswordInput.value !== newPasswordConfirmInput.value) {
+              event.preventDefault();
+              alert('Passwords do not match');
+            }
+          });
+        };
     </script>
 </body>
 </html>
-
