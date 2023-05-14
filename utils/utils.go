@@ -1,11 +1,13 @@
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/shopspring/decimal"
 	"log"
 	"math"
 	"math/rand"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -18,6 +20,8 @@ var contracts = map[string]string{
 	"SHIBA_INU": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
 	"PNK":       "0x93ed3fbe21207ec2e8f2d3c3de6e058cb73bc04d",
 }
+
+var prices = CryptoPrice{}
 
 var cryptoMap = map[string]map[string]interface{}{
 	"paint": {
@@ -102,6 +106,37 @@ func GetTokenName(contractAddr string) string {
 	default:
 		return "UNKNOWN"
 	}
+}
+
+func GetCryptoPrices() (CryptoPrice, error) {
+
+	// Call the Coingecko API to get the current price for each cryptocurrency
+	url := "https://api.coingecko.com/api/v3/simple/price?ids=monero,solana,ethereum,paint,hex,matic-network,binance-usd,shiba-inu,kleros&vs_currencies=usd"
+	resp, err := http.Get(url)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	var data map[string]map[string]float64
+	err = json.NewDecoder(resp.Body).Decode(&data)
+	if err != nil {
+		return prices, err
+	}
+
+	prices = CryptoPrice{
+		Monero:     data["monero"]["usd"],
+		Solana:     data["solana"]["usd"],
+		Ethereum:   data["ethereum"]["usd"],
+		Paint:      data["paint"]["usd"],
+		Hexcoin:    data["hex"]["usd"],
+		Polygon:    data["matic-network"]["usd"],
+		BinanceUSD: data["binance-usd"]["usd"],
+		ShibaInu:   data["shiba-inu"]["usd"],
+		Kleros:     data["kleros"]["usd"],
+	}
+
+	return prices, nil
 }
 
 func GetCryptoContractByCode(code string) (string, error) {

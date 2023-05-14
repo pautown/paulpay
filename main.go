@@ -757,37 +757,6 @@ func getActiveXMRUsers(db *sql.DB) ([]*utils.User, error) {
 	return users, nil
 }
 
-func getCryptoPrices() (utils.CryptoPrice, error) {
-
-	// Call the Coingecko API to get the current price for each cryptocurrency
-	url := "https://api.coingecko.com/api/v3/simple/price?ids=monero,solana,ethereum,paint,hex,matic-network,binance-usd,shiba-inu,kleros&vs_currencies=usd"
-	resp, err := http.Get(url)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	var data map[string]map[string]float64
-	err = json.NewDecoder(resp.Body).Decode(&data)
-	if err != nil {
-		panic(err)
-	}
-
-	prices := utils.CryptoPrice{
-		Monero:     data["monero"]["usd"],
-		Solana:     data["solana"]["usd"],
-		Ethereum:   data["ethereum"]["usd"],
-		Paint:      data["paint"]["usd"],
-		Hexcoin:    data["hex"]["usd"],
-		Polygon:    data["matic-network"]["usd"],
-		BinanceUSD: data["binance-usd"]["usd"],
-		ShibaInu:   data["shiba-inu"]["usd"],
-		Kleros:     data["kleros"]["usd"],
-	}
-
-	return prices, nil
-}
-
 func getUserCryptosEnabled(user utils.User) (utils.User, error) {
 
 	user.CryptosEnabled.XMR = false
@@ -993,8 +962,14 @@ func setMinDonos() {
 func fetchExchangeRates() {
 	for {
 		// Fetch the exchange rate data from the API
-		prices, _ = getCryptoPrices()
-		setMinDonos()
+		var err error
+		prices, err = utils.GetCryptoPrices()
+		if err != nil {
+			log.Println(err)
+		} else {
+			setMinDonos()
+		}
+
 		time.Sleep(80 * time.Second)
 	}
 
