@@ -2642,8 +2642,6 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		username := r.FormValue("username")
 		password := r.FormValue("password")
 
-		log.Println("username:", username, "password:", password)
-
 		user, valid := getUserByUsernameCached(username)
 
 		if !valid {
@@ -3605,7 +3603,6 @@ func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isAdmin {
-		log.Println("username:", username, "password:", password)
 		err_ := createNewUser(username, password)
 		if err_ != nil {
 			log.Println(err_)
