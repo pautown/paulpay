@@ -3232,6 +3232,30 @@ func checkUserSound(userpath string) bool {
 	return b
 }
 
+func checkUserMoneroWallet(userpath string) bool {
+	up := userpath + "monero/wallet"
+	//log.Println("checking", up)
+	b := checkFileExists(up)
+	if b {
+		log.Println("user wallet exists")
+	} else {
+		log.Println("user wallet doesn't exist")
+	}
+	return b
+}
+
+func checkUserMoneroWalletKeys(userpath string) bool {
+	up := userpath + "monero/wallet"
+	//log.Println("checking", up)
+	b := checkFileExists(up)
+	if b {
+		log.Println("user wallet keys exists")
+	} else {
+		log.Println("user wallet keys doesn't exist")
+	}
+	return b
+}
+
 func alertOBSHandler(w http.ResponseWriter, r *http.Request) {
 	value := r.URL.Query().Get("value")
 	user, _ := getUserByAlertURL(value)
@@ -3309,7 +3333,6 @@ func cryptosJsonStringToStruct(jsonStr string) utils.CryptosEnabled {
 }
 
 func cryptoSettingsHandler(w http.ResponseWriter, r *http.Request) {
-
 	cookie, err := r.Cookie("session_token")
 	if err != nil {
 		fmt.Println(err)
@@ -3318,19 +3341,101 @@ func cryptoSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, valid := getUserBySessionCached(cookie.Value)
-	if !valid {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+	if !valid || r.Method == http.MethodPost {
+		http.Redirect(w, r, "/user", http.StatusSeeOther)
 		return
-	}
+	} else {
+		userPath := getUserPathByID(user.UserID)
+		moneroWalletString := "monero wallet not uploaded"
+		moneroWalletKeysString := "monero wallet not key uploaded"
 
-	if r.Method != http.MethodPost {
+		if checkUserMoneroWallet(userPath) {
+			moneroWalletString = "monero wallet uploaded"
+		}
+
+		if checkUserMoneroWalletKeys(userPath) {
+			moneroWalletKeysString = "monero wallet key uploaded"
+		}
+
+		data := struct {
+			UserID                 int
+			Username               string
+			HashedPassword         []byte
+			EthAddress             string
+			SolAddress             string
+			HexcoinAddress         string
+			XMRWalletPassword      string
+			MinDono                int
+			MinMediaDono           int
+			MediaEnabled           bool
+			CreationDatetime       string
+			ModificationDatetime   string
+			Links                  string
+			DonoGIF                string
+			DonoSound              string
+			AlertURL               string
+			MinSol                 float64
+			MinEth                 float64
+			MinXmr                 float64
+			MinPaint               float64
+			MinHex                 float64
+			MinMatic               float64
+			MinBusd                float64
+			MinShib                float64
+			MinUsdc                float64
+			MinTusd                float64
+			MinWbtc                float64
+			MinPnk                 float64
+			DateEnabled            time.Time
+			WalletUploaded         bool
+			CryptosEnabled         utils.CryptosEnabled
+			BillingData            utils.BillingData
+			MoneroWalletString     string
+			MoneroWalletKeysString string
+		}{
+			UserID:                 user.UserID,
+			Username:               user.Username,
+			HashedPassword:         user.HashedPassword,
+			EthAddress:             user.EthAddress,
+			SolAddress:             user.SolAddress,
+			HexcoinAddress:         user.HexcoinAddress,
+			XMRWalletPassword:      user.XMRWalletPassword,
+			MinDono:                user.MinDono,
+			MinMediaDono:           user.MinMediaDono,
+			MediaEnabled:           user.MediaEnabled,
+			CreationDatetime:       user.CreationDatetime,
+			ModificationDatetime:   user.ModificationDatetime,
+			Links:                  user.Links,
+			DonoGIF:                user.DonoGIF,
+			DonoSound:              user.DonoSound,
+			AlertURL:               user.AlertURL,
+			MinSol:                 user.MinSol,
+			MinEth:                 user.MinEth,
+			MinXmr:                 user.MinXmr,
+			MinPaint:               user.MinPaint,
+			MinHex:                 user.MinHex,
+			MinMatic:               user.MinMatic,
+			MinBusd:                user.MinBusd,
+			MinShib:                user.MinShib,
+			MinUsdc:                user.MinUsdc,
+			MinTusd:                user.MinTusd,
+			MinWbtc:                user.MinWbtc,
+			MinPnk:                 user.MinPnk,
+			DateEnabled:            user.DateEnabled,
+			WalletUploaded:         user.WalletUploaded,
+			CryptosEnabled:         user.CryptosEnabled,
+			BillingData:            user.BillingData,
+			MoneroWalletString:     moneroWalletString,
+			MoneroWalletKeysString: moneroWalletKeysString,
+		}
+
 		tmpl, err := template.ParseFiles("web/cryptoselect.html")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		err = tmpl.Execute(w, user)
+		err = tmpl.Execute(w, data)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

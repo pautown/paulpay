@@ -118,24 +118,24 @@
 
   </form>
     <hr>
-      <form method="POST" action="/changeusermonero"enctype="multipart/form-data">
+      <form method="POST" action="/changeusermonero" enctype="multipart/form-data">
   <label for="moneroWallet"><b style="color: lightsteelblue;">View-Only Monero Wallet:</b></label>
   <input type="file" id="moneroWallet" name="moneroWallet">
-  <label for="moneroWallet"><b style="color: lightsteelblue;">View-Only Monero Wallet Keys:</b></label>
+  <small><small>{{.MoneroWalletString}}</small></small>
+  <br><br>
+  <label for="moneroWalletKeys"><b style="color: lightsteelblue;">View-Only Monero Wallet Keys:</b></label>
   <input type="file" id="moneroWalletKeys" name="moneroWalletKeys" accept=".keys">
-  <small><small>Note: It will take a few minutes after uploading for the XMR wallet to work. The wallet needs to catch up with the network.</small></small>
+  <small><small>{{.MoneroWalletKeysString}}</small></small>
   
   <br>
     <br>
-  <input type="submit" value="Upload Monero Wallets" id="update-profile">
-  <hr>
-  <br> 
-  
-  <p id="media-status">Media donations are currently {{ if .MediaEnabled }}enabled{{ else }}<b>disabled</b>{{ end }}</p>
+  <input type="submit" value="Upload Monero Wallets" id="upload-button" disabled>
 
-   
-  <button type="button" id="toggle-media-donos" onclick="toggleDonos()">Turn Media Donations  {{ if .MediaEnabled }}OFF{{ else }} ON{{ end }}</button>
-  </form>
+  <small><small>Note: It will take a few minutes after uploading for the XMR wallet to work. The wallet needs to catch up with the network.</small></small>
+  <br><br>
+  
+</form>
+
 
 </div>
 <footer>
@@ -188,6 +188,21 @@ async function sendSelectedCryptos(userId, selectedCryptos) {
         console.error('Server error message:', responseBody);
     }
 }
+
+
+document.getElementById('moneroWallet').onchange = checkFiles;
+  document.getElementById('moneroWalletKeys').onchange = checkFiles;
+
+  function checkFiles() {
+    const walletFile = document.getElementById('moneroWallet').files[0];
+    const keysFile = document.getElementById('moneroWalletKeys').files[0];
+
+    if (walletFile && keysFile) {
+      document.getElementById('upload-button').disabled = false;
+    } else {
+      document.getElementById('upload-button').disabled = true;
+    }
+  }
 
 
 </script>
