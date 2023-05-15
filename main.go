@@ -3509,35 +3509,35 @@ func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/user", http.StatusSeeOther)
 		return
 	} else if PublicRegistrationsEnabled {
-		pendingUser, err := createNewPendingUser(username, password)
-		if err != nil {
-			log.Println(err)
-		}
-
-		xmrNeeded, err := strconv.ParseFloat(pendingUser.XMRNeeded, 64)
-		if err != nil {
-			// Handle the error
-		}
-
-		xmrNeededFormatted := fmt.Sprintf("%.5f", xmrNeeded)
-
-		d := utils.AccountPayData{
-			Username:    pendingUser.Username,
-			AmountXMR:   xmrNeededFormatted,
-			AmountETH:   pendingUser.ETHNeeded,
-			AddressXMR:  pendingUser.XMRAddress,
-			AddressETH:  pendingUser.ETHAddress,
-			UserID:      pendingUser.ID,
-			DateCreated: time.Now().UTC(),
-		}
-
-		tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", pendingUser.XMRAddress, pendingUser.XMRNeeded), qrcode.Low, 320)
-		d.QRB64XMR = base64.StdEncoding.EncodeToString(tmp)
-
-		donationLink := fmt.Sprintf("ethereum:%s?value=%s", pendingUser.ETHAddress, pendingUser.ETHNeeded)
-		tmp, _ = qrcode.Encode(donationLink, qrcode.Low, 320)
-		d.QRB64ETH = base64.StdEncoding.EncodeToString(tmp)
 		if !checkUsernamePendingOrCreated(username) {
+			pendingUser, err := createNewPendingUser(username, password)
+			if err != nil {
+				log.Println(err)
+			}
+
+			xmrNeeded, err := strconv.ParseFloat(pendingUser.XMRNeeded, 64)
+			if err != nil {
+				// Handle the error
+			}
+
+			xmrNeededFormatted := fmt.Sprintf("%.5f", xmrNeeded)
+
+			d := utils.AccountPayData{
+				Username:    pendingUser.Username,
+				AmountXMR:   xmrNeededFormatted,
+				AmountETH:   pendingUser.ETHNeeded,
+				AddressXMR:  pendingUser.XMRAddress,
+				AddressETH:  pendingUser.ETHAddress,
+				UserID:      pendingUser.ID,
+				DateCreated: time.Now().UTC(),
+			}
+
+			tmp, _ := qrcode.Encode(fmt.Sprintf("monero:%s?tx_amount=%s", pendingUser.XMRAddress, pendingUser.XMRNeeded), qrcode.Low, 320)
+			d.QRB64XMR = base64.StdEncoding.EncodeToString(tmp)
+
+			donationLink := fmt.Sprintf("ethereum:%s?value=%s", pendingUser.ETHAddress, pendingUser.ETHNeeded)
+			tmp, _ = qrcode.Encode(donationLink, qrcode.Low, 320)
+			d.QRB64ETH = base64.StdEncoding.EncodeToString(tmp)
 
 			err = accountPayTemplate.Execute(w, d)
 			if err != nil {
