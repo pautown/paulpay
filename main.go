@@ -580,10 +580,10 @@ func toggleUserRegistrationsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func refreshHandler(w http.ResponseWriter, r *http.Request) {
-
-	user, _ := getUserByUsernameCached(r.FormValue("username"))
-	renewUserSubscription(user)
-
+	if checkLoggedInAdmin(w, r) {
+		user, _ := getUserByUsernameCached(r.FormValue("username"))
+		renewUserSubscription(user)
+	}
 	allUsersHandler(w, r)
 }
 
@@ -1232,6 +1232,8 @@ func checkAccountBillings() {
 						user.BillingData.NeedToPay = true
 						user.BillingData.Enabled = true
 					}
+				} else {
+					renewUserSubscription(user)
 				}
 			}
 		}
