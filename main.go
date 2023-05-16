@@ -2642,6 +2642,7 @@ func verifyPassword(user utils.User, password string) bool {
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		username := r.FormValue("username")
+		username = strings.ToLower(username)
 		password := r.FormValue("password")
 
 		user, valid := getUserByUsernameCached(username)
@@ -3465,6 +3466,8 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Get the username from the URL path
 	username := r.URL.Path[1:]
+
+	username = strings.ToLower(username)
 	user_, valid := getUserByUsernameCached(username)
 	// Calculate all minimum donations
 	user := globalUsers[user_.UserID]
