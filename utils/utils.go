@@ -114,7 +114,7 @@ func GetCryptoPrices() (CryptoPrice, error) {
 	url := "https://api.coingecko.com/api/v3/simple/price?ids=monero,solana,ethereum,paint,hex,matic-network,binance-usd,shiba-inu,kleros&vs_currencies=usd"
 	resp, err := http.Get(url)
 	if err != nil {
-		panic(err)
+		return prices, err
 	}
 	defer resp.Body.Close()
 

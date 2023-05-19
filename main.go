@@ -610,12 +610,12 @@ func getAllUsers() ([]utils.User, error) {
 
 	for rows.Next() {
 		var user utils.User
-		var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString
+		var links, donoGIF, donoSound, alertURL, defaultCrypto, cryptosEnabled sql.NullString
 
 		err = rows.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 			&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
 			&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound,
-			&alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
+			&alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled, &defaultCrypto)
 
 		if err != nil {
 			return nil, err
@@ -634,6 +634,11 @@ func getAllUsers() ([]utils.User, error) {
 		user.DonoSound = donoSound.String
 		if !donoSound.Valid {
 			user.DonoSound = "default.mp3"
+		}
+
+		user.DefaultCrypto = defaultCrypto.String
+		if !defaultCrypto.Valid {
+			user.DefaultCrypto = ""
 		}
 
 		user.AlertURL = alertURL.String
@@ -1823,6 +1828,11 @@ func runDatabaseMigrations(db *sql.DB) error {
 			return err
 		}
 
+		err = addColumnIfNotExist(db, table, "default_crypto", "TEXT")
+		if err != nil {
+			return err
+		}
+
 		err = addColumnIfNotExist(db, table, "dono_sound", "TEXT")
 		if err != nil {
 			return err
@@ -2206,9 +2216,10 @@ func createUser(user utils.User) int {
             alert_url,
             date_enabled,
             wallet_uploaded,
-            cryptos_enabled
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now().UTC(), time.Now(), "", user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, 0, ce_)
+            cryptos_enabled,
+            default_crypto
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now().UTC(), time.Now(), "", user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, 0, ce_, user.DefaultCrypto)
 
 	if err != nil {
 		log.Println(err)
@@ -2300,12 +2311,12 @@ func updateUser(user utils.User) error {
 	statement := `
 		UPDATE users
 		SET Username=?, HashedPassword=?, eth_address=?, sol_address=?, hex_address=?,
-			xmr_wallet_password=?, min_donation_threshold=?, min_media_threshold=?, media_enabled=?, modified_at=?, links=?, dono_gif=?, dono_sound=?, alert_url=?, date_enabled=?, wallet_uploaded=?, cryptos_enabled=?
+			xmr_wallet_password=?, min_donation_threshold=?, min_media_threshold=?, media_enabled=?, modified_at=?, links=?, dono_gif=?, dono_sound=?, alert_url=?, date_enabled=?, wallet_uploaded=?, cryptos_enabled=?, default_crypto=?
 		WHERE id=?
 	`
 	_, err := db.Exec(statement, user.Username, user.HashedPassword, user.EthAddress,
 		user.SolAddress, user.HexcoinAddress, user.XMRWalletPassword, user.MinDono, user.MinMediaDono,
-		user.MediaEnabled, time.Now().UTC(), user.Links, user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, user.WalletUploaded, cryptosStructToJSONString(user.CryptosEnabled), user.UserID)
+		user.MediaEnabled, time.Now().UTC(), user.Links, user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, user.WalletUploaded, cryptosStructToJSONString(user.CryptosEnabled), user.DefaultCrypto, user.UserID)
 	if err != nil {
 		log.Fatalf("failed, err: %v", err)
 	}
@@ -2334,11 +2345,11 @@ func updateUser(user utils.User) error {
 
 func getUserByAlertURL(AlertURL string) (utils.User, error) {
 	var user utils.User
-	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	var links, donoGIF, defaultCrypto, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE alert_url=?", AlertURL)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled, &defaultCrypto)
 	if err != nil {
 		return utils.User{}, err
 	}
@@ -2354,6 +2365,12 @@ func getUserByAlertURL(AlertURL string) (utils.User, error) {
 	if !donoSound.Valid {             // check if the "dono_gif" column is null
 		user.DonoSound = "default.mp3" // set the user's "DonoSound"
 	}
+
+	user.DefaultCrypto = defaultCrypto.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !defaultCrypto.Valid {                 // check if the "dono_gif" column is null
+		user.DefaultCrypto = "" // set the user's "DonoSound"
+	}
+
 	user.AlertURL = alertURL.String // assign the sql.NullString to the user's "DonoGIF" field
 	if !alertURL.Valid {            // check if the "dono_gif" column is null
 		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"
@@ -2441,11 +2458,11 @@ func getUserByUsernameCached(username string) (utils.User, bool) {
 // get a user by their username
 func getUserByUsername(username string) (utils.User, error) {
 	var user utils.User
-	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	var links, donoGIF, defaultCrypto, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled, &defaultCrypto)
 	if err != nil {
 		return utils.User{}, err
 	}
@@ -2461,6 +2478,12 @@ func getUserByUsername(username string) (utils.User, error) {
 	if !donoSound.Valid {             // check if the "dono_gif" column is null
 		user.DonoSound = "default.mp3" // set the user's "DonoSound"
 	}
+
+	user.DefaultCrypto = defaultCrypto.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !defaultCrypto.Valid {                 // check if the "dono_gif" column is null
+		user.DefaultCrypto = "" // set the user's "DonoSound"
+	}
+
 	user.AlertURL = alertURL.String // assign the sql.NullString to the user's "DonoGIF" field
 	if !alertURL.Valid {            // check if the "dono_gif" column is null
 		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"
@@ -2492,11 +2515,11 @@ func getUserByUsername(username string) (utils.User, error) {
 // check a user by their ID
 func checkUserByID(id int) bool {
 	var user utils.User
-	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	var links, donoGIF, donoSound, defaultCrypto, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE id=?", id)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled, &defaultCrypto)
 
 	ce := utils.CryptosEnabled{
 		XMR:   true,
@@ -2513,6 +2536,11 @@ func checkUserByID(id int) bool {
 	user.CryptosEnabled = cryptosJsonStringToStruct(cryptosEnabled.String) // assign the sql.NullString to the user's "DonoGIF" field
 	if !cryptosEnabled.Valid {                                             // check if the "dono_gif" column is null
 		user.CryptosEnabled = ce // set the user's "DonoSound"
+	}
+
+	user.DefaultCrypto = defaultCrypto.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !defaultCrypto.Valid {                 // check if the "dono_gif" column is null
+		user.DefaultCrypto = "" // set the user's "DonoSound"
 	}
 
 	if err == sql.ErrNoRows {
@@ -2548,11 +2576,11 @@ func printUserColumns() error {
 func checkUserByUsername(username string) (bool, int) {
 	printUserColumns()
 	var user utils.User
-	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	var links, donoGIF, donoSound, defaultCrypto, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled, &defaultCrypto)
 
 	ce := utils.CryptosEnabled{
 		XMR:   true,
@@ -2569,6 +2597,11 @@ func checkUserByUsername(username string) (bool, int) {
 	user.CryptosEnabled = cryptosJsonStringToStruct(cryptosEnabled.String) // assign the sql.NullString to the user's "DonoGIF" field
 	if !cryptosEnabled.Valid {                                             // check if the "dono_gif" column is null
 		user.CryptosEnabled = ce // set the user's "DonoSound"
+	}
+
+	user.DefaultCrypto = defaultCrypto.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !defaultCrypto.Valid {                 // check if the "dono_gif" column is null
+		user.DefaultCrypto = "" // set the user's "DonoSound"
 	}
 
 	if err == sql.ErrNoRows {
@@ -2588,11 +2621,11 @@ func getUserBySession(sessionToken string) (utils.User, error) {
 		return utils.User{}, fmt.Errorf("session token not found")
 	}
 	var user utils.User
-	var links, donoGIF, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
+	var links, donoGIF, defaultCrypto, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
 	row := db.QueryRow("SELECT * FROM users WHERE id=?", userID)
 	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
 		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled)
+		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled, &defaultCrypto)
 	if err != nil {
 		return utils.User{}, err
 	}
@@ -2608,6 +2641,11 @@ func getUserBySession(sessionToken string) (utils.User, error) {
 	if !donoSound.Valid {             // check if the "dono_gif" column is null
 		user.DonoSound = "default.mp3" // set the user's "DonoSound"
 	}
+	user.DefaultCrypto = defaultCrypto.String // assign the sql.NullString to the user's "DonoGIF" field
+	if !defaultCrypto.Valid {                 // check if the "dono_gif" column is null
+		user.DefaultCrypto = "" // set the user's "DonoSound"
+	}
+
 	user.AlertURL = alertURL.String // assign the sql.NullString to the user's "DonoGIF" field
 	if !alertURL.Valid {            // check if the "dono_gif" column is null
 		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"

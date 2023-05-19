@@ -71,6 +71,7 @@ type User struct {
 	WalletUploaded       bool
 	CryptosEnabled       CryptosEnabled
 	BillingData          BillingData
+	DefaultCrypto        string
 }
 
 type RawContract struct {
