@@ -111,7 +111,62 @@
             toggleSelect.classList.remove('visible');
             toggleSelect.classList.add('hidden');
           }
-          document.getElementById("toggleSelect").selectedIndex = 1;
+
+          const DefaultCrypto = {{.DefaultCrypto}};
+          var valueToFind = "SOL"; // Replace "SOL" with the value you want to find
+
+          if (DefaultCrypto == "XMR"  && {{.CryptosEnabled.XMR}}) {
+            valueToFind = "XMR";
+          } else if (DefaultCrypto == "SOL" && {{.CryptosEnabled.SOL}}) {
+            valueToFind = "SOL";
+          } else if (DefaultCrypto == "ETH" && {{.CryptosEnabled.ETH}}) {
+            valueToFind = "ETH";
+          } else if (DefaultCrypto == "PAINT" && {{.CryptosEnabled.PAINT}}) {
+            valueToFind = "PAINT";
+          } else if (DefaultCrypto == "HEX" && {{.CryptosEnabled.HEX}}) {
+            valueToFind = "HEX";
+          } else if (DefaultCrypto == "MATIC" && {{.CryptosEnabled.MATIC}}) {
+            valueToFind = "MATIC";
+          } else if (DefaultCrypto == "BUSD" && {{.CryptosEnabled.BUSD}}) {
+            valueToFind = "BUSD";
+          } else if (DefaultCrypto == "SHIB" && {{.CryptosEnabled.SHIB}}) {
+            valueToFind = "SHIB";
+          } else if (DefaultCrypto == "PNK" && {{.CryptosEnabled.PNK}}) {
+            valueToFind = "PNK";
+          } else {
+              if ({{.CryptosEnabled.XMR}}) {
+              valueToFind = "XMR";
+            } else if ({{.CryptosEnabled.SOL}}) {
+              valueToFind = "SOL";
+            } else if ({{.CryptosEnabled.ETH}}) {
+              valueToFind = "ETH";
+            } else if ({{.CryptosEnabled.PAINT}}) {
+              valueToFind = "PAINT";
+            } else if ({{.CryptosEnabled.HEX}}) {
+              valueToFind = "HEX";
+            } else if ({{.CryptosEnabled.MATIC}}) {
+              valueToFind = "MATIC";
+            } else if ({{.CryptosEnabled.BUSD}}) {
+              valueToFind = "BUSD";
+            } else if ({{.CryptosEnabled.SHIB}}) {
+              valueToFind = "SHIB";
+            } else if ({{.CryptosEnabled.PNK}}) {
+              valueToFind = "PNK";
+            }
+          }
+
+
+          var selectElement = document.getElementById("toggleSelect");
+          var valueToFind = "SOL"; // Replace "SOL" with the value you want to find
+
+          for (var i = 0; i < selectElement.options.length; i++) {
+            if (selectElement.options[i].value === valueToFind) {
+              selectElement.selectedIndex = i;
+              break;
+            }
+          }
+
+
           toggleText();
           document.getElementById("toggleSelect").selectedIndex = 0;
 

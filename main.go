@@ -1,5 +1,7 @@
 package main
 
+// add more feedback for monero wallet uploads
+
 import (
 	"bytes"
 	"crypto/sha256"
@@ -1006,40 +1008,37 @@ func createNewEthDono(name string, message string, mediaURL string, amountNeeded
 	return new_dono
 }
 
-func startMoneroWallet(port_int, user_id int) {
-
-	portID := getPortID(xmrWallets, user_id)
-
+func startMoneroWallet(portInt, userID int) {
+	portID := getPortID(xmrWallets, userID)
 	found := true
+
 	if portID == -100 {
 		found = false
 	}
+
 	portStr := strconv.Itoa(portID)
 
 	if found {
-		fmt.Println("Port ID for user", user_id, "is", portID)
-
+		fmt.Println("Port ID for user", userID, "is", portID)
 	} else {
-		fmt.Println("Port ID not found for user", user_id)
-		portStr = strconv.Itoa(port_int)
+		fmt.Println("Port ID not found for user", userID)
+		portStr = strconv.Itoa(portInt)
 	}
 
-	var cmd *exec.Cmd
-	if found {
-		fmt.Println("Starting monero wallet for", portStr, user_id)
-		cmd = exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", portStr, "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/"+strconv.Itoa(user_id)+"/monero/wallet", "--disable-rpc-login", "--password", "")
-	} else {
-		cmd = exec.Command("monero/monero-wallet-rpc", "--rpc-bind-port", portStr, "--daemon-address", "https://xmr-node.cakewallet.com:18081", "--wallet-file", "users/"+strconv.Itoa(user_id)+"/monero/wallet", "--disable-rpc-login", "--password", "")
-	}
-	_, err := cmd.CombinedOutput()
+	cmd := exec.Command("./start_xmr_wallet.sh", portStr, strconv.Itoa(userID))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
 	if err != nil {
 		log.Println("Error running command:", err)
 	}
+
 	_ = walletrpc.New(walletrpc.Config{
-		Address: "http://127.0.0.1:" + strconv.Itoa(port_int) + "/json_rpc",
+		Address: "http://127.0.0.1:" + strconv.Itoa(portInt) + "/json_rpc",
 	})
 
-	fmt.Println("Done starting monero wallet for", portStr, user_id)
+	fmt.Println("Done starting monero wallet for", portStr, userID)
 }
 
 func stopMoneroWallet(user utils.User) {
@@ -3515,6 +3514,29 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			user.Links = "[]"
 		}
 
+		if user.DefaultCrypto == "" {
+			if user.CryptosEnabled.XMR {
+				user.DefaultCrypto = "XMR"
+			} else if user.CryptosEnabled.SOL {
+				user.DefaultCrypto = "SOL"
+			} else if user.CryptosEnabled.ETH {
+				user.DefaultCrypto = "ETH"
+			} else if user.CryptosEnabled.PAINT {
+				user.DefaultCrypto = "PAINT"
+			} else if user.CryptosEnabled.HEX {
+				user.DefaultCrypto = "HEX"
+			} else if user.CryptosEnabled.MATIC {
+				user.DefaultCrypto = "MATIC"
+			} else if user.CryptosEnabled.BUSD {
+				user.DefaultCrypto = "BUSD"
+			} else if user.CryptosEnabled.SHIB {
+				user.DefaultCrypto = "SHIB"
+			} else if user.CryptosEnabled.PNK {
+				user.DefaultCrypto = "PNK"
+			}
+
+		}
+
 		i := utils.IndexDisplay{
 			MaxChar:        MessageMaxChar,
 			MinDono:        user.MinDono,
@@ -3539,11 +3561,9 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			CryptosEnabled: user.CryptosEnabled,
 			Checked:        checked,
 			Links:          user.Links,
+			DefaultCrypto:  user.DefaultCrypto,
 			Username:       username,
 		}
-
-		fmt.Println("user.MinSol =", user.MinSol)
-		fmt.Println("indexDisplay.MinSol =", i.MinSolana)
 
 		err := donationTemplate.Execute(w, i)
 		if err != nil {

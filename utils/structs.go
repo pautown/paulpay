@@ -218,6 +218,7 @@ type IndexDisplay struct {
 	Links          string
 	Checked        string
 	CryptosEnabled CryptosEnabled
+	DefaultCrypto  string
 	Username       string
 }
 
