@@ -1,7 +1,5 @@
 package main
 
-// add more feedback for monero wallet uploads
-
 import (
 	"bytes"
 	"crypto/sha256"
@@ -165,7 +163,16 @@ func checkLoggedInAdmin(w http.ResponseWriter, r *http.Request) bool {
 // Handler function for the "/donations" endpoint
 func donationsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("donationsHandler Called")
-	checkLoggedIn(w, r)
+
+	cookie, err := r.Cookie("session_token")
+	if err != nil {
+		return
+	}
+
+	user, valid := getUserBySessionCached(cookie.Value)
+	if !valid {
+		return
+	}
 	// Fetch the latest data from your database or other data source
 
 	// Retrieve data from the donos table
@@ -202,8 +209,9 @@ func donationsHandler(w http.ResponseWriter, r *http.Request) {
 		dono.EncryptedIP = encryptedIP.String
 		dono.USDAmount = usdAmount.Float64
 		dono.MediaURL = mediaURL.String
-
-		donos = append(donos, dono)
+		if dono.UserID == user.UserID {
+			donos = append(donos, dono)
+		}
 	}
 
 	if err = rows.Err(); err != nil {
@@ -491,8 +499,9 @@ func startWallets() {
 			if user.WalletUploaded {
 				log.Println("Monero wallet uploaded")
 				xmrWallets = append(xmrWallets, []int{user.UserID, starting_port})
-				go startMoneroWallet(starting_port, user.UserID)
+				go startMoneroWallet(starting_port, user.UserID, user)
 				starting_port++
+
 			} else {
 				log.Println("Monero wallet not uploaded")
 			}
@@ -920,8 +929,9 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 		dono.EncryptedIP = encryptedIP.String
 		dono.USDAmount = usdAmount.Float64
 		dono.MediaURL = mediaURL.String
-
-		donos = append(donos, dono)
+		if dono.UserID == user.UserID {
+			donos = append(donos, dono)
+		}
 	}
 
 	if err = rows.Err(); err != nil {
@@ -1008,7 +1018,7 @@ func createNewEthDono(name string, message string, mediaURL string, amountNeeded
 	return new_dono
 }
 
-func startMoneroWallet(portInt, userID int) {
+func startMoneroWallet(portInt, userID int, user utils.User) {
 	portID := getPortID(xmrWallets, userID)
 	found := true
 
@@ -1032,6 +1042,10 @@ func startMoneroWallet(portInt, userID int) {
 	err := cmd.Run()
 	if err != nil {
 		log.Println("Error running command:", err)
+		user.WalletUploaded = false
+		user.WalletPending = false
+		updateUser(user)
+		return
 	}
 
 	_ = walletrpc.New(walletrpc.Config{
@@ -1039,6 +1053,44 @@ func startMoneroWallet(portInt, userID int) {
 	})
 
 	fmt.Println("Done starting monero wallet for", portStr, userID)
+	user.WalletUploaded = true
+	user.WalletPending = true
+	updateUser(user)
+}
+
+func CheckMoneroPort(userID int) bool {
+	payload := strings.NewReader(`{"jsonrpc":"2.0","id":"0","method":"make_integrated_address"}`)
+	portID := getPortID(xmrWallets, userID)
+
+	found := true
+	if portID == -100 {
+		return false
+	}
+
+	if found {
+		fmt.Println("Port ID for user", userID, "is", portID)
+	} else {
+		fmt.Println("Port ID not found for user", userID)
+	}
+
+	rpcURL_ := "http://127.0.0.1:" + strconv.Itoa(portID) + "/json_rpc"
+
+	req, err := http.NewRequest("POST", rpcURL_, payload)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+
+	resp := &utils.RPCResponse{}
+	if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
+		return false
+	}
+
+	return true
 }
 
 func stopMoneroWallet(user utils.User) {
@@ -1072,6 +1124,17 @@ func stopMoneroWallet(user utils.User) {
 
 func checkDonos() {
 	for {
+
+		log.Println("Checking pending wallets for successful starting")
+		for _, u_ := range globalUsers {
+			if u_.WalletUploaded && u_.WalletPending {
+				u_.WalletPending = CheckMoneroPort(u_.UserID)
+				if !u_.WalletPending {
+					updateUser(u_)
+				}
+			}
+		}
+
 		log.Println("Checking donos via checkDonos()")
 		fulfilledDonos := checkUnfulfilledDonos()
 		if len(fulfilledDonos) > 0 {
@@ -1659,6 +1722,7 @@ func checkUnfulfilledDonos() []utils.Dono {
 				updateDonoInMap(dono)
 				continue
 			}
+			updateDonoInMap(dono)
 		} else if dono.CurrencyType == "SOL" {
 			if utils.CheckTransactionSolana(dono.AmountToSend, dono.Address, 100) {
 				dono.AmountSent, _ = utils.PruneStringByDecimalPoints(dono.AmountToSend, 5)
@@ -2871,6 +2935,7 @@ func userHandler(w http.ResponseWriter, r *http.Request) {
 	if user.Links == "" {
 		user.Links = "[]"
 	}
+
 	data := struct {
 		User  utils.User
 		Links string // Changed to string to hold JSON
@@ -3053,7 +3118,7 @@ func changeUserMoneroHandler(w http.ResponseWriter, r *http.Request) {
 				xmrWallets = append(xmrWallets, []int{user.UserID, starting_port})
 				walletRunning = false
 			}
-			go startMoneroWallet(starting_port, user.UserID)
+			go startMoneroWallet(starting_port, user.UserID, user)
 			if !walletRunning {
 				starting_port++
 			}
@@ -3387,12 +3452,9 @@ func cryptoSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		moneroWalletString := "monero wallet not uploaded"
 		moneroWalletKeysString := "monero wallet not key uploaded"
 
-		if checkUserMoneroWallet(userPath) {
-			moneroWalletString = "monero wallet uploaded"
-		}
-
-		if checkUserMoneroWalletKeys(userPath) {
-			moneroWalletKeysString = "monero wallet key uploaded"
+		if checkUserMoneroWallet(userPath) && !CheckMoneroPort(user.UserID) {
+			moneroWalletString = "monero wallet uploaded but not running correctly. Please ensure you have created a view only wallet with no password."
+			moneroWalletKeysString = "monero wallet key uploaded but not running correctly. Please ensure you have created a view only wallet with no password."
 		}
 
 		data := struct {
@@ -3426,6 +3488,7 @@ func cryptoSettingsHandler(w http.ResponseWriter, r *http.Request) {
 			MinPnk                 float64
 			DateEnabled            time.Time
 			WalletUploaded         bool
+			WalletPending          bool
 			CryptosEnabled         utils.CryptosEnabled
 			BillingData            utils.BillingData
 			MoneroWalletString     string
@@ -3461,6 +3524,7 @@ func cryptoSettingsHandler(w http.ResponseWriter, r *http.Request) {
 			MinPnk:                 user.MinPnk,
 			DateEnabled:            user.DateEnabled,
 			WalletUploaded:         user.WalletUploaded,
+			WalletPending:          user.WalletPending,
 			CryptosEnabled:         user.CryptosEnabled,
 			BillingData:            user.BillingData,
 			MoneroWalletString:     moneroWalletString,
@@ -3561,6 +3625,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			CryptosEnabled: user.CryptosEnabled,
 			Checked:        checked,
 			Links:          user.Links,
+			WalletPending:  user.WalletPending,
 			DefaultCrypto:  user.DefaultCrypto,
 			Username:       username,
 		}

@@ -115,7 +115,7 @@
           const DefaultCrypto = {{.DefaultCrypto}};
           var valueToFind = "SOL"; // Replace "SOL" with the value you want to find
 
-          if (DefaultCrypto == "XMR"  && {{.CryptosEnabled.XMR}}) {
+          if (DefaultCrypto == "XMR"  && {{.CryptosEnabled.XMR}} && !{{.WalletPending}}) {
             valueToFind = "XMR";
           } else if (DefaultCrypto == "SOL" && {{.CryptosEnabled.SOL}}) {
             valueToFind = "SOL";
@@ -134,7 +134,7 @@
           } else if (DefaultCrypto == "PNK" && {{.CryptosEnabled.PNK}}) {
             valueToFind = "PNK";
           } else {
-              if ({{.CryptosEnabled.XMR}}) {
+              if ({{.CryptosEnabled.XMR}} && !{{.WalletPending}}) {
               valueToFind = "XMR";
             } else if ({{.CryptosEnabled.SOL}}) {
               valueToFind = "SOL";
@@ -323,7 +323,7 @@
        
 
         <option value="" disabled selected>Switch Cryptocurrency</option>
-        {{ if .CryptosEnabled.XMR }}
+        {{ if and (not .WalletPending) .CryptosEnabled.XMR }}
         <option value="XMR">Switch to Monero</option>
         {{ end }}
         {{ if .CryptosEnabled.SOL }}

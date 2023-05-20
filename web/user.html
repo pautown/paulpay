@@ -113,7 +113,7 @@ document.getElementById('threePercent').textContent = `$${threePercent.toFixed(2
   // Update the text content of the <span> element with the number of days left
   document.getElementById("days-left").textContent = daysLeft.toString();
 
-  
+
   const paymentButton = document.getElementById('payment-button');
   if (daysLeft <= 0) {
     paymentButton.innerHTML = 'Pay 3% Fee';
@@ -258,8 +258,17 @@ function applyLink(description) {
 
 
   
-  
-  <p id="media-status"> <b style="color: lightsteelblue;">Monero Wallet: </b> {{ if .User.WalletUploaded }}<b style="color: lightseagreen;">uploaded</b>{{ else }}<b>not yet uploaded.</b>{{ end }}</p>
+  <p id="media-status">
+  <b style="color: lightsteelblue;">Monero Wallet: </b>
+  {{if and (not .User.WalletPending) .User.WalletUploaded}}
+    <b style="color: lightseagreen;">running</b>
+  {{else if and .User.WalletPending .User.WalletUploaded}}
+    <b style="color: yellow;">uploaded and pending</b>
+  {{else}}
+    <b>not yet uploaded.</b>
+  {{end}}
+</p>
+
   <form method="GET" action="/cryptosettings">
     <button style="padding: 0 10px; margin-right: 10px; display: inline-block;">View/Change Crypto Settings</button>
   </form>

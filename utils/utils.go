@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -77,6 +78,17 @@ var cryptoMap = map[string]map[string]interface{}{
 func GetTransactionAmount(t Transfer) string {
 	d := decimal.NewFromFloat(t.Value)
 	return d.String()
+}
+
+func IsPortOpen(port int) bool {
+	address := fmt.Sprintf("%s:%d", "http://127.0.0.1", port)
+	conn, err := net.DialTimeout("tcp", address, 1*time.Second)
+	if err != nil {
+		// Port is closed or unreachable
+		return false
+	}
+	defer conn.Close()
+	return true
 }
 
 func GetTransactionToken(t Transfer) string {

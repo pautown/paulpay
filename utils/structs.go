@@ -69,6 +69,7 @@ type User struct {
 	MinPnk               float64
 	DateEnabled          time.Time
 	WalletUploaded       bool
+	WalletPending        bool
 	CryptosEnabled       CryptosEnabled
 	BillingData          BillingData
 	DefaultCrypto        string
@@ -215,6 +216,7 @@ type IndexDisplay struct {
 	ShibPrice      float64
 	PnkPrice       float64
 	MinAmnt        float64
+	WalletPending  bool
 	Links          string
 	Checked        string
 	CryptosEnabled CryptosEnabled

@@ -118,23 +118,30 @@
 
   </form>
     <hr>
-      <form method="POST" action="/changeusermonero" enctype="multipart/form-data">
-  <label for="moneroWallet"><b style="color: lightsteelblue;">View-Only Monero Wallet:</b></label>
-  <input type="file" id="moneroWallet" name="moneroWallet">
-  <small><small>{{.MoneroWalletString}}</small></small>
-  <br><br>
-  <label for="moneroWalletKeys"><b style="color: lightsteelblue;">View-Only Monero Wallet Keys:</b></label>
-  <input type="file" id="moneroWalletKeys" name="moneroWalletKeys" accept=".keys">
-  <small><small>{{.MoneroWalletKeysString}}</small></small>
-  
-  <br>
-    <br>
-  <input type="submit" value="Upload Monero Wallets" id="upload-button" disabled>
+    {{if not .WalletUploaded}}
+        <form method="POST" action="/changeusermonero" enctype="multipart/form-data">
+          <label for="moneroWallet"><b style="color: lightsteelblue;">View-Only Monero Wallet:</b></label>
+          <input type="file" id="moneroWallet" name="moneroWallet">
+          <small><small>{{.MoneroWalletString}}</small></small>
+          <br><br>
+          <label for="moneroWalletKeys"><b style="color: lightsteelblue;">View-Only Monero Wallet Keys:</b></label>
+          <input type="file" id="moneroWalletKeys" name="moneroWalletKeys" accept=".keys">
+          <small><small>{{.MoneroWalletKeysString}}</small></small>
+          
+          <br>
+          <br>
+          <input type="submit" value="Upload Monero Wallets" id="upload-button" disabled>
+          <small><small>Note: It will take a few minutes after uploading for the XMR wallet to work. The wallet needs to catch up with the network.</small></small>
+          <br><br>
+        </form>
+    {{else}}
+      {{if .WalletPending}}
+        <p style="color: yellow;">Wallet and wallet key successfully uploaded, wallet is currently catching up to the network. This can take anywhere from a few minutes to a half an hour to complete. Please be patient.</p>
+      {{else}}
+        <p style="color: green;">Wallet uploaded and caught up to network. XMR donations will now work.</p>
+      {{end}}
+    {{end}}
 
-  <small><small>Note: It will take a few minutes after uploading for the XMR wallet to work. The wallet needs to catch up with the network.</small></small>
-  <br><br>
-  
-</form>
 
 
 </div>

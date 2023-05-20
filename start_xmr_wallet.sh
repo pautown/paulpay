@@ -1,16 +1,15 @@
 #!/bin/bash
 
-portStr="RPC_PORT"
-user_id="USER_ID"
+daemon_address="https://xmr-node.cakewallet.com:18081"
+rpc_bind_port=$1
+wallet_file="users/$2/monero/wallet"
 
-curl -X POST http://localhost:"$portStr"/json_rpc \
-  -H 'Content-Type: application/json' \
-  --data '{
-    "jsonrpc": "2.0",
-    "id": "0",
-    "method": "open_wallet",
-    "params": {
-      "filename": "users/'"$user_id"'/monero/wallet",
-      "password": ""
-    }
-  }'
+monero/monero-wallet-rpc \
+  --rpc-bind-port "$rpc_bind_port" \
+  --daemon-address "$daemon_address" \
+  --wallet-file "$wallet_file" \
+  --disable-rpc-login \
+  --password ""
+
+
+
