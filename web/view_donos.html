@@ -130,9 +130,49 @@
                 }
             }
         }
+
+    function replayDono(donoID) {
+        var row = document.getElementById(donoID);
+        var donationName = row.cells[2].innerText;
+        var donationMessage = row.cells[3].innerText;
+        var donationMedia = row.cells[4].innerText;
+        var usdValue = row.cells[5].innerText;
+        usdValue = usdValue.replace('$', '');
+        var amountSent = row.cells[6].innerText;
+
+        var crypto = row.cells[7].innerText;
+        
+        var data = {
+            donoID: donoID,
+            donationName: donationName,
+            donationMessage: donationMessage,
+            donationMedia: donationMedia,
+            usdValue: usdValue,
+            amountSent: amountSent,
+            crypto: crypto
+        };
+
+        var xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    console.log("Donation replayed successfully");
+                } else {
+                    console.log("Error replaying donation: " + xhr.status);
+                }
+            }
+        };
+        xhr.open("POST", "/replaydono");
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.send(JSON.stringify(data));
+    }
         
     document.addEventListener("DOMContentLoaded", function() {
+
         
+
+
+
 
 
     function updateDonations() {
@@ -151,7 +191,6 @@
         xhr.send();
     }
 
-
     // Call the updateDonations function every 5 seconds
     setInterval(updateDonations, 4000);
 });
@@ -162,30 +201,36 @@
 <body>
 	<h1>View Donos</h1>
 	<div id="donations">
-		<table>
-			<thead>
-				<tr>
-					<th onclick="sortTable(0)">Donation Time</th>
-					<th onclick="sortTable(1)">Donation Name</th>
-					<th onclick="sortTable(2)">Donation Message</th>
-					<th onclick="sortTable(3)">USD Value</th>
-					<th onclick="sortTable(4)">Amount Sent</th>
-					<th onclick="sortTable(5)">Crypto</th>
-				</tr>
-			</thead>
-			<tbody id="donations-table-body">
-				{{range .}}
-				<tr>
-					<td>{{.UpdatedAt.Format "15:04:05 01-02-2006"}}</td>
-					<td>{{.Name}}</td>
-					<td>{{.Message}} {{.MediaURL}}</td>
-					<td>${{.USDAmount}}</td>
-					<td>{{.AmountSent}}</td>
-					<td>{{.CurrencyType}}</td>
-				</tr>
-				{{end}}
-			</tbody>
-		</table>
-	</div>
+        <table>
+            <thead>
+                <tr>                    
+                    <th></th> <!-- New column for the button -->
+                    <th onclick="sortTable(0)">Time</th>
+                    <th onclick="sortTable(1)">Name</th>
+                    <th onclick="sortTable(2)">Message</th>
+                    <th onclick="sortTable(3)">Media</th>
+                    <th onclick="sortTable(4)">USD Value</th>
+                    <th onclick="sortTable(5)">Amount</th>
+                    <th onclick="sortTable(6)">Crypto</th>
+                </tr>
+            </thead>
+            <tbody id="donations-table-body">
+                {{range .}}
+                <tr id="{{.ID}}">
+                    <td>
+                        <button onclick="replayDono('{{.ID}}')">Replay</button>
+                    </td>
+                    <td>{{.UpdatedAt.Format "15:04:05 01-02-2006"}}</td>
+                    <td>{{.Name}}</td>
+                    <td>{{.Message}}</td>
+                    <td>{{.MediaURL}}</td>
+                    <td>${{.USDAmount}}</td>
+                    <td>{{.AmountSent}}</td>
+                    <td>{{.CurrencyType}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
 </body>
 </html>

@@ -38,6 +38,16 @@ type SuperChat struct {
 	CryptoCode   string
 }
 
+type Donation struct {
+	ID              string `json:"donoID"`
+	DonationName    string `json:"donationName"`
+	DonationMessage string `json:"donationMessage"`
+	DonationMedia   string `json:"donationMedia"`
+	USDValue        string `json:"usdValue"`
+	AmountSent      string `json:"amountSent"`
+	Crypto          string `json:"crypto"`
+}
+
 type User struct {
 	UserID               int
 	Username             string

@@ -115,15 +115,18 @@ var routes_ []Route_
 // Define a new template that only contains the table content
 var tableTemplate = template.Must(template.New("table").Parse(`
 	{{range .}}
-	<tr>
-		<td>{{.UpdatedAt.Format "15:04:05 01-02-2006"}}</td>
-		<td>{{.Name}}</td>
-		<td>{{.Message}} {{.MediaURL}}</td>
-		<td>${{.USDAmount}}</td>
-		<td>{{.AmountSent}}</td>
-		<td>{{.CurrencyType}}</td>
-	</tr>
-
+	<tr id="{{.ID}}">
+                    <td>
+                        <button onclick="replayDono('{{.ID}}')">Replay</button>
+                    </td>
+                    <td>{{.UpdatedAt.Format "15:04:05 01-02-2006"}}</td>
+                    <td>{{.Name}}</td>
+                    <td>{{.Message}}</td>
+                    <td>{{.MediaURL}}</td>
+                    <td>${{.USDAmount}}</td>
+                    <td>{{.AmountSent}}</td>
+                    <td>{{.CurrencyType}}</td>
+                </tr>
 	{{end}}
 `))
 
@@ -210,7 +213,11 @@ func donationsHandler(w http.ResponseWriter, r *http.Request) {
 		dono.USDAmount = usdAmount.Float64
 		dono.MediaURL = mediaURL.String
 		if dono.UserID == user.UserID {
-			donos = append(donos, dono)
+			if s, err := strconv.ParseFloat(dono.AmountSent, 64); err == nil {
+				if s > 0 {
+					donos = append(donos, dono)
+				}
+			}
 		}
 	}
 
@@ -440,6 +447,7 @@ func setupRoutes() {
 		{"/pay", paymentHandler},
 		{"/alert", alertOBSHandler},
 		{"/viewdonos", viewDonosHandler},
+		{"/replaydono", replayDonoHandler},
 		{"/progressbar", progressbarOBSHandler},
 		{"/login", loginHandler},
 		{"/incorrect_login", incorrectLoginHandler},
@@ -483,6 +491,37 @@ func setupRoutes() {
 
 	logoutTemplate, _ = template.ParseFiles("web/logout.html")
 	incorrectPasswordTemplate, _ = template.ParseFiles("web/password_change_failed.html")
+}
+
+func replayDonoHandler(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	user, valid := getLoggedInUser(w, r)
+
+	var donation utils.Donation
+	err := json.NewDecoder(r.Body).Decode(&donation)
+	if err != nil {
+		fmt.Printf("Error decoding JSON")
+		http.Error(w, "Error decoding JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Process the donation information as needed
+	fmt.Printf("Received donation replay: %+v\n", donation)
+
+	if valid {
+		replayDono(donation, user.UserID)
+	} else {
+		http.Error(w, "Invalid donation trying to be replayed", http.StatusBadRequest)
+		return
+	}
+
+	// Send response indicating success
+	w.WriteHeader(http.StatusOK)
 }
 
 func startWallets() {
@@ -530,6 +569,20 @@ func checkValidSubscription(DateEnabled time.Time) bool {
 	}
 	log.Println("checkValidSubscription() User not valid")
 	return false
+}
+
+func getLoggedInUser(w http.ResponseWriter, r *http.Request) (utils.User, bool) {
+	cookie, err := r.Cookie("session_token")
+	if err != nil {
+		return utils.User{}, false // Return an instance of utils.User with empty/default values
+	}
+
+	user, valid := getUserBySessionCached(cookie.Value)
+	if !valid {
+		return utils.User{}, false // Return an instance of utils.User with empty/default values
+	}
+
+	return user, true
 }
 
 func allUsersHandler(w http.ResponseWriter, r *http.Request) {
@@ -866,6 +919,27 @@ func createTestDono(user_id int, name string, curr string, message string, amoun
 	addDonoToDonoBar(amount, curr, user_id)
 }
 
+func replayDono(donation utils.Donation, userID int) {
+	valid, media_url_ := checkDonoForMediaUSDThreshold(donation.DonationMedia, convertToFloat64(donation.USDValue))
+
+	if valid == false {
+		media_url_ = ""
+	}
+
+	err := createNewQueueEntry(db, userID, "ReplayAddress", donation.DonationName, donation.DonationMessage, donation.AmountSent, donation.Crypto, convertToFloat64(donation.USDValue), media_url_)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func convertToFloat64(value string) float64 {
+	f, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		panic(err)
+	}
+	return f
+}
+
 // extractVideoID extracts the video ID from a YouTube URL
 func extractVideoID(url string) string {
 	videoID := ""
@@ -930,7 +1004,11 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 		dono.USDAmount = usdAmount.Float64
 		dono.MediaURL = mediaURL.String
 		if dono.UserID == user.UserID {
-			donos = append(donos, dono)
+			if s, err := strconv.ParseFloat(dono.AmountSent, 64); err == nil {
+				if s > 0 {
+					donos = append(donos, dono)
+				}
+			}
 		}
 	}
 
