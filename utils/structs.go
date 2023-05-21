@@ -11,6 +11,11 @@ type ETHCheckAddress struct {
 	ERC20str string
 }
 
+type InviteCode struct {
+	Value  string
+	Active bool
+}
+
 type CryptoSuperChat struct {
 	Name            string
 	Message         string

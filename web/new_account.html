@@ -16,7 +16,7 @@
 
 <body>
 
-	<h1>Account creation is currently <b>closed</b> and invite-only.</h1>
+	<small><h2>Ferret is currently in <b>closed beta</b> and invite-only.</h2></small>
     <h1>Create New Account</h1>
     <form method="POST" action="/newaccount">
         <label for="username">Username:</label>
@@ -25,6 +25,10 @@
         <input type="password" id="password" name="password" required><br><br>
         <label for="password-confirm">Confirm New Password:</label>
         <input type="password" id="password-confirm" name="password_confirm" required><br><br>
+
+
+        <label for="invitecode">Invite Code:</label>
+        <input type="text" id="invite-code" name="invitecode" required><br><br>
         <small>
 	        <div style="display: flex; align-items: center;">
 		        <label style="width: 80%;" for="terms">I have read and accepted the <a href="http://www.ferret.cash/termsofservice" target="_blank">Terms of Service</a></label>

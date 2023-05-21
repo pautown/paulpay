@@ -42,6 +42,28 @@
   <span><b style="color: lightsteelblue;"> User Registrations Open: </b> {{.RegistrationOpen}}</span>
   <form method="POST" action="/toggleUserRegistrations"><input type="submit" value="Toggle User Registrations"></form>
 
+
+  <form method="POST" action="/generatecodes"><input type="submit" value="Generate 5 Invite Codes"></form>
+ 
+
+    <table>
+        <thead>
+            <tr>
+                <th>Invite Code</th>
+                <th>Active</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .InviteCodes}}
+            <tr>
+                <td>{{.Value}}</td>
+                <td>{{if .Active}}Active{{else}}Used{{end}}</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</body>
+
     
     <table>
         <thead>

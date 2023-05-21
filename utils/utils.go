@@ -275,3 +275,32 @@ func GenerateUniqueURL() string {
 	}
 	return (string(randomString))
 }
+
+func GenerateUniqueCode() string {
+	rand.Seed(time.Now().UnixNano())
+	const charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	const length = 15
+	randomString := make([]byte, length)
+	for i := range randomString {
+		randomString[i] = charset[rand.Intn(len(charset))]
+	}
+	return (string(randomString))
+}
+
+func GenerateUniqueCodes(amount int) map[string]InviteCode {
+	inviteCodes := make(map[string]InviteCode)
+	for i := 0; i < amount; i++ {
+		cS := GenerateUniqueCode()
+		inviteCodes[cS] = InviteCode{Value: cS, Active: true}
+	}
+
+	return inviteCodes
+}
+
+func AddInviteCodes(existingMap map[string]InviteCode, newMap map[string]InviteCode) map[string]InviteCode {
+	for key, value := range newMap {
+		existingMap[key] = value
+	}
+
+	return existingMap
+}
