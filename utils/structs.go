@@ -36,6 +36,7 @@ type SuperChat struct {
 	CreatedAt    string
 	CheckedAt    string
 	CryptoCode   string
+	EncryptedIP  string
 }
 
 type Donation struct {

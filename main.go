@@ -2,10 +2,9 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
-	"encoding/hex"
+	//"encoding/hex"
 	"encoding/json"
 	"fmt"
 	//	"github.com/davecgh/go-spew/spew"
@@ -34,11 +33,14 @@ import (
 	"text/template"
 	"time"
 	"unicode/utf8"
+
+	"github.com/realclientip/realclientip-go"
 )
 
 const username = "admin"
 
 var pending_donos []utils.SuperChat
+var ip_requests []string
 
 var USDMinimum float64 = 5
 var MediaMin float64 = 0.025 // Currently unused
@@ -51,8 +53,9 @@ var host_url string = "https://ferret.cash/"
 var addressSliceSolana []utils.AddressSolana
 
 var checked string = ""
-var killDono = 20.00 * time.Minute // hours it takes for a dono to be unfulfilled before it is no longer checked.
+var killDono = 35.00 * time.Minute // hours it takes for a dono to be unfulfilled before it is no longer checked.
 var indexTemplate *template.Template
+var overflowTemplate *template.Template
 var tosTemplate *template.Template
 var registerTemplate *template.Template
 var donationTemplate *template.Template
@@ -458,6 +461,7 @@ func setupRoutes() {
 		{"/changeuser", changeUserHandler},
 		{"/register", registerUserHandler},
 		{"/newaccount", newAccountHandler},
+		{"/overflow", overflowHandler},
 		{"/billing", accountBillingHandler},
 		{"/changeusermonero", changeUserMoneroHandler},
 		{"/usermanager", allUsersHandler},
@@ -467,10 +471,12 @@ func setupRoutes() {
 	}
 
 	for _, route_ := range routes_ {
-		http.HandleFunc(route_.Path, route_.Handler)
+		http.HandleFunc(route_.Path, logging(route_.Handler))
 	}
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
+
+	overflowTemplate, _ = template.ParseFiles("web/overflow.html")
 	tosTemplate, _ = template.ParseFiles("web/tos.html")
 	registerTemplate, _ = template.ParseFiles("web/new_account.html")
 	donationTemplate, _ = template.ParseFiles("web/donation.html")
@@ -491,6 +497,41 @@ func setupRoutes() {
 
 	logoutTemplate, _ = template.ParseFiles("web/logout.html")
 	incorrectPasswordTemplate, _ = template.ParseFiles("web/password_change_failed.html")
+}
+
+func clearRecentIPS(ip string) {
+	for {
+		ip_requests = ip_requests[:0]
+		time.Sleep(5 * time.Minute)
+	}
+}
+
+func CheckRecentIPRequests(ip string) int {
+	matching_ips := 0
+	for _, ip_ := range ip_requests {
+		err := bcrypt.CompareHashAndPassword([]byte(ip_), []byte(ip))
+		if err == nil {
+			matching_ips++
+			if matching_ips == 80 {
+				ip_requests = append(ip_requests, encryptIP(ip))
+				return matching_ips
+			}
+		}
+	}
+	ip_requests = append(ip_requests, encryptIP(ip))
+	return matching_ips
+}
+
+func logging(f http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ip := getIPAddress(r)
+		matching_ip := CheckRecentIPRequests(ip)
+		if matching_ip >= 80 {
+			http.Redirect(w, r, "/overflow", http.StatusSeeOther)
+			return
+		}
+		f(w, r)
+	}
 }
 
 func replayDonoHandler(w http.ResponseWriter, r *http.Request) {
@@ -901,6 +942,7 @@ func setServerVars() {
 	log.Println("------------ setServerVars()")
 	setMinDonos()
 }
+
 func createTestDono(user_id int, name string, curr string, message string, amount string, usdAmount float64, media_url string) {
 	valid, media_url_ := checkDonoForMediaUSDThreshold(media_url, usdAmount)
 
@@ -915,7 +957,6 @@ func createTestDono(user_id int, name string, curr string, message string, amoun
 	if err != nil {
 		panic(err)
 	}
-
 	addDonoToDonoBar(amount, curr, user_id)
 }
 
@@ -1089,8 +1130,8 @@ func fetchExchangeRates() {
 
 }
 
-func createNewEthDono(name string, message string, mediaURL string, amountNeeded float64, cryptoCode string) utils.SuperChat {
-	new_dono := utils.CreatePendingDono(name, message, mediaURL, amountNeeded, cryptoCode)
+func createNewEthDono(name string, message string, mediaURL string, amountNeeded float64, cryptoCode string, encrypted_ip string) utils.SuperChat {
+	new_dono := utils.CreatePendingDono(name, message, mediaURL, amountNeeded, cryptoCode, encrypted_ip)
 	pending_donos = utils.AppendPendingDono(pending_donos, new_dono)
 
 	return new_dono
@@ -1565,10 +1606,8 @@ func clearEncryptedIP(dono *utils.Dono) {
 }
 
 func encryptIP(ip string) string {
-	h := sha256.New()
-	h.Write([]byte("IPFingerprint" + ip))
-	hash := h.Sum(nil)
-	return hex.EncodeToString(hash)
+	hashedIP, _ := bcrypt.GenerateFromPassword([]byte(ip), bcrypt.MinCost)
+	return string(hashedIP)
 }
 
 func getUnfulfilledDonoIPs() ([]string, error) {
@@ -1802,6 +1841,7 @@ func checkUnfulfilledDonos() []utils.Dono {
 			}
 			updateDonoInMap(dono)
 		} else if dono.CurrencyType == "SOL" {
+			log.Println("SOLANA DONO AMOUNT NEEDED:", dono.AmountToSend)
 			if utils.CheckTransactionSolana(dono.AmountToSend, dono.Address, 100) {
 				dono.AmountSent, _ = utils.PruneStringByDecimalPoints(dono.AmountToSend, 5)
 				addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
@@ -3629,7 +3669,6 @@ func tosHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If no username is present in the URL path, serve the indexTemplate
 	err := tosTemplate.Execute(w, nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -3638,7 +3677,28 @@ func tosHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func overflowHandler(w http.ResponseWriter, r *http.Request) {
+	err := overflowTemplate.Execute(w, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+}
+
+func getIPAddress(r *http.Request) string {
+	var strat realclientip.Strategy
+
+	strat = realclientip.NewChainStrategy(
+		realclientip.Must(realclientip.NewSingleIPHeaderStrategy("Cf-Connecting-IP")),
+		realclientip.RemoteAddrStrategy{},
+	)
+
+	return strat.ClientIP(r.Header, r.RemoteAddr)
+}
+
 func indexHandler(w http.ResponseWriter, r *http.Request) {
+
 	// Ignore requests for the favicon
 	if r.URL.Path == "/favicon.ico" {
 		return
@@ -4132,7 +4192,8 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the user's IP address
-	ip := r.RemoteAddr
+	ip := getIPAddress(r)
+	log.Println("dono ip", ip)
 
 	// Get form values
 	fCrypto := r.FormValue("crypto")
@@ -4142,6 +4203,15 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	fMedia := r.FormValue("media")
 	fShowAmount := r.FormValue("showAmount")
 	encrypted_ip := encryptIP(ip)
+	log.Println("encrypted_ip", encrypted_ip)
+
+	matching_ips := utils.CheckPendingDonosFromIP(pending_donos, ip)
+
+	log.Println("Waiting pending donos from this IP:", matching_ips)
+	if matching_ips >= 9 {
+		http.Redirect(w, r, "/overflow", http.StatusSeeOther)
+		return
+	}
 
 	if fAmount == "" {
 		fAmount = "0"
@@ -4201,27 +4271,30 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	if fCrypto == "XMR" {
 
 		fmt.Println("Amount", amount)
+		createNewXMRDono(s.Name, s.Message, s.Media, amount, encrypted_ip)
 		handleMoneroPayment(w, &s, params, amount, encrypted_ip, showAmount, USDAmount, user.UserID)
 	} else if fCrypto == "SOL" {
 		fmt.Println("Amount", amount)
-		new_dono := createNewSolDono(s.Name, s.Message, s.Media, utils.FuzzDono(amount, "SOL"))
-		fmt.Println("Amount needed:", new_dono.AmountNeeded)
+		new_dono := createNewSolDono(s.Name, s.Message, s.Media, utils.FuzzDono(amount, "SOL"), encrypted_ip)
 		handleSolanaPayment(w, &s, params, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, media, encrypted_ip, USDAmount, user.UserID)
 	} else {
 		fmt.Println("Amount", amount)
 		s.Currency = fCrypto
-		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount, fCrypto)
-		fmt.Printf("Amount needed: %.18f\n", new_dono.AmountNeeded)
-
+		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount, fCrypto, encrypted_ip)
 		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL, fCrypto, encrypted_ip, USDAmount, user.UserID)
 	}
 }
 
-func createNewSolDono(name string, message string, mediaURL string, amountNeeded float64) utils.SuperChat {
-	new_dono := utils.CreatePendingSolDono(name, message, mediaURL, amountNeeded)
+func createNewSolDono(name string, message string, mediaURL string, amountNeeded float64, encrypted_ip string) utils.SuperChat {
+	new_dono := utils.CreatePendingDono(name, message, mediaURL, amountNeeded, "SOL", encrypted_ip)
 	pending_donos = utils.AppendPendingDono(pending_donos, new_dono)
 
 	return new_dono
+}
+
+func createNewXMRDono(name string, message string, mediaURL string, amountNeeded float64, encrypted_ip string) {
+	new_dono := utils.CreatePendingDono(name, message, mediaURL, amountNeeded, "XMR", encrypted_ip)
+	pending_donos = utils.AppendPendingDono(pending_donos, new_dono)
 }
 
 func checkDonationStatusHandler(w http.ResponseWriter, r *http.Request) {

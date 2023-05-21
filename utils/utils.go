@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 var contracts = map[string]string{
@@ -208,7 +210,7 @@ func CheckDonos(transfers []Transfer, pending_donos []SuperChat) []SuperChat {
 	return completed_donos
 }
 
-func CreatePendingDono(name string, message string, mediaURL string, amountNeeded float64, cryptoCode string) SuperChat {
+func CreatePendingDono(name string, message string, mediaURL string, amountNeeded float64, cryptoCode string, encrypted_ip string) SuperChat {
 	amountNeeded = FuzzDono(amountNeeded, cryptoCode)
 	pendingDono := SuperChat{
 		Name:         name,
@@ -219,6 +221,7 @@ func CreatePendingDono(name string, message string, mediaURL string, amountNeede
 		CreatedAt:    time.Now().String(),
 		CheckedAt:    time.Now().String(),
 		CryptoCode:   cryptoCode,
+		EncryptedIP:  encrypted_ip,
 	}
 	return pendingDono
 }
@@ -226,6 +229,21 @@ func CreatePendingDono(name string, message string, mediaURL string, amountNeede
 func AppendPendingDono(pending_donos []SuperChat, new_dono SuperChat) []SuperChat {
 	pending_donos = append(pending_donos, new_dono)
 	return pending_donos
+}
+
+func CheckPendingDonosFromIP(pending_donos []SuperChat, ip string) int {
+	matching_ips := 0
+	for _, dono := range pending_donos {
+		err := bcrypt.CompareHashAndPassword([]byte(dono.EncryptedIP), []byte(ip))
+
+		if err == nil {
+			matching_ips++
+			if matching_ips == 15 {
+				return matching_ips
+			}
+		}
+	}
+	return matching_ips
 }
 
 func CheckMatchingDono(amount float64, cryptoCode string, pending_donos []SuperChat) bool {

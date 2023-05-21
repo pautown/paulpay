@@ -12,6 +12,7 @@ import (
 
   "github.com/portto/solana-go-sdk/client"
   "github.com/shopspring/decimal"
+  "log"
   "net/http"
   "time"
 )
@@ -117,13 +118,14 @@ func SetSolWallets(sW map[int]SolWallet) {
 func getTransactionsForAddresses() {
   for _, wallet := range solWallets {
     sameBalance := false
-
     wallet, sameBalance = checkSameBalanceSol(wallet)
 
     if sameBalance {
+      fmt.Println("Sol wallet the same balance, not getting new txs")
       fmt.Println("SOL:", wallet.Address[:7]+".. no new txs.")
       time.Sleep(10 * time.Second)
     } else {
+      fmt.Println("Sol wallet not the same balance, not getting new txs")
       endpoint := rpc.MainNetBeta_RPC
       client := rpc.New(endpoint)
       out, err := client.GetSignaturesForAddress(
@@ -220,10 +222,7 @@ func containsTransaction(sig string) bool {
 
 func checkSameBalanceSol(wallet SolWallet) (SolWallet, bool) {
   amt, _ := getSOLBalance(wallet.Address)
-  if wallet.Amount <= 1 {
-    wallet.Amount = amt
-    return wallet, true
-  }
+  log.Println("Wallet ballance", amt)
   if amt == wallet.Amount {
     return wallet, true
   } else {
