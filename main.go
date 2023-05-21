@@ -293,7 +293,7 @@ func main() {
 	a.Refresh = 10
 	pb.Refresh = 1
 	obsData = getObsData(db, 1)
-
+	inviteCodeMap = getAllCodes()
 	setServerVars()
 
 	//go createTestDono(2, "Big Bob", "XMR", "This Cruel Message is Bob's Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", "50", 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
@@ -732,6 +732,31 @@ func updateEnabledDate(userID int) error {
 	}
 
 	return nil
+}
+
+func getAllCodes() map[string]utils.InviteCode {
+
+	rows, err := db.Query("SELECT * FROM invites")
+	if err != nil {
+		log.Println(err)
+		return inviteCodeMap
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ic utils.InviteCode
+
+		err = rows.Scan(&ic.Value, &ic.Active)
+
+		if err != nil {
+			log.Println(err)
+			return inviteCodeMap
+		}
+		inviteCodeMap[ic.Value] = ic
+	}
+
+	return inviteCodeMap
+
 }
 
 func getAllUsers() ([]utils.User, error) {
@@ -2527,6 +2552,22 @@ func createUser(user utils.User) int {
 	return userID
 }
 
+// update an existing code
+func updateInviteCode(code utils.InviteCode) error {
+
+	inviteCodeMap[code.Value] = code
+	statement := `
+		UPDATE invites
+		SET value=?, active=?
+		WHERE value=?
+	`
+	_, err := db.Exec(statement, code.Value, code.Active, code.Value)
+	if err != nil {
+		log.Fatalf("failed, err: %v", err)
+	}
+	return err
+}
+
 // update an existing user
 func updateUser(user utils.User) error {
 	globalUsers[user.UserID] = user
@@ -3932,8 +3973,8 @@ func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 					log.Println(err_)
 				} else {
 					inviteCodeMap[invitecode] = utils.InviteCode{Value: invitecode, Active: false}
+					updateInviteCode(inviteCodeMap[invitecode])
 				}
-
 				http.Redirect(w, r, "/user", http.StatusSeeOther)
 				return
 			}
