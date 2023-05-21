@@ -33,8 +33,7 @@ import (
 	"text/template"
 	"time"
 	"unicode/utf8"
-
-	"github.com/realclientip/realclientip-go"
+	//"github.com/realclientip/realclientip-go"
 )
 
 const username = "admin"
@@ -524,11 +523,13 @@ func CheckRecentIPRequests(ip string) int {
 
 func logging(f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ip := getIPAddress(r)
-		matching_ip := CheckRecentIPRequests(ip)
-		if matching_ip >= 80 {
-			http.Redirect(w, r, "/overflow", http.StatusSeeOther)
-			return
+		if r.URL.Path != "/overflow" && r.URL.Path != "/progressbar" && r.URL.Path != "/donations" && r.URL.Path != "/check_donation_status" && r.URL.Path != "/replaydono" && r.URL.Path != "/viewdonos" {
+			ip := getIPAddress(r)
+			matchingIP := CheckRecentIPRequests(ip)
+			if matchingIP >= 200 {
+				http.Redirect(w, r, "/overflow", http.StatusSeeOther)
+				return
+			}
 		}
 		f(w, r)
 	}
@@ -1086,7 +1087,6 @@ func viewDonosHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func setUserMinDonos(user utils.User) utils.User {
-	log.Println("begin setUserMinDonos() for", user.UserID)
 	var err error
 	user.MinSol, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.Solana)), 64)
 	user.MinEth, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.Ethereum)), 64)
@@ -1100,7 +1100,6 @@ func setUserMinDonos(user utils.User) utils.User {
 	user.MinTusd, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono))), 64)
 	user.MinWbtc, _ = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.WBTC)), 64)
 	user.MinPnk, err = strconv.ParseFloat(fmt.Sprintf("%.5f", (float64(user.MinDono)/prices.Kleros)), 64)
-	log.Println("setUserMinDonos() user.MinSol = ", user.MinSol)
 	if err != nil {
 		log.Println("setUserMinDonos() err:", err)
 	}
@@ -1220,10 +1219,9 @@ func stopMoneroWallet(user utils.User) {
 		found = false
 	}
 
-	if found {
-		fmt.Println("Port ID for user", user.UserID, "is", portID)
-	} else {
+	if !found {
 		fmt.Println("Port ID not found for user", user.UserID)
+		return
 	}
 
 	portStr := strconv.Itoa(portID)
@@ -1243,7 +1241,6 @@ func stopMoneroWallet(user utils.User) {
 
 func checkDonos() {
 	for {
-
 		log.Println("Checking pending wallets for successful starting")
 		for _, u_ := range globalUsers {
 			if u_.WalletUploaded && u_.WalletPending {
@@ -1894,11 +1891,13 @@ func updateDonosInDB() {
 	// Loop through the donosMap and update the database with any changes
 	for _, dono := range donosMap {
 		if dono.Fulfilled && dono.AmountSent != "0.0" {
-			log.Println("DONO COMPLETED! Dono: ", dono.AmountSent, dono.CurrencyType)
+			log.Println("DONO COMPLETED: ", dono.AmountSent, dono.CurrencyType)
 		}
 		_, err = db.Exec("UPDATE donos SET user_id=?, dono_address=?, dono_name=?, dono_message=?, amount_to_send=?, amount_sent=?, currency_type=?, anon_dono=?, fulfilled=?, encrypted_ip=?, created_at=?, updated_at=?, usd_amount=?, media_url=? WHERE dono_id=?", dono.UserID, dono.Address, dono.Name, dono.Message, dono.AmountToSend, dono.AmountSent, dono.CurrencyType, dono.AnonDono, dono.Fulfilled, dono.EncryptedIP, dono.CreatedAt, dono.UpdatedAt, dono.USDAmount, dono.MediaURL, dono.ID)
 		if err != nil {
 			log.Printf("Error updating Dono with ID %d in the database: %v\n", dono.ID, err)
+		} else {
+			delete(donosMap, dono.ID)
 		}
 	}
 }
@@ -3687,14 +3686,16 @@ func overflowHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getIPAddress(r *http.Request) string {
-	var strat realclientip.Strategy
+	ip := r.Header.Get("X-Real-IP")
+	if ip == "" {
+		ip = r.Header.Get("X-Forwarded-For")
+	}
 
-	strat = realclientip.NewChainStrategy(
-		realclientip.Must(realclientip.NewSingleIPHeaderStrategy("Cf-Connecting-IP")),
-		realclientip.RemoteAddrStrategy{},
-	)
+	if ip == "" {
+		ip = r.RemoteAddr
+	}
 
-	return strat.ClientIP(r.Header, r.RemoteAddr)
+	return ip
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -4269,16 +4270,12 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	USDAmount := getUSDValue(amount, fCrypto)
 	if fCrypto == "XMR" {
-
-		fmt.Println("Amount", amount)
 		createNewXMRDono(s.Name, s.Message, s.Media, amount, encrypted_ip)
 		handleMoneroPayment(w, &s, params, amount, encrypted_ip, showAmount, USDAmount, user.UserID)
 	} else if fCrypto == "SOL" {
-		fmt.Println("Amount", amount)
 		new_dono := createNewSolDono(s.Name, s.Message, s.Media, utils.FuzzDono(amount, "SOL"), encrypted_ip)
 		handleSolanaPayment(w, &s, params, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, media, encrypted_ip, USDAmount, user.UserID)
 	} else {
-		fmt.Println("Amount", amount)
 		s.Currency = fCrypto
 		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount, fCrypto, encrypted_ip)
 		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL, fCrypto, encrypted_ip, USDAmount, user.UserID)
@@ -4408,8 +4405,6 @@ func handleEthereumPayment(w http.ResponseWriter, s *utils.CryptoSuperChat, name
 
 	tmp, _ := qrcode.Encode(donationLink, qrcode.Low, 320)
 	s.QRB64 = base64.StdEncoding.EncodeToString(tmp)
-	fmt.Println("createNewDono() amount_", amount_)
-	fmt.Println("createNewDono() s.Amount", s.Amount)
 	s.DonationID = createNewDono(userID, address, s.Name, s.Message, s.Amount, fCrypto, encrypted_ip, showAmount_, USDAmount, media_)
 	err := payTemplate.Execute(w, s)
 	if err != nil {
