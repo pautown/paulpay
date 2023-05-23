@@ -1213,8 +1213,14 @@ func startMoneroWallet(portInt, userID int, user utils.User) {
 	err := cmd.Run()
 	if err != nil {
 		log.Println("Error running command:", err)
-		user.WalletUploaded = false
-		user.WalletPending = false
+		walletRunning := CheckMoneroPort(userID)
+		if walletRunning {
+			user.WalletUploaded = true
+			user.WalletPending = false
+		} else {
+			user.WalletUploaded = false
+			user.WalletPending = false
+		}
 		updateUser(user)
 		return
 	}
@@ -3745,6 +3751,35 @@ func cryptoSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func errorHandler(w http.ResponseWriter, r *http.Request, header, subheader, message string) {
+	if r.Method == http.MethodPost {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	} else {
+		data := struct {
+			ErrorHeader    string
+			ErrorSubHeader string
+			ErrorMessage   string
+		}{
+			ErrorHeader:    header,
+			ErrorSubHeader: subheader,
+			ErrorMessage:   message,
+		}
+
+		tmpl, err := template.ParseFiles("web/err.html")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		err = tmpl.Execute(w, data)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
 func tosHandler(w http.ResponseWriter, r *http.Request) {
 	// Ignore requests for the favicon
 	if r.URL.Path == "/favicon.ico" {
@@ -3857,6 +3892,9 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Println(err)
 		}
 	} else {
+
+		errorHandler(w, r, "User not found", "didn't find a ferret account with that username", "No username was found.")
+
 		// If no username is present in the URL path, serve the indexTemplate
 		err := indexTemplate.Execute(w, nil)
 		if err != nil {
@@ -3977,7 +4015,13 @@ func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				http.Redirect(w, r, "/user", http.StatusSeeOther)
 				return
+			} else {
+				errorHandler(w, r, "Username invalid.", "Woops, the username you tried seems to be already registered.", "Your invite code worked, but the username you chose does not. Please go back and try to register a different username.")
+				return
 			}
+		} else {
+			errorHandler(w, r, "Incorrect invite code", "Woops, the invite code you tried to use is invalid.", "Your invite code is not valid. Please go back and try again, making sure your invite code is inputted correctly.")
+			return
 		}
 	} else {
 		if !checkUsernamePendingOrCreated(username) {
@@ -4015,7 +4059,7 @@ func newAccountHandler(w http.ResponseWriter, r *http.Request) {
 				fmt.Println(err)
 			}
 		} else {
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+			errorHandler(w, r, "Username invalid.", "Woops, the username you tried seems to be already registered.", "The username you chose is already taken or invalid. Please go back and try to register a different username.")
 			return
 		}
 	}
