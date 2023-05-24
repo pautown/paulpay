@@ -2288,7 +2288,7 @@ func createDatabaseIfNotExists(db *sql.DB) error {
 	_, err = db.Exec(`
         CREATE TABLE IF NOT EXISTS invites (
             value TEXT UNIQUE,
-            active BOOL,
+            active BOOL
         )
     `)
 
