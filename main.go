@@ -2286,6 +2286,17 @@ func createDatabaseIfNotExists(db *sql.DB) error {
 	}
 
 	_, err = db.Exec(`
+        CREATE TABLE IF NOT EXISTS invites (
+            value TEXT UNIQUE,
+            active BOOL,
+        )
+    `)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`
         CREATE TABLE IF NOT EXISTS pendingusers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
@@ -3892,9 +3903,11 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Println(err)
 		}
 	} else {
-
-		errorHandler(w, r, "User not found", "didn't find a ferret account with that username", "No username was found.")
-
+		log.Println("username = ", username)
+		if username != "" {
+			errorHandler(w, r, "User not found", "didn't find a ferret account with that username", "No username was found.")
+			return
+		}
 		// If no username is present in the URL path, serve the indexTemplate
 		err := indexTemplate.Execute(w, nil)
 		if err != nil {
