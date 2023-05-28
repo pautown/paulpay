@@ -484,7 +484,7 @@ func setupRoutes() {
 	}
 
 	for _, route_ := range routes_ {
-		http.HandleFunc(route_.Path, logging(route_.Handler))
+		http.HandleFunc(route_.Path, route_.Handler)
 	}
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
@@ -531,7 +531,7 @@ func CheckRecentIPRequests(ip string) int {
 			}
 		}
 	}
-	ip_requests = append(ip_requests, encryptIP(ip))
+	ip_requests = append(ip_requests, ip)
 	return matching_ips
 }
 
@@ -1827,6 +1827,7 @@ func checkUnfulfilledDonos() []utils.Dono {
 			timeElapsedFromDonoCreation := time.Since(dono.CreatedAt)
 			if timeElapsedFromDonoCreation > killDono || dono.Address == " " || dono.AmountToSend == "0.0" {
 				dono.Fulfilled = true
+				dono.EncryptedIP = ""
 				if dono.Address == " " {
 					log.Println("No dono address, killed (marked as fulfilled) and won't be checked again. \n")
 				} else {
@@ -1852,6 +1853,7 @@ func checkUnfulfilledDonos() []utils.Dono {
 						dono.AmountSent = valueStr
 						addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
 						dono.Fulfilled = true
+						dono.EncryptedIP = ""
 						dono.UpdatedAt = time.Now().UTC()
 						fulfilledDonos = append(fulfilledDonos, dono)
 						updateDonoInMap(dono)
@@ -1891,6 +1893,7 @@ func checkUnfulfilledDonos() []utils.Dono {
 				dono.AmountSent, _ = utils.PruneStringByDecimalPoints(dono.AmountToSend, 5)
 				addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID)
 				dono.Fulfilled = true
+				dono.EncryptedIP = ""
 				fulfilledDonos = append(fulfilledDonos, dono)
 				updateDonoInMap(dono)
 				continue
@@ -1902,6 +1905,7 @@ func checkUnfulfilledDonos() []utils.Dono {
 				dono.AmountSent, _ = utils.PruneStringByDecimalPoints(dono.AmountToSend, 5)
 				addDonoToDonoBar(dono.AmountSent, dono.CurrencyType, dono.UserID) // change Amount To Send to USD value of sent
 				dono.Fulfilled = true
+				dono.EncryptedIP = ""
 				fulfilledDonos = append(fulfilledDonos, dono)
 				updateDonoInMap(dono)
 				continue
@@ -2727,68 +2731,11 @@ func getUserBySessionCached(sessionToken string) (utils.User, bool) {
 
 func getUserByUsernameCached(username string) (utils.User, bool) {
 	for _, user := range globalUsers {
-		if user.Username == username {
+		if strings.ToLower(user.Username) == strings.ToLower(username) {
 			return user, true
 		}
 	}
 	return globalUsers[0], false
-
-}
-
-// get a user by their username
-func getUserByUsername(username string) (utils.User, error) {
-	var user utils.User
-	var links, donoGIF, defaultCrypto, donoSound, alertURL, cryptosEnabled sql.NullString // use sql.NullString for the "links" and "dono_gif" fields
-	row := db.QueryRow("SELECT * FROM users WHERE Username=?", username)
-	err := row.Scan(&user.UserID, &user.Username, &user.HashedPassword, &user.EthAddress,
-		&user.SolAddress, &user.HexcoinAddress, &user.XMRWalletPassword, &user.MinDono, &user.MinMediaDono,
-		&user.MediaEnabled, &user.CreationDatetime, &user.ModificationDatetime, &links, &donoGIF, &donoSound, &alertURL, &user.DateEnabled, &user.WalletUploaded, &cryptosEnabled, &defaultCrypto)
-	if err != nil {
-		return utils.User{}, err
-	}
-	user.Links = links.String
-	if !links.Valid {
-		user.Links = ""
-	}
-	user.DonoGIF = donoGIF.String // assign the sql.NullString to the user's "DonoGIF" field
-	if !donoGIF.Valid {           // check if the "dono_gif" column is null
-		user.DonoGIF = "default.gif" // set the user's "DonoGIF"
-	}
-	user.DonoSound = donoSound.String // assign the sql.NullString to the user's "DonoGIF" field
-	if !donoSound.Valid {             // check if the "dono_gif" column is null
-		user.DonoSound = "default.mp3" // set the user's "DonoSound"
-	}
-
-	user.DefaultCrypto = defaultCrypto.String // assign the sql.NullString to the user's "DonoGIF" field
-	if !defaultCrypto.Valid {                 // check if the "dono_gif" column is null
-		user.DefaultCrypto = "" // set the user's "DonoSound"
-	}
-
-	user.AlertURL = alertURL.String // assign the sql.NullString to the user's "DonoGIF" field
-	if !alertURL.Valid {            // check if the "dono_gif" column is null
-		user.AlertURL = utils.GenerateUniqueURL() // set the user's "DonoSound"
-	}
-
-	ce := utils.CryptosEnabled{
-		XMR:   true,
-		SOL:   true,
-		ETH:   false,
-		PAINT: false,
-		HEX:   true,
-		MATIC: false,
-		BUSD:  true,
-		SHIB:  false,
-		PNK:   true,
-	}
-
-	user.CryptosEnabled = cryptosJsonStringToStruct(cryptosEnabled.String) // assign the sql.NullString to the user's "DonoGIF" field
-	if !cryptosEnabled.Valid {                                             // check if the "dono_gif" column is null
-		user.CryptosEnabled = ce // set the user's "DonoSound"
-	}
-
-	user = setUserMinDonos(user)
-
-	return user, nil
 
 }
 
@@ -4359,9 +4306,6 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 	fMessage := r.FormValue("message")
 	fMedia := r.FormValue("media")
 	fShowAmount := r.FormValue("showAmount")
-	encrypted_ip := encryptIP(ip)
-	log.Println("encrypted_ip", encrypted_ip)
-
 	matching_ips := utils.CheckPendingDonosFromIP(pending_donos, ip)
 
 	log.Println("Waiting pending donos from this IP:", matching_ips)
@@ -4426,15 +4370,15 @@ func paymentHandler(w http.ResponseWriter, r *http.Request) {
 
 	USDAmount := getUSDValue(amount, fCrypto)
 	if fCrypto == "XMR" {
-		createNewXMRDono(s.Name, s.Message, s.Media, amount, encrypted_ip)
-		handleMoneroPayment(w, &s, params, amount, encrypted_ip, showAmount, USDAmount, user.UserID)
+		createNewXMRDono(s.Name, s.Message, s.Media, amount, ip)
+		handleMoneroPayment(w, &s, params, amount, ip, showAmount, USDAmount, user.UserID)
 	} else if fCrypto == "SOL" {
-		new_dono := createNewSolDono(s.Name, s.Message, s.Media, utils.FuzzDono(amount, "SOL"), encrypted_ip)
-		handleSolanaPayment(w, &s, params, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, media, encrypted_ip, USDAmount, user.UserID)
+		new_dono := createNewSolDono(s.Name, s.Message, s.Media, utils.FuzzDono(amount, "SOL"), ip)
+		handleSolanaPayment(w, &s, params, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, media, ip, USDAmount, user.UserID)
 	} else {
 		s.Currency = fCrypto
-		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount, fCrypto, encrypted_ip)
-		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL, fCrypto, encrypted_ip, USDAmount, user.UserID)
+		new_dono := createNewEthDono(s.Name, s.Message, s.Media, amount, fCrypto, ip)
+		handleEthereumPayment(w, &s, new_dono.Name, new_dono.Message, new_dono.AmountNeeded, showAmount, new_dono.MediaURL, fCrypto, ip, USDAmount, user.UserID)
 	}
 }
 

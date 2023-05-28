@@ -11,8 +11,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 var contracts = map[string]string{
@@ -234,9 +232,7 @@ func AppendPendingDono(pending_donos []SuperChat, new_dono SuperChat) []SuperCha
 func CheckPendingDonosFromIP(pending_donos []SuperChat, ip string) int {
 	matching_ips := 0
 	for _, dono := range pending_donos {
-		err := bcrypt.CompareHashAndPassword([]byte(dono.EncryptedIP), []byte(ip))
-
-		if err == nil {
+		if ip == dono.EncryptedIP {
 			matching_ips++
 			if matching_ips == 15 {
 				return matching_ips
