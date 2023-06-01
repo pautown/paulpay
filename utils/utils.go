@@ -80,6 +80,14 @@ func GetTransactionAmount(t Transfer) string {
 	return d.String()
 }
 
+func CompareStringsLowercase(str_one, str_two string) bool {
+	if strings.ToLower(str_one) == strings.ToLower(str_two) {
+		return true
+	} else {
+		return false
+	}
+}
+
 func IsPortOpen(port int) bool {
 	address := fmt.Sprintf("%s:%d", "http://127.0.0.1", port)
 	conn, err := net.DialTimeout("tcp", address, 1*time.Second)

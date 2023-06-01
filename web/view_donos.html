@@ -17,6 +17,14 @@
         <button style="padding: 0 10px 0;">View Donations</button>
       </form>
     </div>
+
+    <br><br>
+
+    <form id="testDonationForm" method="POST" action="/testdonation" enctype="multipart/form-data">
+      <input type="hidden" name="username" value="{{ .Username }}">
+      <input type="submit" value="Test Donation On OBS Overlay">
+    </form>
+
   <br><br>
 	<style>
 		body {
@@ -194,6 +202,36 @@
     // Call the updateDonations function every 5 seconds
     setInterval(updateDonations, 4000);
 });
+
+
+
+    document.addEventListener("DOMContentLoaded", function() {
+    document.getElementById("testDonationForm").addEventListener("submit", function(event) {
+      event.preventDefault(); // Prevent the default form submission behavior
+
+      // Get the form data
+      var formData = new FormData(this);
+
+      // Send the AJAX request
+      fetch("/testdonation", {
+        method: "POST",
+        body: formData
+      })
+      .then(function(response) {
+        if (response.ok) {
+          console.log("Donation submitted successfully");
+          // Perform any necessary actions or display a success message
+        } else {
+          console.log("Error submitting donation");
+          // Handle the error or display an error message
+        }
+      })
+      .catch(function(error) {
+        console.log("Error submitting donation:", error);
+        // Handle the error or display an error message
+      });
+    });
+  });
         
     </script>
     

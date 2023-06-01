@@ -478,6 +478,7 @@ func setupRoutes() {
 		{"/changeusermonero", changeUserMoneroHandler},
 		{"/usermanager", allUsersHandler},
 		{"/refresh", refreshHandler},
+		{"/testdonation", testDonoHandler},
 		{"/toggleUserRegistrations", toggleUserRegistrationsHandler},
 		{"/generatecodes", generateCodesHandler},
 		{"/cryptosettings", cryptoSettingsHandler},
@@ -578,6 +579,34 @@ func replayDonoHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Send response indicating success
 	w.WriteHeader(http.StatusOK)
+}
+
+func testDonoHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("starting testDonoHandler()")
+
+	if r.Method != http.MethodPost {
+		log.Println("testDonoHandler() method is not POST")
+		return
+	}
+
+	user, valid := getLoggedInUser(w, r)
+	username := r.FormValue("username")
+	log.Println("testDonoHandler() username:", username)
+	log.Println("testDonoHandler() user.username:", user.Username)
+
+	if valid && utils.CompareStringsLowercase(user.Username, username) {
+		donation := utils.Donation{
+			ID:              "123",
+			DonationName:    "John Doe",
+			DonationMessage: "Test message",
+			DonationMedia:   "",
+			USDValue:        "100",
+			AmountSent:      "5",
+			Crypto:          "XMR",
+		}
+
+		replayDono(donation, user.UserID)
+	}
 }
 
 func startWallets() {
