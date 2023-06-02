@@ -122,7 +122,6 @@ func getTransactionsForAddresses() {
 
     if sameBalance {
       fmt.Println("Sol wallet the same balance, not getting new txs")
-      fmt.Println("SOL:", wallet.Address[:7]+".. no new txs.")
       time.Sleep(10 * time.Second)
     } else {
       fmt.Println("Sol wallet not the same balance, getting new txs")
@@ -232,6 +231,10 @@ func checkSameBalanceSol(wallet SolWallet) (SolWallet, bool) {
 }
 
 func getSOLBalance(address string) (float64, error) {
+
+  if address == "" {
+    return 0, nil
+  }
   balance, err := solClient.GetBalance(
     context.TODO(), // request context
     address,        // wallet to fetch balance for

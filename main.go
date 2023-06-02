@@ -253,7 +253,25 @@ func donationsHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
-	var err error
+	// Open the log file in append mode, create it if it doesn't exist
+	file, err := os.OpenFile("logfile.txt", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	// Set the log output to the log file
+	log.SetOutput(file)
+
+	// Your script code here
+	// ...
+
+	// If your script crashes, log the error
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Script crashed:", r)
+		}
+	}()
 
 	// Open a new database connection
 	db, err = sql.Open("sqlite3", "users.db")
@@ -295,10 +313,6 @@ func main() {
 	obsData = getObsData(db, 1)
 	inviteCodeMap = getAllCodes()
 	setServerVars()
-
-	//go createTestDono(2, "Big Bob", "XMR", "This Cruel Message is Bob's Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! Test message! ", "50", 100, "https://www.youtube.com/watch?v=6iseNlvH2_s")
-	// go createTestDono("Medium Bob", "XMR", "Hey it's medium Bob ", 0.1, 3, "https://www.youtube.com/watch?v=6iseNlvH2_s")
-
 	err = http.ListenAndServe(":8900", nil)
 	if err != nil {
 		panic(err)
@@ -359,10 +373,7 @@ func updateCryptosHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func mapToCryptosEnabled(selectedCryptos map[string]bool) utils.CryptosEnabled {
-	// Create a new instance of the CryptosEnabled struct
 	cryptosEnabled := utils.CryptosEnabled{}
-
-	// Set each field of the CryptosEnabled struct based on the corresponding value in the map
 	cryptosEnabled.XMR = selectedCryptos["monero"]
 	cryptosEnabled.SOL = selectedCryptos["solana"]
 	cryptosEnabled.ETH = selectedCryptos["ethereum"]
@@ -489,7 +500,6 @@ func setupRoutes() {
 	}
 
 	indexTemplate, _ = template.ParseFiles("web/index.html")
-
 	overflowTemplate, _ = template.ParseFiles("web/overflow.html")
 	tosTemplate, _ = template.ParseFiles("web/tos.html")
 	registerTemplate, _ = template.ParseFiles("web/new_account.html")
@@ -498,56 +508,15 @@ func setupRoutes() {
 	payTemplate, _ = template.ParseFiles("web/pay.html")
 	alertTemplate, _ = template.ParseFiles("web/alert.html")
 	accountPayTemplate, _ = template.ParseFiles("web/accountpay.html")
-
 	billPayTemplate, _ = template.ParseFiles("web/billpay.html")
-
 	userOBSTemplate, _ = template.ParseFiles("web/obs/settings.html")
 	progressbarTemplate, _ = template.ParseFiles("web/obs/progressbar.html")
-
 	loginTemplate, _ = template.ParseFiles("web/login.html")
 	incorrectLoginTemplate, _ = template.ParseFiles("web/incorrect_login.html")
 	userTemplate, _ = template.ParseFiles("web/user.html")
 	cryptoSettingsTemplate, _ = template.ParseFiles("web/cryptoselect.html")
-
 	logoutTemplate, _ = template.ParseFiles("web/logout.html")
 	incorrectPasswordTemplate, _ = template.ParseFiles("web/password_change_failed.html")
-}
-
-func clearRecentIPS(ip string) {
-	for {
-		ip_requests = ip_requests[:0]
-		time.Sleep(5 * time.Minute)
-	}
-}
-
-func CheckRecentIPRequests(ip string) int {
-	matching_ips := 0
-	for _, ip_ := range ip_requests {
-		err := bcrypt.CompareHashAndPassword([]byte(ip_), []byte(ip))
-		if err == nil {
-			matching_ips++
-			if matching_ips == 80 {
-				ip_requests = append(ip_requests, encryptIP(ip))
-				return matching_ips
-			}
-		}
-	}
-	ip_requests = append(ip_requests, ip)
-	return matching_ips
-}
-
-func logging(f http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/overflow" && r.URL.Path != "/progressbar" && r.URL.Path != "/donations" && r.URL.Path != "/check_donation_status" && r.URL.Path != "/replaydono" && r.URL.Path != "/viewdonos" {
-			ip := getIPAddress(r)
-			matchingIP := CheckRecentIPRequests(ip)
-			if matchingIP >= 200 {
-				http.Redirect(w, r, "/overflow", http.StatusSeeOther)
-				return
-			}
-		}
-		f(w, r)
-	}
 }
 
 func replayDonoHandler(w http.ResponseWriter, r *http.Request) {
@@ -556,9 +525,7 @@ func replayDonoHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
 	user, valid := getLoggedInUser(w, r)
-
 	var donation utils.Donation
 	err := json.NewDecoder(r.Body).Decode(&donation)
 	if err != nil {
@@ -582,18 +549,11 @@ func replayDonoHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func testDonoHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("starting testDonoHandler()")
-
 	if r.Method != http.MethodPost {
-		log.Println("testDonoHandler() method is not POST")
 		return
 	}
-
 	user, valid := getLoggedInUser(w, r)
 	username := r.FormValue("username")
-	log.Println("testDonoHandler() username:", username)
-	log.Println("testDonoHandler() user.username:", user.Username)
-
 	if valid && utils.CompareStringsLowercase(user.Username, username) {
 		donation := utils.Donation{
 			ID:              "123",
@@ -627,7 +587,17 @@ func startWallets() {
 				starting_port++
 
 			} else {
-				log.Println("Monero wallet not uploaded")
+				if checkWalletExists(user.UserID) {
+					log.Println("Monero wallet uploaded")
+					xmrWallets = append(xmrWallets, []int{user.UserID, starting_port})
+					go startMoneroWallet(starting_port, user.UserID, user)
+					user.WalletUploaded = true
+					updateUser(user)
+					starting_port++
+				} else {
+					log.Println("Monero wallet not uploaded")
+				}
+
 			}
 		} else {
 			log.Println("startWallets() User not valid")
@@ -2613,7 +2583,7 @@ func updateInviteCode(code utils.InviteCode) error {
 	`
 	_, err := db.Exec(statement, code.Value, code.Active, code.Value)
 	if err != nil {
-		log.Fatalf("failed, err: %v", err)
+		log.Println("failed, err: %v", err)
 	}
 	return err
 }
@@ -2760,7 +2730,7 @@ func getUserBySessionCached(sessionToken string) (utils.User, bool) {
 
 func getUserByUsernameCached(username string) (utils.User, bool) {
 	for _, user := range globalUsers {
-		if strings.ToLower(user.Username) == strings.ToLower(username) {
+		if utils.CompareStringsLowercase(user.Username, username) {
 			return user, true
 		}
 	}
@@ -2927,7 +2897,6 @@ func getUserBySession(sessionToken string) (utils.User, error) {
 	return user, nil
 }
 
-// verify that the entered password matches the stored hashed password for a user
 func verifyPassword(user utils.User, password string) bool {
 	err := bcrypt.CompareHashAndPassword(user.HashedPassword, []byte(password))
 	return err == nil
@@ -3502,6 +3471,18 @@ func checkFileExists(filePath string) bool {
 		return false
 	}
 
+}
+
+func checkWalletExists(userID int) bool {
+	idstr := strconv.Itoa(userID)
+	up := "users/" + idstr + "/monero/wallet"
+	up_ := "users/" + idstr + "/monero/wallet.keys"
+
+	if checkFileExists(up) && checkFileExists(up_) {
+		return true
+	} else {
+		return false
+	}
 }
 
 func checkUserGIF(userpath string) bool {
