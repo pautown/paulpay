@@ -461,7 +461,7 @@ func setupRoutes() {
 	})
 
 	http.Handle("/media/", http.StripPrefix("/media/", http.FileServer(http.Dir("web/obs/media/"))))
-	http.Handle("/users/", http.StripPrefix("/users/", http.FileServer(http.Dir("users/"))))
+	http.HandleFunc("/users/", handleUsers)
 
 	routes_ = []Route_{
 		{"/updatecryptos", updateCryptosHandler},
@@ -517,6 +517,16 @@ func setupRoutes() {
 	cryptoSettingsTemplate, _ = template.ParseFiles("web/cryptoselect.html")
 	logoutTemplate, _ = template.ParseFiles("web/logout.html")
 	incorrectPasswordTemplate, _ = template.ParseFiles("web/password_change_failed.html")
+}
+
+func handleUsers(w http.ResponseWriter, r *http.Request) {
+	if strings.Contains(r.URL.Path, "/monero") {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	// Serve the file or directory normally
+	http.StripPrefix("/users/", http.FileServer(http.Dir("users/"))).ServeHTTP(w, r)
 }
 
 func replayDonoHandler(w http.ResponseWriter, r *http.Request) {
@@ -1215,9 +1225,11 @@ func startMoneroWallet(portInt, userID int, user utils.User) {
 		walletRunning := CheckMoneroPort(userID)
 		if walletRunning {
 			user.WalletUploaded = true
+			user.WalletRunning = true
 			user.WalletPending = false
 		} else {
 			user.WalletUploaded = false
+			user.WalletRunning = false
 			user.WalletPending = false
 		}
 		updateUser(user)
@@ -1229,6 +1241,7 @@ func startMoneroWallet(portInt, userID int, user utils.User) {
 	})
 
 	fmt.Println("Done starting monero wallet for", portStr, userID)
+	user.WalletRunning = true
 	user.WalletUploaded = true
 	user.WalletPending = true
 	updateUser(user)
@@ -3784,6 +3797,14 @@ func getIPAddress(r *http.Request) string {
 	return ip
 }
 
+func redirectMainHandler(w http.ResponseWriter, r *http.Request) {
+	err := indexTemplate.Execute(w, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Ignore requests for the favicon
@@ -3803,24 +3824,49 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			user.Links = "[]"
 		}
 
+		XMR_ := user.CryptosEnabled.XMR
+
+		if user.CryptosEnabled.XMR == true && user.WalletRunning != false {
+
+		}
+
+		XMR_ = false
+
+		if user.EthAddress == "" {
+			user.CryptosEnabled.ETH = false
+			user.CryptosEnabled.PAINT = false
+			user.CryptosEnabled.HEX = false
+			user.CryptosEnabled.MATIC = false
+			user.CryptosEnabled.BUSD = false
+			user.CryptosEnabled.SHIB = false
+			user.CryptosEnabled.PNK = false
+		}
+
+		if user.SolAddress == "" {
+			user.CryptosEnabled.SOL = false
+		}
+
+		CE_ := user.CryptosEnabled
+		CE_.XMR = XMR_
+		user.DefaultCrypto = "SOL"
 		if user.DefaultCrypto == "" {
-			if user.CryptosEnabled.XMR {
+			if CE_.XMR {
 				user.DefaultCrypto = "XMR"
-			} else if user.CryptosEnabled.SOL {
+			} else if CE_.SOL {
 				user.DefaultCrypto = "SOL"
-			} else if user.CryptosEnabled.ETH {
+			} else if CE_.ETH {
 				user.DefaultCrypto = "ETH"
-			} else if user.CryptosEnabled.PAINT {
+			} else if CE_.PAINT {
 				user.DefaultCrypto = "PAINT"
-			} else if user.CryptosEnabled.HEX {
+			} else if CE_.HEX {
 				user.DefaultCrypto = "HEX"
-			} else if user.CryptosEnabled.MATIC {
+			} else if CE_.MATIC {
 				user.DefaultCrypto = "MATIC"
-			} else if user.CryptosEnabled.BUSD {
+			} else if CE_.BUSD {
 				user.DefaultCrypto = "BUSD"
-			} else if user.CryptosEnabled.SHIB {
+			} else if CE_.SHIB {
 				user.DefaultCrypto = "SHIB"
-			} else if user.CryptosEnabled.PNK {
+			} else if CE_.PNK {
 				user.DefaultCrypto = "PNK"
 			}
 
@@ -3847,7 +3893,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			ShibPrice:      prices.ShibaInu,
 			PnkPrice:       prices.Kleros,
 			PaintPrice:     prices.Paint,
-			CryptosEnabled: user.CryptosEnabled,
+			CryptosEnabled: CE_,
 			Checked:        checked,
 			Links:          user.Links,
 			WalletPending:  user.WalletPending,

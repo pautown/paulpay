@@ -72,9 +72,7 @@
           "price": "{{.PnkPrice}}"
         }
       };
-      var crypto_selected
-      var crypto_selected = "XMR";
-      var selectedValue = crypto_selected;
+      var selectedValue = "{{.DefaultCrypto}}";
 
 
         window.onload = function() {
@@ -112,8 +110,8 @@
             toggleSelect.classList.add('hidden');
           }
 
-          const DefaultCrypto = {{.DefaultCrypto}};
-          var valueToFind = "SOL"; // Replace "SOL" with the value you want to find
+          const DefaultCrypto = "{{.DefaultCrypto}}";
+          var valueToFind = DefaultCrypto; // Replace "SOL" with the value you want to find
 
           if (DefaultCrypto == "XMR"  && {{.CryptosEnabled.XMR}} && !{{.WalletPending}}) {
             valueToFind = "XMR";
@@ -157,7 +155,6 @@
 
 
           var selectElement = document.getElementById("toggleSelect");
-          var valueToFind = "SOL"; // Replace "SOL" with the value you want to find
 
           for (var i = 0; i < selectElement.options.length; i++) {
             if (selectElement.options[i].value === valueToFind) {

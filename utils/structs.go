@@ -85,6 +85,7 @@ type User struct {
 	MinPnk               float64
 	DateEnabled          time.Time
 	WalletUploaded       bool
+	WalletRunning        bool
 	WalletPending        bool
 	CryptosEnabled       CryptosEnabled
 	BillingData          BillingData
