@@ -2499,7 +2499,7 @@ func createUser(user utils.User) int {
             cryptos_enabled,
             default_crypto
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, user.Username, user.HashedPassword, user.EthAddress, user.SolAddress, user.HexcoinAddress, "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now().UTC(), time.Now(), "", user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, 0, ce_, user.DefaultCrypto)
+    `, user.Username, user.HashedPassword, "", "", "", "", user.MinDono, user.MinMediaDono, user.MediaEnabled, time.Now().UTC(), time.Now(), "", user.DonoGIF, user.DonoSound, user.AlertURL, user.DateEnabled, 0, ce_, user.DefaultCrypto)
 
 	if err != nil {
 		log.Println(err)
@@ -4276,7 +4276,6 @@ func createPendingUser(user utils.PendingUser) error {
 }
 
 func getNewUser(username string, hashedPassword []byte) utils.User {
-
 	ce := utils.CryptosEnabled{
 		XMR:   false,
 		SOL:   false,
@@ -4293,9 +4292,9 @@ func getNewUser(username string, hashedPassword []byte) utils.User {
 		Username:          username,
 		HashedPassword:    hashedPassword,
 		CryptosEnabled:    ce,
-		EthAddress:        "0x5b5856dA280e592e166A1634d353A53224ed409c",
-		SolAddress:        "adWqokePHcAbyF11TgfvvM1eKax3Kxtnn9sZVQh6fXo",
-		HexcoinAddress:    "0x5b5856dA280e592e166A1634d353A53224ed409c",
+		EthAddress:        "",
+		SolAddress:        "",
+		HexcoinAddress:    "",
 		XMRWalletPassword: "",
 		MinDono:           3,
 		MinMediaDono:      5,
